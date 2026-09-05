@@ -56,7 +56,10 @@ pub const Iterator = struct {
                 if (can_break) self.candidate = .{
                     .line = .{ .start = self.line_start, .end = span.end, .columns = self.columns },
                     .graphemes = self.graphemes,
-                    .boundaries = boundary.before,
+                    // `boundaryAt` has consumed the boundary at span.end.
+                    // Restoring after it avoids deciding that same boundary
+                    // again when the next visual line starts there.
+                    .boundaries = self.boundaries,
                 };
                 continue;
             }
@@ -129,13 +132,12 @@ pub const Iterator = struct {
         return .{ .start = start, .end = end, .columns = end - start };
     }
 
-    const BoundaryAt = struct { value: line_break.Boundary, before: line_break.Iterator };
+    const BoundaryAt = struct { value: line_break.Boundary };
 
     fn boundaryAt(self: *Iterator, offset: usize) BoundaryAt {
         while (true) {
-            const before = self.boundaries;
             const boundary = self.boundaries.next().?;
-            if (boundary.offset >= offset) return .{ .value = boundary, .before = before };
+            if (boundary.offset >= offset) return .{ .value = boundary };
         }
     }
 };
