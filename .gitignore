@@ -1,1 +1,3 @@
 private/
+.zig-cache/
+zig-out/
