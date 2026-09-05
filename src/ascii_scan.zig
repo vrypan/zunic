@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const options = @import("build_options");
 
 pub const Backend = enum { off, scalar, auto, simd };
+pub const Paragraph = enum { none, letters, simple };
 
 pub fn selectedBackend() Backend {
     return switch (options.wrap_fast_path) {
@@ -23,6 +24,18 @@ pub fn allLetters(bytes: []const u8) bool {
         .auto => if (autoSimdSupported()) simdAllLetters(bytes) else scalarAllLetters(bytes),
         .simd => simdAllLetters(bytes),
     };
+}
+
+/// Recognizes the ASCII subset whose grapheme and line-break behavior is
+/// fully represented by letters, spaces, and hard separators.
+pub fn paragraph(bytes: []const u8) Paragraph {
+    if (selectedBackend() == .off) return .none;
+    if (allLetters(bytes)) return .letters;
+    for (bytes) |byte| switch (byte) {
+        'a'...'z', 'A'...'Z', ' ', '\n', '\r', 0x0B, 0x0C => {},
+        else => return .none,
+    };
+    return .simple;
 }
 
 pub fn scalarAllLetters(bytes: []const u8) bool {

@@ -24,13 +24,17 @@ pub const Iterator = struct {
     line_start: usize = 0,
     columns: usize = 0,
     candidate: ?Candidate = null,
-    ascii_only_letters: ?bool = null,
+    ascii_paragraph: ?ascii_scan.Paragraph = null,
     finished: bool = false,
 
     pub fn next(self: *Iterator) ?Line {
         if (self.finished) return null;
-        if (self.ascii_only_letters == null) self.ascii_only_letters = ascii_scan.allLetters(self.bytes);
-        if (self.ascii_only_letters.?) return self.nextAsciiLetters();
+        if (self.ascii_paragraph == null) self.ascii_paragraph = ascii_scan.paragraph(self.bytes);
+        switch (self.ascii_paragraph.?) {
+            .letters => return self.nextAsciiLetters(),
+            .simple => return self.nextAsciiParagraph(),
+            .none => {},
+        }
 
         while (true) {
             const before_graphemes = self.graphemes;
@@ -128,6 +132,54 @@ pub const Iterator = struct {
         };
         self.line_start = end;
         return .{ .start = start, .end = end, .columns = end - start };
+    }
+
+    fn nextAsciiParagraph(self: *Iterator) ?Line {
+        if (self.line_start == self.bytes.len) {
+            self.finished = true;
+            return null;
+        }
+        const start = self.line_start;
+        var pos = start;
+        var columns: usize = 0;
+        var candidate: ?Line = null;
+        while (pos < self.bytes.len) {
+            const byte = self.bytes[pos];
+            if (byte == '\n' or byte == '\r' or byte == 0x0B or byte == 0x0C) {
+                const end = if (byte == '\r' and pos + 1 < self.bytes.len and self.bytes[pos + 1] == '\n') pos + 2 else pos + 1;
+                self.line_start = end;
+                return .{ .start = start, .end = pos, .columns = columns };
+            }
+            const next_columns = columns + 1;
+            if (next_columns <= self.options.max_columns) {
+                columns = next_columns;
+                pos += 1;
+                if (byte == ' ') candidate = .{ .start = start, .end = pos, .columns = columns };
+                continue;
+            }
+            if (candidate) |saved| {
+                self.line_start = saved.end;
+                return saved;
+            }
+            if (self.options.overflow == .allow) {
+                columns = next_columns;
+                pos += 1;
+                if (byte == ' ') {
+                    self.line_start = pos;
+                    return .{ .start = start, .end = pos, .columns = columns };
+                }
+                continue;
+            }
+            if (pos == start) {
+                columns = next_columns;
+                pos += 1;
+                continue;
+            }
+            self.line_start = pos;
+            return .{ .start = start, .end = pos, .columns = columns };
+        }
+        self.finished = true;
+        return .{ .start = start, .end = pos, .columns = columns };
     }
 
     const BoundaryAt = struct { value: line_break.Boundary };

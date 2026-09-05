@@ -15,6 +15,8 @@ const legacy_corpora = [_]Corpus{
 };
 
 const wrap_cases = [_]WrapCase{
+    .{ .name = "ascii-words-4k-grapheme-full", .corpus = .{ .name = "ascii-words", .seed = "alpha beta gamma delta epsilon zeta eta theta ", .length = 4096 }, .max_columns = 40, .overflow = .grapheme },
+    .{ .name = "ascii-words-4k-allow-full", .corpus = .{ .name = "ascii-words", .seed = "alpha beta gamma delta epsilon zeta eta theta ", .length = 4096 }, .max_columns = 40, .overflow = .allow },
     .{ .name = "prose-64-grapheme-full", .corpus = .{ .name = "prose", .seed = "A paragraph has spaces, punctuation, numbers 123, and quoted words. ", .length = 96 }, .max_columns = 1, .overflow = .grapheme },
     .{ .name = "prose-4k-allow-full", .corpus = .{ .name = "prose", .seed = "A paragraph has spaces, punctuation, numbers 123, and quoted words. ", .length = 4096 }, .max_columns = 40, .overflow = .allow },
     .{ .name = "greek-4k-grapheme-full", .corpus = .{ .name = "greek", .seed = "Καλημέρα cafe\xcc\x81 — λέξεις και τόνοι. ", .length = 4096 }, .max_columns = 80, .overflow = .grapheme },

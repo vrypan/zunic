@@ -61,4 +61,6 @@ test "ASCII fast path preserves word and viewport lines" {
     try expectProductionMatchesReference("abcdefghijklmnopqrstuvwxyz", .{ .max_columns = 5, .overflow = .allow });
     try expectProductionMatchesReference("abc\xcc\x81def", .{ .max_columns = 3, .overflow = .grapheme });
     try expectProductionMatchesReference("abc def", .{ .max_columns = 3, .overflow = .allow });
+    try expectProductionMatchesReference("alpha beta gamma\r\ndelta", .{ .max_columns = 6, .overflow = .grapheme });
+    try expectProductionMatchesReference("alpha beta gamma\r\ndelta", .{ .max_columns = 6, .overflow = .allow });
 }
