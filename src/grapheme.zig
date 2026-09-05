@@ -1,5 +1,5 @@
 //! Default extended-grapheme boundaries (UAX #29 core rules).
-const utf8 = @import("utf8.zig");
+const scalar = @import("scalar.zig");
 const properties = @import("properties.zig");
 
 pub const Span = struct { start: usize, end: usize };
@@ -7,7 +7,7 @@ pub const Span = struct { start: usize, end: usize };
 const Property = enum { other, cr, lf, control, extend, zwj, ri, prepend, spacing_mark, l, v, t, lv, lvt, ep };
 const InCB = enum { none, consonant, extend, linker };
 const Classification = struct { property: Property, incb: InCB };
-const Token = struct { step: utf8.Step, classification: Classification };
+const Token = struct { scalar: scalar.Token, classification: Classification };
 
 pub const Iterator = struct {
     bytes: []const u8,
@@ -66,7 +66,7 @@ pub const Iterator = struct {
     fn takeToken(self: *Iterator) Token {
         const token = self.pending orelse self.decodeAt(self.pos);
         self.pending = null;
-        self.pos += token.step.len;
+        self.pos = token.scalar.end;
         return token;
     }
 
@@ -76,8 +76,8 @@ pub const Iterator = struct {
     }
 
     fn decodeAt(self: *const Iterator, offset: usize) Token {
-        const step = utf8.step(self.bytes[offset..]);
-        return .{ .step = step, .classification = classify(step.cp) };
+        const token = scalar.at(self.bytes, offset);
+        return .{ .scalar = token, .classification = classify(token) };
     }
 };
 
@@ -103,18 +103,16 @@ fn isControl(p: Property) bool {
     return p == .cr or p == .lf or p == .control;
 }
 
-fn classify(maybe_cp: ?u21) Classification {
-    const cp = maybe_cp orelse return .{ .property = .other, .incb = .none };
-    const value = properties.graphemeProperties(cp);
-    const property: Property = switch (value.gcb) {
-        .other => if (value.extended_pictographic) .ep else .other,
+fn classify(token: scalar.Token) Classification {
+    const property: Property = switch (token.grapheme.gcb) {
+        .other => if (token.grapheme.extended_pictographic) .ep else .other,
         .regional_indicator => .ri,
         .spacingmark => .spacing_mark,
-        else => @enumFromInt(@intFromEnum(value.gcb)),
+        else => @enumFromInt(@intFromEnum(token.grapheme.gcb)),
     };
     return .{
         .property = property,
-        .incb = @enumFromInt(@intFromEnum(value.incb)),
+        .incb = @enumFromInt(@intFromEnum(token.grapheme.incb)),
     };
 }
 

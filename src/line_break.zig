@@ -4,8 +4,8 @@
 //! It does not select lines by terminal width, tailor rules with CLDR data, or
 //! perform dictionary segmentation for complex South East Asian text. SA
 //! letters therefore resolve to AL; SA marks resolve to CM as required by LB1.
-const utf8 = @import("utf8.zig");
 const properties = @import("properties.zig");
+const scalar = @import("scalar.zig");
 
 pub const Opportunity = enum { prohibited, allowed, mandatory };
 pub const Boundary = struct { offset: usize, opportunity: Opportunity };
@@ -62,8 +62,7 @@ const Class = enum {
 };
 
 const Token = struct {
-    len: usize,
-    cp: ?u21,
+    scalar: scalar.Token,
     raw: Class,
 };
 
@@ -111,12 +110,12 @@ pub const Iterator = struct {
         const offset = self.pos;
         const token = self.takeToken();
         const raw = token.raw;
-        const cp = token.cp orelse 0;
+        const cp = token.scalar.codepoint orelse 0;
         const current = resolve(raw, cp, self.previous, self.previous_raw);
         const following = self.peekToken();
         const next_raw = following.raw;
-        const next_cp = following.cp orelse 0;
-        const opportunity = breakBefore(self, raw, current, cp, next_raw, next_cp, following.len != 0);
+        const next_cp = following.scalar.codepoint orelse 0;
+        const opportunity = breakBefore(self, raw, current, cp, next_raw, next_cp, following.scalar.end != following.scalar.start);
         self.consume(raw, current, cp);
         return .{ .offset = offset, .opportunity = opportunity };
     }
@@ -124,7 +123,7 @@ pub const Iterator = struct {
     fn consumeFirst(self: *Iterator) void {
         const token = self.takeToken();
         const raw = token.raw;
-        const cp = token.cp orelse 0;
+        const cp = token.scalar.codepoint orelse 0;
         const current = resolve(raw, cp, .al, .bk);
         self.previous = current;
         self.previous_raw = raw;
@@ -138,7 +137,7 @@ pub const Iterator = struct {
     fn takeToken(self: *Iterator) Token {
         const token = self.next_token orelse self.decodeAt(self.pos);
         self.next_token = null;
-        self.pos += token.len;
+        self.pos = token.scalar.end;
         return token;
     }
 
@@ -148,8 +147,8 @@ pub const Iterator = struct {
     }
 
     fn decodeAt(self: *const Iterator, offset: usize) Token {
-        const step = utf8.step(self.bytes[offset..]);
-        return .{ .len = step.len, .cp = step.cp, .raw = rawClass(step.cp) };
+        const token = scalar.at(self.bytes, offset);
+        return .{ .scalar = token, .raw = rawClass(token.codepoint) };
     }
 
     fn consume(self: *Iterator, raw: Class, current: Class, cp: u21) void {
@@ -314,7 +313,7 @@ fn isWordInitialBreakContext(c: Class) bool {
 fn nextAfterCurrentIsNu(it: *const Iterator) bool {
     const next = it.next_token orelse it.decodeAt(it.pos);
     if (next.raw != .is) return false;
-    return it.decodeAt(it.pos + next.len).raw == .nu;
+    return it.decodeAt(next.scalar.end).raw == .nu;
 }
 fn hangulPair(left: Class, right: Class) bool {
     if (left == .jl) return right == .jl or right == .jv or right == .h2 or right == .h3;

@@ -7,6 +7,11 @@ extended-grapheme segmentation, default Unicode 16.0.0 UAX #14 line-break
 boundaries, and a terminal cell-width policy. Its grapheme and line-break
 implementations pass the official Unicode 16.0.0 conformance fixtures.
 
+`zunic.scalar.iterator(bytes)` is the low-level compositional API. It yields
+borrowed byte spans, an optional decoded code point, and its grapheme and
+line-break properties; malformed bytes consume one byte with the package's
+normal fallback properties.
+
 `zunic.line_break.iterator(bytes)` returns a boundary at every UTF-8
 code-point byte offset, including offset zero and the end of the input. Each boundary is
 `.prohibited`, `.allowed`, or `.mandatory`; the final boundary is mandatory.

@@ -4,6 +4,7 @@
 //! and terminal-column policy are its public boundary, which lets consumers
 //! extract this directory into a separate module later.
 pub const utf8 = @import("utf8.zig");
+pub const scalar = @import("scalar.zig");
 pub const grapheme = @import("grapheme.zig");
 pub const width = @import("width.zig");
 pub const line_break = @import("line_break.zig");
