@@ -64,3 +64,22 @@ test "ASCII fast path preserves word and viewport lines" {
     try expectProductionMatchesReference("alpha beta gamma\r\ndelta", .{ .max_columns = 6, .overflow = .grapheme });
     try expectProductionMatchesReference("alpha beta gamma\r\ndelta", .{ .max_columns = 6, .overflow = .allow });
 }
+
+test "ASCII paragraph fast path matches reference exhaustively" {
+    const alphabet = [_]u8{ 'a', 'Z', ' ', '\n', '\r', 0x0B, 0x0C };
+    var buffer: [5]u8 = undefined;
+    for (0..6) |length| {
+        const combinations = std.math.pow(usize, alphabet.len, length);
+        for (0..combinations) |value| {
+            var remaining = value;
+            for (0..length) |index| {
+                buffer[index] = alphabet[remaining % alphabet.len];
+                remaining /= alphabet.len;
+            }
+            for ([_]usize{ 1, 2, 3 }) |max_columns| {
+                try expectProductionMatchesReference(buffer[0..length], .{ .max_columns = max_columns, .overflow = .grapheme });
+                try expectProductionMatchesReference(buffer[0..length], .{ .max_columns = max_columns, .overflow = .allow });
+            }
+        }
+    }
+}

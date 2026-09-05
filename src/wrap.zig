@@ -150,11 +150,16 @@ pub const Iterator = struct {
                 self.line_start = end;
                 return .{ .start = start, .end = pos, .columns = columns };
             }
+            // UAX #14 permits a break after a run of spaces, not between
+            // adjacent spaces. Record the opportunity when the following
+            // non-space confirms the end of that run.
+            if (byte != ' ' and pos > start and self.bytes[pos - 1] == ' ') {
+                candidate = .{ .start = start, .end = pos, .columns = columns };
+            }
             const next_columns = columns + 1;
             if (next_columns <= self.options.max_columns) {
                 columns = next_columns;
                 pos += 1;
-                if (byte == ' ') candidate = .{ .start = start, .end = pos, .columns = columns };
                 continue;
             }
             if (candidate) |saved| {
@@ -164,10 +169,6 @@ pub const Iterator = struct {
             if (self.options.overflow == .allow) {
                 columns = next_columns;
                 pos += 1;
-                if (byte == ' ') {
-                    self.line_start = pos;
-                    return .{ .start = start, .end = pos, .columns = columns };
-                }
                 continue;
             }
             if (pos == start) {
