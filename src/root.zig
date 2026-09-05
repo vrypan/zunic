@@ -1,8 +1,6 @@
-//! Small, allocation-free Unicode primitives used by zooi.
+//! Allocation-free Unicode primitives for Zig terminal applications.
 //!
-//! The module deliberately has no dependency on the rest of zooi. Byte spans
-//! and terminal-column policy are its public boundary, which lets consumers
-//! extract this directory into a separate module later.
+//! Byte spans and terminal-column policy form the package's public boundary.
 pub const utf8 = @import("utf8.zig");
 pub const scalar = @import("scalar.zig");
 pub const grapheme = @import("grapheme.zig");
