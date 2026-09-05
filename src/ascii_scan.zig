@@ -18,7 +18,9 @@ pub fn allLetters(bytes: []const u8) bool {
     return switch (selectedBackend()) {
         .off => false,
         .scalar => scalarAllLetters(bytes),
-        .auto => if (simdSupported()) simdAllLetters(bytes) else scalarAllLetters(bytes),
+        // Auto is enabled only for native ARM64, where this backend has been
+        // exercised. x86 stays scalar until it has actual-hardware coverage.
+        .auto => if (autoSimdSupported()) simdAllLetters(bytes) else scalarAllLetters(bytes),
         .simd => simdAllLetters(bytes),
     };
 }
@@ -46,6 +48,10 @@ pub fn simdSupported() bool {
         .aarch64, .x86_64 => true,
         else => false,
     };
+}
+
+fn autoSimdSupported() bool {
+    return builtin.cpu.arch == .aarch64;
 }
 
 fn isLetter(byte: u8) bool {
