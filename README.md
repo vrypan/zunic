@@ -24,7 +24,7 @@ segmentation, and emergency breaks remain caller responsibilities.
 Add the dependency:
 
 ```sh
-zig fetch --save git+https://github.com/vrypan/zunic.git#v0.2.0
+zig fetch --save git+https://github.com/vrypan/zunic.git#v0.2.1
 ```
 
 Add the module in your application's `build.zig`:
