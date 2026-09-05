@@ -20,9 +20,10 @@ pub fn allLetters(bytes: []const u8) bool {
     return switch (selectedBackend()) {
         .off => false,
         .scalar => scalarAllLetters(bytes),
-        // Auto is enabled only for native ARM64, where this backend has been
-        // exercised. x86 stays scalar until it has actual-hardware coverage.
-        .auto => if (autoSimdSupported() and bytes.len >= simd_width) simdAllLetters(bytes) else scalarAllLetters(bytes),
+        // Auto covers every architecture with a vector backend. The kernel is
+        // portable @Vector code that lowers to baseline SSE2 on x86_64, and the
+        // scan tests check it against the scalar path at every alignment.
+        .auto => if (simdSupported() and bytes.len >= simd_width) simdAllLetters(bytes) else scalarAllLetters(bytes),
         .simd => simdAllLetters(bytes),
     };
 }
@@ -61,10 +62,6 @@ pub fn simdSupported() bool {
         .aarch64, .x86_64 => true,
         else => false,
     };
-}
-
-fn autoSimdSupported() bool {
-    return builtin.cpu.arch == .aarch64;
 }
 
 fn isLetter(byte: u8) bool {
