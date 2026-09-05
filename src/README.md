@@ -2,7 +2,7 @@
 
 This directory is an allocation-free internal component with no dependency on
 the rest of zooi. It provides tolerant UTF-8 stepping, extended-grapheme
-grouping, a terminal-width policy, and simple line-break opportunities.
+grouping, a terminal-width policy, and default UAX #14 line-break boundaries.
 
 `tables.zig` is the checked-in Unicode 16.0.0 width data previously used by
 zooi. Normal builds are offline. The terminal-width policy is deliberately not
@@ -13,7 +13,10 @@ explicit caller-visible replacement path.
 
 The grapheme implementation passes Unicode 16.0.0's official
 `GraphemeBreakTest` fixture, including combining marks, Hangul,
-prepend/spacing marks, Indic conjuncts, flags, and emoji ZWJ sequences. Line
-breaking currently offers mandatory CRLF/LF breaks and whitespace
-opportunities. Its Unicode 16 property tables are checked in, but the complete
-context-sensitive UAX #14 state machine remains future work.
+prepend/spacing marks, Indic conjuncts, flags, and emoji ZWJ sequences. The
+line-break iterator passes Unicode 16.0.0's `LineBreakTest` and yields one
+boundary for each UTF-8 code-point byte offset: offset zero is prohibited, the final
+offset is mandatory, and intermediate positions are prohibited or allowed.
+It implements UAX #14 revision 53 defaults, without locale/CLDR tailoring,
+dictionary segmentation for SA text, terminal-width line fitting, or emergency
+breaking.

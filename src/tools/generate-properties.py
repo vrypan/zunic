@@ -2,7 +2,7 @@
 """Generate Unicode 16.0.0 grapheme and line-break lookup ranges.
 
 Run from the repository root:
-    python3 src/unicode/tools/generate-properties.py
+    python3 src/tools/generate-properties.py
 
 The inputs are committed under ../data.  This script deliberately parses the
 pinned UCD files instead of Python's Unicode database, whose version is not a
@@ -133,6 +133,46 @@ def emit_tailoring(out, lb, eaw, categories):
     out.write("pub fn isBaHyphen(cp: u21) bool { return inRanges(&lb_ba_hyphen, cp); }\n\n")
 
 
+def coalesce(points):
+    ranges = []
+    for cp in points:
+        if ranges and cp == ranges[-1][1] + 1:
+            ranges[-1] = (ranges[-1][0], cp)
+        else:
+            ranges.append((cp, cp))
+    return ranges
+
+
+def emit_predicate(out, name, ranges):
+    out.write(f"pub const {name}_ranges = [_]Range{{\n")
+    for lo, hi in ranges:
+        out.write(f"    .{{ .lo = 0x{lo:X}, .hi = 0x{hi:X} }},\n")
+    out.write("};\n\n")
+    out.write(f"pub fn {name}(cp: u21) bool {{ return inRanges(&{name}_ranges, cp); }}\n\n")
+
+
+def emit_line_break_auxiliaries(out, lb, eaw, ep, categories):
+    # LB1 resolves South East Asian marks as CM.  The test must be based on
+    # the pinned UnicodeData category rather than Python's Unicode version.
+    sa_mn_mc = []
+    for lo, hi in lb["SA"]:
+        sa_mn_mc.extend(cp for cp in range(lo, hi + 1) if categories.get(cp, "Cn") in {"Mn", "Mc"})
+    emit_predicate(out, "isSaMnMc", coalesce(sa_mn_mc))
+
+    # LB19a, LB21a, and LB30 consult East Asian F/W/H. LB30b also needs
+    # unassigned Extended_Pictographic. Keep both binary-searchable at runtime.
+    east_asian_wide = []
+    for prop in ("F", "W", "H"):
+        for lo, hi in eaw[prop]:
+            east_asian_wide.extend(range(lo, hi + 1))
+    emit_predicate(out, "isEastAsianWide", coalesce(sorted(east_asian_wide)))
+
+    ep_cn = []
+    for lo, hi in ep["Extended_Pictographic"]:
+        ep_cn.extend(cp for cp in range(lo, hi + 1) if categories.get(cp, "Cn") == "Cn")
+    emit_predicate(out, "isExtendedPictographicCn", coalesce(ep_cn))
+
+
 def main():
     gcb = parse(FILES["gcb"])
     ep = parse(FILES["ep"], {"Extended_Pictographic"})
@@ -142,13 +182,14 @@ def main():
     categories = unicode_categories(FILES["ud"])
     with OUT.open("w", encoding="utf-8") as out:
         out.write("//! Generated from pinned Unicode 16.0.0 UCD files. Do not edit.\n")
-        out.write("//! Run src/unicode/tools/generate-properties.py to regenerate.\n\n")
+        out.write("//! Run src/tools/generate-properties.py to regenerate.\n\n")
         out.write("pub const Range = struct { lo: u21, hi: u21 };\n\n")
         emit_table(out, "gcb", gcb)
         emit_table(out, "emoji", ep)
         emit_table(out, "lb", lb)
         emit_table(out, "incb", incb)
         emit_tailoring(out, lb, eaw, categories)
+        emit_line_break_auxiliaries(out, lb, eaw, ep, categories)
         emit_line_break_api(out, lb)
 
 
