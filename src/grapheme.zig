@@ -6,30 +6,34 @@ pub const Span = struct { start: usize, end: usize };
 
 const Property = enum { other, cr, lf, control, extend, zwj, ri, prepend, spacing_mark, l, v, t, lv, lvt, ep };
 const InCB = enum { none, consonant, extend, linker };
+const Classification = struct { property: Property, incb: InCB };
+const Token = struct { step: utf8.Step, classification: Classification };
 
 pub const Iterator = struct {
     bytes: []const u8,
     pos: usize = 0,
+    pending: ?Token = null,
 
     pub fn next(self: *Iterator) ?Span {
         if (self.pos >= self.bytes.len) return null;
         const start = self.pos;
-        const first = utf8.step(self.bytes[self.pos..]);
-        self.pos += first.len;
-        var previous = property(first.cp);
+        const first = self.takeToken();
+        const first_classification = first.classification;
+        var previous = first_classification.property;
         var ri_count: usize = if (previous == .ri) 1 else 0;
         var ep_before_zwj = previous == .ep;
         var zwj_after_ep = false;
         var incb_linker_after_consonant = false;
-        var incb_seen_consonant = indicConjunct(first.cp) == .consonant;
+        var incb_seen_consonant = first_classification.incb == .consonant;
 
         while (self.pos < self.bytes.len) {
-            const next_step = utf8.step(self.bytes[self.pos..]);
-            const current = property(next_step.cp);
-            const current_incb = indicConjunct(next_step.cp);
+            const lookahead = self.peekToken();
+            const classification = lookahead.classification;
+            const current = classification.property;
+            const current_incb = classification.incb;
             if (breakBefore(previous, current, ri_count, zwj_after_ep, incb_linker_after_consonant, current_incb)) break;
 
-            self.pos += next_step.len;
+            _ = self.takeToken();
             if (current == .ri) ri_count += 1 else if (current != .extend) ri_count = 0;
             if (current == .zwj) {
                 zwj_after_ep = ep_before_zwj;
@@ -58,6 +62,23 @@ pub const Iterator = struct {
         }
         return .{ .start = start, .end = self.pos };
     }
+
+    fn takeToken(self: *Iterator) Token {
+        const token = self.pending orelse self.decodeAt(self.pos);
+        self.pending = null;
+        self.pos += token.step.len;
+        return token;
+    }
+
+    fn peekToken(self: *Iterator) Token {
+        if (self.pending == null) self.pending = self.decodeAt(self.pos);
+        return self.pending.?;
+    }
+
+    fn decodeAt(self: *const Iterator, offset: usize) Token {
+        const step = utf8.step(self.bytes[offset..]);
+        return .{ .step = step, .classification = classify(step.cp) };
+    }
 };
 
 pub fn iterator(bytes: []const u8) Iterator {
@@ -82,44 +103,21 @@ fn isControl(p: Property) bool {
     return p == .cr or p == .lf or p == .control;
 }
 
-fn property(maybe_cp: ?u21) Property {
-    const cp = maybe_cp orelse return .other;
-    if (inRanges(&properties.gcb_cr, cp)) return .cr;
-    if (inRanges(&properties.gcb_lf, cp)) return .lf;
-    if (inRanges(&properties.gcb_control, cp)) return .control;
-    if (inRanges(&properties.gcb_l, cp)) return .l;
-    if (inRanges(&properties.gcb_v, cp)) return .v;
-    if (inRanges(&properties.gcb_t, cp)) return .t;
-    if (inRanges(&properties.gcb_lv, cp)) return .lv;
-    if (inRanges(&properties.gcb_lvt, cp)) return .lvt;
-    if (inRanges(&properties.gcb_prepend, cp)) return .prepend;
-    if (inRanges(&properties.gcb_spacingmark, cp)) return .spacing_mark;
-    if (inRanges(&properties.gcb_extend, cp)) return .extend;
-    if (inRanges(&properties.gcb_zwj, cp)) return .zwj;
-    if (inRanges(&properties.gcb_regional_indicator, cp)) return .ri;
-    if (isExtendedPictographic(cp)) return .ep;
-    return .other;
+fn classify(maybe_cp: ?u21) Classification {
+    const cp = maybe_cp orelse return .{ .property = .other, .incb = .none };
+    const value = properties.graphemeProperties(cp);
+    const property: Property = switch (value.gcb) {
+        .other => if (value.extended_pictographic) .ep else .other,
+        .regional_indicator => .ri,
+        .spacingmark => .spacing_mark,
+        else => @enumFromInt(@intFromEnum(value.gcb)),
+    };
+    return .{
+        .property = property,
+        .incb = @enumFromInt(@intFromEnum(value.incb)),
+    };
 }
 
 pub fn isExtendedPictographic(cp: u21) bool {
-    return inRanges(&properties.emoji_extended_pictographic, cp);
-}
-
-fn indicConjunct(maybe_cp: ?u21) InCB {
-    const cp = maybe_cp orelse return .none;
-    if (inRanges(&properties.incb_incb__consonant, cp)) return .consonant;
-    if (inRanges(&properties.incb_incb__extend, cp)) return .extend;
-    if (inRanges(&properties.incb_incb__linker, cp)) return .linker;
-    return .none;
-}
-
-fn inRanges(ranges: []const properties.Range, cp: u21) bool {
-    var lo: usize = 0;
-    var hi: usize = ranges.len;
-    while (lo < hi) {
-        const mid = lo + (hi - lo) / 2;
-        const r = ranges[mid];
-        if (cp < r.lo) hi = mid else if (cp > r.hi) lo = mid + 1 else return true;
-    }
-    return false;
+    return properties.graphemeProperties(cp).extended_pictographic;
 }

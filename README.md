@@ -61,6 +61,32 @@ pub fn main() void {
 }
 ```
 
+## Wrapping terminal text
+
+`zunic.wrap.iterator` chooses greedy lines by terminal columns. It preserves
+extended grapheme clusters and default UAX #14 break opportunities. Hard line
+separators are consumed rather than included in the returned span.
+
+```zig
+var lines = try zunic.wrap.iterator(text, .{ .max_columns = 80 });
+while (lines.next()) |line| {
+    const visible = text[line.start..line.end];
+    std.debug.print("{s} ({d} columns)\n", .{ visible, line.columns });
+}
+```
+
+The default `.grapheme` overflow policy breaks an unbreakable word before the
+grapheme that would overflow. Use `.overflow = .allow` to keep that word on
+one oversized line. Spans retain whitespace, tabs, controls, and malformed
+bytes; apply the renderer's filtering policy before writing terminal output.
+
+## Development
+
+Run `make benchmark` to measure ReleaseFast throughput for UTF-8, grapheme,
+width, line-break, and wrapping workloads. Compare five-sample results on the
+same machine; they are not cross-machine rankings. Use `make benchmark` with
+`BENCHMARK_ARGS=--smoke` for a quicker smoke run.
+
 ```sh
 zig build test
 ```

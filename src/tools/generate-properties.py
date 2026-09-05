@@ -55,15 +55,81 @@ def emit_table(out, prefix, values):
         out.write("};\n\n")
 
 
+def value_at(values, point, default):
+    for value, ranges in values.items():
+        for lo, hi in ranges:
+            if lo <= point <= hi:
+                return value
+    return default
+
+
+def partition_properties(gcb, incb, ep):
+    boundaries = {0, 0x110000}
+    for values in (gcb, incb, ep):
+        for ranges in values.values():
+            for lo, hi in ranges:
+                boundaries.add(lo)
+                boundaries.add(hi + 1)
+    points = sorted(point for point in boundaries if point <= 0x110000)
+    result = []
+    for lo, end in zip(points, points[1:]):
+        hi = end - 1
+        gcb_value = value_at(gcb, lo, "Other")
+        incb_value = value_at(incb, lo, "None")
+        pictographic = value_at(ep, lo, "") == "Extended_Pictographic"
+        if gcb_value != "Other" or incb_value != "None" or pictographic:
+            result.append((lo, hi, gcb_value, incb_value, pictographic))
+    for left, right in zip(result, result[1:]):
+        assert left[1] < right[0]
+    return result
+
+
+def emit_grapheme_api(out, gcb, incb, ep):
+    ranges = partition_properties(gcb, incb, ep)
+    out.write("pub const GraphemeClass = enum { other, cr, lf, control, extend, zwj, regional_indicator, prepend, spacingmark, l, v, t, lv, lvt };\n")
+    out.write("pub const IndicConjunctBreak = enum { none, consonant, extend, linker };\n")
+    out.write("pub const GraphemeProperties = struct { gcb: GraphemeClass, incb: IndicConjunctBreak, extended_pictographic: bool };\n")
+    out.write("pub const GraphemeRange = struct { lo: u21, hi: u21, properties: GraphemeProperties };\n\n")
+    out.write("pub const grapheme_ranges = [_]GraphemeRange{\n")
+    for lo, hi, gcb_value, incb_value, pictographic in ranges:
+        out.write(f"    .{{ .lo = 0x{lo:X}, .hi = 0x{hi:X}, .properties = .{{ .gcb = .{zig_name(gcb_value)}, .incb = .{zig_name(incb_value.replace('InCB; ', ''))}, .extended_pictographic = {'true' if pictographic else 'false'} }} }},\n")
+    out.write("};\n\n")
+    out.write("pub const grapheme_ascii = [_]GraphemeProperties{\n")
+    for cp in range(128):
+        gcb_value = value_at(gcb, cp, "Other")
+        incb_value = value_at(incb, cp, "None")
+        pictographic = value_at(ep, cp, "") == "Extended_Pictographic"
+        out.write(f"    .{{ .gcb = .{zig_name(gcb_value)}, .incb = .{zig_name(incb_value.replace('InCB; ', ''))}, .extended_pictographic = {'true' if pictographic else 'false'} }},\n")
+    out.write("};\n\n")
+    out.write("pub fn graphemeProperties(cp: u21) GraphemeProperties {\n")
+    out.write("    if (cp < grapheme_ascii.len) return grapheme_ascii[cp];\n")
+    out.write("    var lo: usize = 0; var hi: usize = grapheme_ranges.len;\n")
+    out.write("    while (lo < hi) { const mid = lo + (hi - lo) / 2; const r = grapheme_ranges[mid]; if (cp < r.lo) hi = mid else if (cp > r.hi) lo = mid + 1 else return r.properties; }\n")
+    out.write("    return .{ .gcb = .other, .incb = .none, .extended_pictographic = false };\n}\n\n")
+
+
 def emit_line_break_api(out, values):
     names = sorted(values)
     out.write("pub const LineBreak = enum {\n")
     for name in names:
         out.write(f"    {zig_name(name)},\n")
     out.write("};\n\n")
+    ranges = sorted((lo, hi, zig_name(name)) for name, entries in values.items() for lo, hi in entries)
+    for left, right in zip(ranges, ranges[1:]):
+        assert left[1] < right[0], (left, right)
+    out.write("pub const LineBreakRange = struct { lo: u21, hi: u21, class: LineBreak };\n")
+    out.write("pub const line_break_ranges = [_]LineBreakRange{\n")
+    for lo, hi, name in ranges:
+        out.write(f"    .{{ .lo = 0x{lo:X}, .hi = 0x{hi:X}, .class = .{name} }},\n")
+    out.write("};\n\n")
+    out.write("pub const line_break_ascii = [_]LineBreak{\n")
+    for cp in range(128):
+        out.write(f"    .{zig_name(value_at(values, cp, 'XX'))},\n")
+    out.write("};\n\n")
     out.write("pub fn lineBreak(cp: u21) LineBreak {\n")
-    for name in names:
-        out.write(f"    if (inRanges(&lb_{zig_name(name)}, cp)) return .{zig_name(name)};\n")
+    out.write("    if (cp < line_break_ascii.len) return line_break_ascii[cp];\n")
+    out.write("    var lo: usize = 0; var hi: usize = line_break_ranges.len;\n")
+    out.write("    while (lo < hi) { const mid = lo + (hi - lo) / 2; const r = line_break_ranges[mid]; if (cp < r.lo) hi = mid else if (cp > r.hi) lo = mid + 1 else return r.class; }\n")
     out.write("    return .xx;\n}\n\n")
     out.write("fn inRanges(ranges: []const Range, cp: u21) bool {\n")
     out.write("    var lo: usize = 0;\n    var hi: usize = ranges.len;\n")
@@ -188,6 +254,7 @@ def main():
         emit_table(out, "emoji", ep)
         emit_table(out, "lb", lb)
         emit_table(out, "incb", incb)
+        emit_grapheme_api(out, gcb, incb, ep)
         emit_tailoring(out, lb, eaw, categories)
         emit_line_break_auxiliaries(out, lb, eaw, ep, categories)
         emit_line_break_api(out, lb)

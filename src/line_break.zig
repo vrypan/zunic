@@ -61,6 +61,12 @@ const Class = enum {
     zwj,
 };
 
+const Token = struct {
+    len: usize,
+    cp: ?u21,
+    raw: Class,
+};
+
 pub const Iterator = struct {
     bytes: []const u8,
     pos: usize = 0,
@@ -84,6 +90,7 @@ pub const Iterator = struct {
     number_cl_cp: bool = false,
     aksara_vi: bool = false,
     ri_count: usize = 0,
+    next_token: ?Token = null,
 
     pub fn next(self: *Iterator) ?Boundary {
         if (self.finished) return null;
@@ -102,25 +109,23 @@ pub const Iterator = struct {
         }
 
         const offset = self.pos;
-        const step = utf8.step(self.bytes[self.pos..]);
-        const raw = rawClass(step.cp);
-        const cp = step.cp orelse 0;
+        const token = self.takeToken();
+        const raw = token.raw;
+        const cp = token.cp orelse 0;
         const current = resolve(raw, cp, self.previous, self.previous_raw);
-        const following = utf8.step(self.bytes[self.pos + step.len ..]);
-        const next_raw = rawClass(following.cp);
+        const following = self.peekToken();
+        const next_raw = following.raw;
         const next_cp = following.cp orelse 0;
         const opportunity = breakBefore(self, raw, current, cp, next_raw, next_cp, following.len != 0);
-        self.pos += step.len;
         self.consume(raw, current, cp);
         return .{ .offset = offset, .opportunity = opportunity };
     }
 
     fn consumeFirst(self: *Iterator) void {
-        const step = utf8.step(self.bytes);
-        const raw = rawClass(step.cp);
-        const cp = step.cp orelse 0;
+        const token = self.takeToken();
+        const raw = token.raw;
+        const cp = token.cp orelse 0;
         const current = resolve(raw, cp, .al, .bk);
-        self.pos = step.len;
         self.previous = current;
         self.previous_raw = raw;
         self.previous_base_cp = cp;
@@ -128,6 +133,23 @@ pub const Iterator = struct {
         self.updateState(raw, current, cp);
         self.qu_pi_sp = current == .qu and properties.isQuPi(cp);
         self.word_initial_hy = current == .hy or cp == 0x2010;
+    }
+
+    fn takeToken(self: *Iterator) Token {
+        const token = self.next_token orelse self.decodeAt(self.pos);
+        self.next_token = null;
+        self.pos += token.len;
+        return token;
+    }
+
+    fn peekToken(self: *Iterator) Token {
+        if (self.next_token == null) self.next_token = self.decodeAt(self.pos);
+        return self.next_token.?;
+    }
+
+    fn decodeAt(self: *const Iterator, offset: usize) Token {
+        const step = utf8.step(self.bytes[offset..]);
+        return .{ .len = step.len, .cp = step.cp, .raw = rawClass(step.cp) };
     }
 
     fn consume(self: *Iterator, raw: Class, current: Class, cp: u21) void {
@@ -290,11 +312,9 @@ fn isWordInitialBreakContext(c: Class) bool {
     return isHard(c) or c == .sp or c == .zw or c == .cb or c == .gl;
 }
 fn nextAfterCurrentIsNu(it: *const Iterator) bool {
-    const current = utf8.step(it.bytes[it.pos..]);
-    const next = utf8.step(it.bytes[it.pos + current.len ..]);
-    if (rawClass(next.cp) != .is) return false;
-    const after = utf8.step(it.bytes[it.pos + current.len + next.len ..]);
-    return rawClass(after.cp) == .nu;
+    const next = it.next_token orelse it.decodeAt(it.pos);
+    if (next.raw != .is) return false;
+    return it.decodeAt(it.pos + next.len).raw == .nu;
 }
 fn hangulPair(left: Class, right: Class) bool {
     if (left == .jl) return right == .jl or right == .jv or right == .h2 or right == .h3;

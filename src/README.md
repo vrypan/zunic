@@ -20,3 +20,8 @@ offset is mandatory, and intermediate positions are prohibited or allowed.
 It implements UAX #14 revision 53 defaults, without locale/CLDR tailoring,
 dictionary segmentation for SA text, terminal-width line fitting, or emergency
 breaking.
+
+`wrap.iterator(bytes, .{ .max_columns = n })` adds a separate terminal policy:
+it greedily fits the package width policy, never splits an extended grapheme,
+and consumes hard Unicode line separators. It is not locale tailoring or
+hyphenation.

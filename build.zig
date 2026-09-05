@@ -11,6 +11,7 @@ pub fn build(b: *std.Build) void {
     const roots = [_][]const u8{
         "src/root_test.zig",
         "src/conformance_test.zig",
+        "src/wrap_test.zig",
     };
     for (roots) |root| {
         const test_mod = b.createModule(.{
@@ -21,4 +22,19 @@ pub fn build(b: *std.Build) void {
         test_mod.addImport("zunic", zunic);
         test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = test_mod })).step);
     }
+
+    const benchmark_mod = b.createModule(.{
+        .root_source_file = b.path("src/benchmark.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    benchmark_mod.addImport("zunic", zunic);
+    const benchmark = b.addExecutable(.{
+        .name = "zunic-benchmark",
+        .root_module = benchmark_mod,
+    });
+    const run_benchmark = b.addRunArtifact(benchmark);
+    if (b.args) |args| run_benchmark.addArgs(args);
+    const benchmark_step = b.step("benchmark", "Run zunic benchmarks");
+    benchmark_step.dependOn(&run_benchmark.step);
 }
