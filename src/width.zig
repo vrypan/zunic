@@ -41,8 +41,7 @@ pub fn textWidth(bytes: []const u8) usize {
     var it = grapheme.iterator(bytes);
     var total: usize = 0;
     while (it.next()) |span| {
-        const m = measureCluster(bytes[span.start..span.end]);
-        total += if (m.columns == 3) 1 else m.columns;
+        total += if (span.columns == 3) 1 else span.columns;
     }
     return total;
 }
