@@ -19,6 +19,29 @@ The iterator is allocation-free and reports default UAX #14 opportunities only.
 Choosing a break for a terminal width, locale/CLDR tailoring, dictionary
 segmentation, and emergency breaks remain caller responsibilities.
 
+## Why zunic
+
+- **No allocator, anywhere.** No API takes an `std.mem.Allocator`, so
+  nothing can fail on allocation. Iterators return borrowed byte offsets
+  into the caller's input; state lives in the iterator struct.
+- **No dependencies.** Zig standard library only. The Unicode tables are
+  generated into the source tree, so there is no build-time download,
+  code generation step, or C library to link.
+- **Conformance-tested, not hand-tuned.** `zig build test` runs the
+  official Unicode 16.0.0 `GraphemeBreakTest` and `LineBreakTest`
+  fixtures, embedded in the repository, over every case they define.
+- **Tolerant.** Malformed UTF-8 never errors and never
+  panics. An invalid byte is consumed as one span with defined fallback
+  properties, so a terminal reading arbitrary bytes keeps making
+  progress.
+- **One pass over the text.** `scalar.iterator` yields the byte span,
+  the decoded code point, the cell width, and the grapheme and
+  line-break properties together, instead of forcing a separate pass per
+  property.
+- **Optimized wrapping.** Grapheme segmentation, UAX #14 boundaries,
+  and terminal cell widths are used by `zunic.wrap` to provide out-of-the-box
+  text wrapping.
+
 ## Usage
 
 Add the dependency:
