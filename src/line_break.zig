@@ -10,56 +10,7 @@ const scalar = @import("scalar.zig");
 pub const Opportunity = enum { prohibited, allowed, mandatory };
 pub const Boundary = struct { offset: usize, opportunity: Opportunity };
 
-const Class = enum {
-    ai,
-    ak,
-    al,
-    ap,
-    as,
-    b2,
-    ba,
-    bb,
-    bk,
-    cb,
-    cj,
-    cl,
-    cm,
-    cp,
-    cr,
-    eb,
-    em,
-    ex,
-    gl,
-    h2,
-    h3,
-    hl,
-    hy,
-    id,
-    in,
-    is,
-    jl,
-    jt,
-    jv,
-    lf,
-    nl,
-    ns,
-    nu,
-    op,
-    po,
-    pr,
-    qu,
-    ri,
-    sa,
-    sg,
-    sp,
-    sy,
-    vf,
-    vi,
-    wj,
-    xx,
-    zw,
-    zwj,
-};
+const Class = properties.LineBreak;
 
 const Token = struct {
     scalar: scalar.Token,
@@ -148,7 +99,7 @@ pub const Iterator = struct {
 
     fn decodeAt(self: *const Iterator, offset: usize) Token {
         const token = scalar.at(self.bytes, offset);
-        return .{ .scalar = token, .raw = rawClass(token) };
+        return .{ .scalar = token, .raw = token.line_break };
     }
 
     fn consume(self: *Iterator, raw: Class, current: Class, cp: u21) void {
@@ -262,10 +213,6 @@ fn breakBefore(it: *const Iterator, raw: Class, current: Class, cp: u21, next_ra
     if ((it.previous == .eb or properties.isExtendedPictographicCn(it.previous_base_cp)) and current == .em) return .prohibited;
 
     return .allowed; // LB31
-}
-
-fn rawClass(token: scalar.Token) Class {
-    return @enumFromInt(@intFromEnum(token.line_break));
 }
 
 // LB1. The fallback for malformed UTF-8 is AL in rawClass.
