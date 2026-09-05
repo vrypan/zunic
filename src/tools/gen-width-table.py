@@ -24,6 +24,7 @@ import unicodedata
 
 MAX_CP = 0x110000
 SURROGATE_LO, SURROGATE_HI = 0xD800, 0xDFFF
+UNICODE_VERSION = "16.0.0"
 
 
 def width_of(cp: int) -> int:
@@ -72,6 +73,11 @@ def emit(name, ranges, out):
 
 
 def main():
+    if unicodedata.unidata_version != UNICODE_VERSION:
+        sys.exit(
+            f"requires Unicode {UNICODE_VERSION}; Python provides "
+            f"{unicodedata.unidata_version}"
+        )
     all_runs = runs()
     zero = [(lo, hi) for lo, hi, w in all_runs if w == 0]
     wide = [(lo, hi) for lo, hi, w in all_runs if w == 2]
