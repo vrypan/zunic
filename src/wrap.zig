@@ -1,7 +1,6 @@
 //! Greedy terminal-column wrapping that preserves extended grapheme clusters.
 const grapheme = @import("grapheme.zig");
 const line_break = @import("line_break.zig");
-const utf8 = @import("utf8.zig");
 const ascii_scan = @import("ascii_scan.zig");
 
 pub const Overflow = enum { allow, grapheme };
@@ -152,9 +151,10 @@ pub fn iterator(bytes: []const u8, options: Options) error{InvalidWidth}!Iterato
 }
 
 fn hardBreak(bytes: []const u8) bool {
-    const cp = utf8.step(bytes).cp orelse return false;
-    return switch (cp) {
-        0x0B, 0x0C, 0x0D, 0x0A, 0x85, 0x2028, 0x2029 => true,
+    return switch (bytes[0]) {
+        0x0A, 0x0B, 0x0C, 0x0D => true,
+        0xC2 => bytes.len >= 2 and bytes[1] == 0x85,
+        0xE2 => bytes.len >= 3 and bytes[1] == 0x80 and (bytes[2] == 0xA8 or bytes[2] == 0xA9),
         else => false,
     };
 }
