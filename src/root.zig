@@ -8,3 +8,4 @@ pub const grapheme = @import("grapheme.zig");
 pub const width = @import("width.zig");
 pub const line_break = @import("line_break.zig");
 pub const wrap = @import("wrap.zig");
+pub const build_options = @import("build_options");

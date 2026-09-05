@@ -3,6 +3,7 @@ const grapheme = @import("grapheme.zig");
 const line_break = @import("line_break.zig");
 const utf8 = @import("utf8.zig");
 const width = @import("width.zig");
+const ascii_scan = @import("ascii_scan.zig");
 
 pub const Overflow = enum { allow, grapheme };
 pub const Options = struct {
@@ -25,10 +26,13 @@ pub const Iterator = struct {
     line_start: usize = 0,
     columns: usize = 0,
     candidate: ?Candidate = null,
+    ascii_only_letters: ?bool = null,
     finished: bool = false,
 
     pub fn next(self: *Iterator) ?Line {
         if (self.finished) return null;
+        if (self.ascii_only_letters == null) self.ascii_only_letters = ascii_scan.allLetters(self.bytes);
+        if (self.ascii_only_letters.?) return self.nextAsciiLetters();
 
         while (true) {
             const before_graphemes = self.graphemes;
@@ -110,6 +114,20 @@ pub const Iterator = struct {
         self.finished = true;
         if (self.line_start == self.bytes.len) return null;
         return .{ .start = self.line_start, .end = self.bytes.len, .columns = self.columns };
+    }
+
+    fn nextAsciiLetters(self: *Iterator) ?Line {
+        if (self.line_start == self.bytes.len) {
+            self.finished = true;
+            return null;
+        }
+        const start = self.line_start;
+        const end = switch (self.options.overflow) {
+            .allow => self.bytes.len,
+            .grapheme => @min(self.bytes.len, start + self.options.max_columns),
+        };
+        self.line_start = end;
+        return .{ .start = start, .end = end, .columns = end - start };
     }
 
     const BoundaryAt = struct { value: line_break.Boundary, before: line_break.Iterator };

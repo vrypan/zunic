@@ -35,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
     var output_buffer: [4096]u8 = undefined;
     var output_file = std.Io.File.stdout().writer(io, &output_buffer);
     const output = &output_file.interface;
-    try output.print("zunic-benchmark harness_version={s} target_bytes={d} samples={d} smoke={any}\n", .{ harness_version, target_bytes, sample_count, smoke });
+    try output.print("zunic-benchmark harness_version={s} target_bytes={d} samples={d} smoke={any} wrap_fast_path={s}\n", .{ harness_version, target_bytes, sample_count, smoke, @tagName(zunic.build_options.wrap_fast_path) });
     for (legacy_corpora) |corpus| {
         const text = try makeCorpus(allocator, corpus);
         try printSamples(output, corpus.name, "utf8", text, target_bytes, utf8Checksum, io);

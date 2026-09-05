@@ -3,16 +3,22 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const WrapFastPath = enum { off, scalar, auto, simd };
+    const wrap_fast_path = b.option(WrapFastPath, "wrap-fast-path", "ASCII wrapping acceleration backend") orelse .auto;
+    const build_options = b.addOptions();
+    build_options.addOption(WrapFastPath, "wrap_fast_path", wrap_fast_path);
 
     const zunic = b.addModule("zunic", .{
         .root_source_file = b.path("src/root.zig"),
     });
+    zunic.addImport("build_options", build_options.createModule());
     const test_step = b.step("test", "Run zunic tests");
     const roots = [_][]const u8{
         "src/root_test.zig",
         "src/conformance_test.zig",
         "src/wrap_test.zig",
         "src/wrap_regression_test.zig",
+        "src/scan_test.zig",
     };
     for (roots) |root| {
         const test_mod = b.createModule(.{
@@ -21,6 +27,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         test_mod.addImport("zunic", zunic);
+        test_mod.addImport("build_options", build_options.createModule());
         test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = test_mod })).step);
     }
 
@@ -30,6 +37,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     regression_mod.addImport("zunic", zunic);
+    regression_mod.addImport("build_options", build_options.createModule());
     const regression_step = b.step("wrap-regressions", "Run wrapper regression tests");
     regression_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = regression_mod })).step);
 

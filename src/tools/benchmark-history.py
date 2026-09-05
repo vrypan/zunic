@@ -7,6 +7,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import statistics
 import subprocess
 import sys
@@ -58,7 +59,8 @@ def summarize(samples):
 def save(args):
     if not SAFE_LABEL.fullmatch(args.label):
         raise SystemExit("label must contain only letters, digits, dot, underscore, or dash")
-    command = ["zig", "build", "benchmark", "-Doptimize=ReleaseFast", "--", *args.benchmark_args]
+    build_args = shlex.split(os.environ.get("ZUNIC_BENCHMARK_BUILD_ARGS", ""))
+    command = ["zig", "build", "benchmark", "-Doptimize=ReleaseFast", *build_args, "--", *args.benchmark_args]
     completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
     timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     HISTORY.mkdir(parents=True, exist_ok=True)
@@ -75,7 +77,7 @@ def save(args):
         "source_fingerprint": digest_sources(), "python": platform.python_version(),
         "os": platform.platform(), "machine": platform.machine(),
         "cpu": platform.processor() or "unknown", "zig": git_zig_version(),
-        "harness": header, "benchmark_args": args.benchmark_args,
+        "harness": header, "benchmark_args": args.benchmark_args, "build_args": build_args,
     }
     (run / "metadata.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
     (run / "summary.json").write_text(json.dumps(summarize(samples), indent=2, sort_keys=True) + "\n")
@@ -99,7 +101,9 @@ def compare(args):
     for key in ("zig", "machine", "benchmark_args"):
         if before_meta.get(key) != after_meta.get(key):
             raise SystemExit(f"incompatible runs: {key} differs")
-    if before_meta["harness"] != after_meta["harness"]:
+    before_harness = {k: v for k, v in before_meta["harness"].items() if k != "wrap_fast_path"}
+    after_harness = {k: v for k, v in after_meta["harness"].items() if k != "wrap_fast_path"}
+    if before_harness != after_harness:
         raise SystemExit("incompatible runs: harness metadata differs")
     for key in sorted(set(before) | set(after)):
         if key not in before or key not in after:

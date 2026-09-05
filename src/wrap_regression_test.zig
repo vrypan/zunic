@@ -55,3 +55,10 @@ test "wrap matches independent reference randomized" {
         }
     }
 }
+
+test "ASCII fast path preserves word and viewport lines" {
+    try expectProductionMatchesReference("abcdefghijklmnopqrstuvwxyz", .{ .max_columns = 5, .overflow = .grapheme });
+    try expectProductionMatchesReference("abcdefghijklmnopqrstuvwxyz", .{ .max_columns = 5, .overflow = .allow });
+    try expectProductionMatchesReference("abc\xcc\x81def", .{ .max_columns = 3, .overflow = .grapheme });
+    try expectProductionMatchesReference("abc def", .{ .max_columns = 3, .overflow = .allow });
+}
