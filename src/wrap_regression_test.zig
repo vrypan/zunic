@@ -65,6 +65,63 @@ test "ASCII fast path preserves word and viewport lines" {
     try expectProductionMatchesReference("alpha beta gamma\r\ndelta", .{ .max_columns = 6, .overflow = .allow });
 }
 
+fn countScalars(bytes: []const u8) usize {
+    var count: usize = 0;
+    var pos: usize = 0;
+    while (pos < bytes.len) {
+        pos += unicode.utf8.step(bytes[pos..]).len;
+        count += 1;
+    }
+    return count;
+}
+
+// The 008 work bound: the wrapper decodes each scalar exactly once (the
+// scanner never rewinds and LB25's rare extra lookahead is absent from these
+// corpora), with at most two tokens buffered, at every width, in both
+// overflow policies, at every input scale. Replay would show up here as a
+// superlinear decode count.
+test "wrapping decodes each scalar once at all scales and widths" {
+    const seeds = [_][]const u8{
+        "wörter über zwölf lange tage hinweg ",
+        "ööööööööööööööööööööööööööööööö",
+        "e\xcc\x81\xcc\x81\xcc\x81\xcc\x81\xcc\x81\xcc\x81\xcc\x81\xcc\x81",
+        "日本語の文章と漢字を測定します。 ",
+    };
+    var buffer: [4096]u8 = undefined;
+    for (seeds) |seed| {
+        for ([_]usize{ 1, 2, 4, 8 }) |scale| {
+            var length: usize = 0;
+            for (0..scale) |_| {
+                @memcpy(buffer[length..][0..seed.len], seed);
+                length += seed.len;
+            }
+            const bytes = buffer[0..length];
+            const expected = countScalars(bytes);
+            for ([_]usize{ 1, 3, 40 }) |max_columns| {
+                for ([_]unicode.wrap.Overflow{ .grapheme, .allow }) |overflow| {
+                    var it = try unicode.wrap.instrumentedIterator(bytes, .{ .max_columns = max_columns, .overflow = overflow });
+                    while (it.next()) |_| {}
+                    try std.testing.expectEqual(expected, it.scanner.counters.decoded_scalars);
+                    try std.testing.expect(it.scanner.counters.max_buffered <= 2);
+                }
+            }
+        }
+    }
+}
+
+test "viewport wrapping stays lazy" {
+    var buffer: [4096]u8 = undefined;
+    const seed = "wörter über zwölf lange tage hinweg ";
+    var length: usize = 0;
+    while (length + seed.len <= buffer.len) : (length += seed.len) {
+        @memcpy(buffer[length..][0..seed.len], seed);
+    }
+    const bytes = buffer[0..length];
+    var it = try unicode.wrap.instrumentedIterator(bytes, .{ .max_columns = 20, .overflow = .grapheme });
+    for (0..4) |_| _ = it.next() orelse return error.TestUnexpectedResult;
+    try std.testing.expect(it.scanner.counters.decoded_scalars < countScalars(bytes) / 2);
+}
+
 test "ASCII paragraph fast path matches reference exhaustively" {
     const alphabet = [_]u8{ 'a', 'Z', ' ', '\n', '\r', 0x0B, 0x0C };
     var buffer: [5]u8 = undefined;

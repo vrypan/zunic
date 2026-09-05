@@ -11,14 +11,73 @@ pub const Span = struct {
 
 const Property = enum { other, cr, lf, control, extend, zwj, ri, prepend, spacing_mark, l, v, t, lv, lvt, ep };
 const InCB = enum { none, consonant, extend, linker };
-const Classification = struct { property: Property, incb: InCB };
+pub const Classification = struct { property: Property, incb: InCB };
 const Token = struct { scalar: scalar.Token, classification: Classification };
+
+/// Internal UAX #29 intra-cluster transition state, separated from the byte
+/// iterator so a fused scanner can drive it from an already-decoded token
+/// stream. `init` starts a cluster at its first scalar; `breakBefore` asks
+/// whether the cluster ends before the next scalar; `consume` extends it.
+pub const ClusterState = struct {
+    previous: Property,
+    ri_count: usize,
+    ep_before_zwj: bool,
+    zwj_after_ep: bool = false,
+    incb_linker_after_consonant: bool = false,
+    incb_seen_consonant: bool,
+
+    pub inline fn init(classification: Classification) ClusterState {
+        return .{
+            .previous = classification.property,
+            .ri_count = if (classification.property == .ri) 1 else 0,
+            .ep_before_zwj = classification.property == .ep,
+            .incb_seen_consonant = classification.incb == .consonant,
+        };
+    }
+
+    pub inline fn breakBeforeNext(self: ClusterState, classification: Classification) bool {
+        return breakBefore(self.previous, classification.property, self.ri_count, self.zwj_after_ep, self.incb_linker_after_consonant, classification.incb);
+    }
+
+    pub inline fn consume(self: *ClusterState, classification: Classification) void {
+        const current = classification.property;
+        if (current == .ri) self.ri_count += 1 else if (current != .extend) self.ri_count = 0;
+        if (current == .zwj) {
+            self.zwj_after_ep = self.ep_before_zwj;
+        } else if (current == .ep) {
+            self.ep_before_zwj = true;
+            self.zwj_after_ep = false;
+        } else if (current != .extend) {
+            self.ep_before_zwj = false;
+            self.zwj_after_ep = false;
+        }
+        switch (classification.incb) {
+            .consonant => {
+                self.incb_seen_consonant = true;
+                self.incb_linker_after_consonant = false;
+            },
+            .linker => {
+                if (self.incb_seen_consonant) self.incb_linker_after_consonant = true;
+            },
+            .extend => {},
+            .none => {
+                self.incb_seen_consonant = false;
+                self.incb_linker_after_consonant = false;
+            },
+        }
+        self.previous = current;
+    }
+};
 
 pub const Iterator = struct {
     bytes: []const u8,
     pos: usize = 0,
     pending: ?Token = null,
 
+    // This loop is ClusterState's transition logic hand-scheduled into
+    // locals: routing it through the struct costs 7-15% on short-scalar
+    // corpora (measured for 008). The scanner differential tests in
+    // scan_test.zig keep the two in agreement.
     pub fn next(self: *Iterator) ?Span {
         if (self.pos >= self.bytes.len) return null;
         const start = self.pos;
@@ -89,13 +148,13 @@ pub const Iterator = struct {
     }
 };
 
-const ClusterMeasure = struct {
+pub const ClusterMeasure = struct {
     columns: usize = 0,
     has_base: bool = false,
     has_pictograph: bool = false,
     has_ri: bool = false,
 
-    fn add(self: *ClusterMeasure, token: scalar.Token) void {
+    pub fn add(self: *ClusterMeasure, token: scalar.Token) void {
         const cp = token.codepoint orelse return;
         if (cp < 0x20 or cp == 0x7f) return;
         if (token.cell_width != 0) {
@@ -106,7 +165,7 @@ const ClusterMeasure = struct {
         if (cp >= 0x1f1e6 and cp <= 0x1f1ff) self.has_ri = true;
     }
 
-    fn finish(self: ClusterMeasure) u3 {
+    pub fn finish(self: ClusterMeasure) u3 {
         if (!self.has_base) return 0;
         if (self.has_pictograph or self.has_ri) return 2;
         if (self.columns > 2) return 3;
@@ -136,7 +195,7 @@ fn isControl(p: Property) bool {
     return p == .cr or p == .lf or p == .control;
 }
 
-fn classify(token: scalar.Token) Classification {
+pub fn classify(token: scalar.Token) Classification {
     const property: Property = switch (token.grapheme.gcb) {
         .other => if (token.grapheme.extended_pictographic) .ep else .other,
         .regional_indicator => .ri,

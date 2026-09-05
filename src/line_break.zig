@@ -17,11 +17,13 @@ const Token = struct {
     raw: Class,
 };
 
-pub const Iterator = struct {
-    bytes: []const u8,
-    pos: usize = 0,
-    initialized: bool = false,
-    finished: bool = false,
+/// Internal UAX #14 transition state, separated from the byte iterator so a
+/// fused scanner can drive it from an already-decoded token stream. The
+/// protocol per scalar mirrors `Iterator.next`: resolve the raw class with
+/// `resolveCurrent`, ask `opportunityBefore` for the boundary in front of the
+/// scalar, then `consume` it. The first scalar of the text is consumed with
+/// `first` instead and has no boundary decision.
+pub const State = struct {
     previous: Class = .al,
     previous_raw: Class = .al,
     previous_base_cp: u21 = 0,
@@ -40,69 +42,33 @@ pub const Iterator = struct {
     number_cl_cp: bool = false,
     aksara_vi: bool = false,
     ri_count: usize = 0,
-    next_token: ?Token = null,
 
-    pub fn next(self: *Iterator) ?Boundary {
-        if (self.finished) return null;
-        if (!self.initialized) {
-            self.initialized = true;
-            if (self.bytes.len == 0) {
-                self.finished = true;
-                return .{ .offset = 0, .opportunity = .mandatory };
-            }
-            self.consumeFirst();
-            return .{ .offset = 0, .opportunity = .prohibited };
-        }
-        if (self.pos == self.bytes.len) {
-            self.finished = true;
-            return .{ .offset = self.pos, .opportunity = .mandatory };
-        }
-
-        const offset = self.pos;
-        const token = self.takeToken();
-        const raw = token.raw;
-        const cp = token.scalar.codepoint orelse 0;
-        const current = resolve(raw, cp, self.previous, self.previous_raw);
-        const following = self.peekToken();
-        const next_raw = following.raw;
-        const next_cp = following.scalar.codepoint orelse 0;
-        const opportunity = breakBefore(self, raw, current, cp, next_raw, next_cp, following.scalar.end != following.scalar.start);
-        self.consume(raw, current, cp);
-        return .{ .offset = offset, .opportunity = opportunity };
-    }
-
-    fn consumeFirst(self: *Iterator) void {
-        const token = self.takeToken();
-        const raw = token.raw;
-        const cp = token.scalar.codepoint orelse 0;
+    pub fn first(raw: Class, cp: u21) State {
+        var state = State{};
         const current = resolve(raw, cp, .al, .bk);
-        self.previous = current;
-        self.previous_raw = raw;
-        self.previous_base_cp = cp;
-        self.previous_at_sot = true;
-        self.updateState(raw, current, cp);
-        self.qu_pi_sp = current == .qu and properties.isQuPi(cp);
-        self.word_initial_hy = current == .hy or cp == 0x2010;
+        state.previous = current;
+        state.previous_raw = raw;
+        state.previous_base_cp = cp;
+        state.previous_at_sot = true;
+        state.updateState(raw, current, cp);
+        state.qu_pi_sp = current == .qu and properties.isQuPi(cp);
+        state.word_initial_hy = current == .hy or cp == 0x2010;
+        return state;
     }
 
-    fn takeToken(self: *Iterator) Token {
-        const token = self.next_token orelse self.decodeAt(self.pos);
-        self.next_token = null;
-        self.pos = token.scalar.end;
-        return token;
+    pub fn resolveCurrent(self: *const State, raw: Class, cp: u21) Class {
+        return resolve(raw, cp, self.previous, self.previous_raw);
     }
 
-    fn peekToken(self: *Iterator) Token {
-        if (self.next_token == null) self.next_token = self.decodeAt(self.pos);
-        return self.next_token.?;
+    /// `next_raw`/`next_cp`/`has_next` describe the scalar following this one
+    /// (class `.al`, code point 0, `has_next == false` at end of text), and
+    /// `next_end` is that scalar's end offset within `bytes` so LB25 can
+    /// examine the second following scalar when required.
+    pub fn opportunityBefore(self: *const State, bytes: []const u8, raw: Class, current: Class, cp: u21, next_raw: Class, next_cp: u21, has_next: bool, next_end: usize) Opportunity {
+        return breakBefore(self, bytes, raw, current, cp, next_raw, next_cp, has_next, next_end);
     }
 
-    fn decodeAt(self: *const Iterator, offset: usize) Token {
-        const token = scalar.at(self.bytes, offset);
-        return .{ .scalar = token, .raw = token.line_break };
-    }
-
-    fn consume(self: *Iterator, raw: Class, current: Class, cp: u21) void {
+    pub fn consume(self: *State, raw: Class, current: Class, cp: u21) void {
         self.before_previous = self.previous;
         self.before_previous_cp = self.previous_base_cp;
         self.previous = current;
@@ -112,7 +78,7 @@ pub const Iterator = struct {
         self.updateState(raw, current, cp);
     }
 
-    fn updateState(self: *Iterator, raw: Class, current: Class, cp: u21) void {
+    fn updateState(self: *State, raw: Class, current: Class, cp: u21) void {
         const was_op_sp = self.op_sp;
         const was_qu_pi_sp = self.qu_pi_sp;
         const was_cl_cp_sp = self.cl_cp_sp;
@@ -141,12 +107,72 @@ pub const Iterator = struct {
     }
 };
 
+pub const Iterator = struct {
+    bytes: []const u8,
+    pos: usize = 0,
+    initialized: bool = false,
+    finished: bool = false,
+    state: State = .{},
+    next_token: ?Token = null,
+
+    pub fn next(self: *Iterator) ?Boundary {
+        if (self.finished) return null;
+        if (!self.initialized) {
+            self.initialized = true;
+            if (self.bytes.len == 0) {
+                self.finished = true;
+                return .{ .offset = 0, .opportunity = .mandatory };
+            }
+            const token = self.takeToken();
+            self.state = State.first(token.raw, token.scalar.codepoint orelse 0);
+            return .{ .offset = 0, .opportunity = .prohibited };
+        }
+        if (self.pos == self.bytes.len) {
+            self.finished = true;
+            return .{ .offset = self.pos, .opportunity = .mandatory };
+        }
+
+        const offset = self.pos;
+        const token = self.takeToken();
+        const raw = token.raw;
+        const cp = token.scalar.codepoint orelse 0;
+        const current = self.state.resolveCurrent(raw, cp);
+        const following = self.peekToken();
+        const next_raw = following.raw;
+        const next_cp = following.scalar.codepoint orelse 0;
+        const opportunity = self.state.opportunityBefore(self.bytes, raw, current, cp, next_raw, next_cp, following.scalar.end != following.scalar.start, following.scalar.end);
+        self.state.consume(raw, current, cp);
+        return .{ .offset = offset, .opportunity = opportunity };
+    }
+
+    fn takeToken(self: *Iterator) Token {
+        const token = self.next_token orelse self.decodeAt(self.pos);
+        self.next_token = null;
+        self.pos = token.scalar.end;
+        return token;
+    }
+
+    fn peekToken(self: *Iterator) Token {
+        if (self.next_token == null) self.next_token = self.decodeAt(self.pos);
+        return self.next_token.?;
+    }
+
+    fn decodeAt(self: *const Iterator, offset: usize) Token {
+        const token = scalar.at(self.bytes, offset);
+        return .{ .scalar = token, .raw = token.line_break };
+    }
+};
+
 pub fn iterator(bytes: []const u8) Iterator {
     return .{ .bytes = bytes };
 }
 
+pub fn isHardClass(c: Class) bool {
+    return isHard(c);
+}
+
 // LB4-LB31, after LB1 resolution. Earlier rules take precedence.
-fn breakBefore(it: *const Iterator, raw: Class, current: Class, cp: u21, next_raw: Class, next_cp: u21, has_next: bool) Opportunity {
+fn breakBefore(it: *const State, bytes: []const u8, raw: Class, current: Class, cp: u21, next_raw: Class, next_cp: u21, has_next: bool, next_end: usize) Opportunity {
     // LB5 and LB6: preserve CRLF, and force boundaries around hard breaks.
     if (it.previous_raw == .cr and raw == .lf) return .prohibited;
     if (isHard(it.previous_raw)) return .allowed;
@@ -194,7 +220,7 @@ fn breakBefore(it: *const Iterator, raw: Class, current: Class, cp: u21, next_ra
     if ((it.previous == .po or it.previous == .pr) and current == .nu) return .prohibited;
     if (it.previous == .hy and current == .nu) return .prohibited;
     if (it.previous == .is and current == .nu) return .prohibited;
-    if ((it.previous == .po or it.previous == .pr) and current == .op and (next_raw == .nu or nextAfterCurrentIsNu(it))) return .prohibited;
+    if ((it.previous == .po or it.previous == .pr) and current == .op and (next_raw == .nu or secondFollowingIsNu(bytes, next_raw, next_end))) return .prohibited;
     if (it.po_pr_before_op and (current == .nu or (current == .is and next_raw == .nu))) return .prohibited;
 
     // LB26-LB30b: Hangul, Brahmic syllables, alphabetics, and emoji.
@@ -256,10 +282,9 @@ fn isLb15bFollower(c: Class) bool {
 fn isWordInitialBreakContext(c: Class) bool {
     return isHard(c) or c == .sp or c == .zw or c == .cb or c == .gl;
 }
-fn nextAfterCurrentIsNu(it: *const Iterator) bool {
-    const next = it.next_token orelse it.decodeAt(it.pos);
-    if (next.raw != .is) return false;
-    return it.decodeAt(next.scalar.end).raw == .nu;
+fn secondFollowingIsNu(bytes: []const u8, next_raw: Class, next_end: usize) bool {
+    if (next_raw != .is) return false;
+    return scalar.at(bytes, next_end).line_break == .nu;
 }
 fn hangulPair(left: Class, right: Class) bool {
     if (left == .jl) return right == .jl or right == .jv or right == .h2 or right == .h3;
