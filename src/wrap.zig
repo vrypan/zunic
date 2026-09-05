@@ -2,7 +2,6 @@
 const grapheme = @import("grapheme.zig");
 const line_break = @import("line_break.zig");
 const utf8 = @import("utf8.zig");
-const width = @import("width.zig");
 const ascii_scan = @import("ascii_scan.zig");
 
 pub const Overflow = enum { allow, grapheme };
@@ -170,6 +169,5 @@ fn clusterColumns(bytes: []const u8, span: grapheme.Span) usize {
         if (byte < 0x20 or byte == 0x7f) return 0;
         if (byte < 0x80) return 1;
     }
-    const measure = width.measureCluster(bytes[span.start..span.end]);
-    return if (measure.columns == 3) 1 else measure.columns;
+    return if (span.columns == 3) 1 else span.columns;
 }

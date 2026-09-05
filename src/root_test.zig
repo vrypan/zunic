@@ -19,3 +19,12 @@ test "scalar iterator retains byte spans and facts" {
     try std.testing.expectEqual(@as(?u21, 0x754C), cjk.codepoint);
     try std.testing.expect(it.next() == null);
 }
+
+test "grapheme clusters retain the shared terminal measure" {
+    const text = "e\xcc\x81界👩‍👩‍👧‍👦\x00";
+    var it = unicode.grapheme.iterator(text);
+    while (it.next()) |span| {
+        const measured = unicode.width.measureCluster(text[span.start..span.end]);
+        try std.testing.expectEqual(measured.columns, span.columns);
+    }
+}

@@ -2,7 +2,12 @@
 const scalar = @import("scalar.zig");
 const properties = @import("properties.zig");
 
-pub const Span = struct { start: usize, end: usize };
+pub const Span = struct {
+    start: usize,
+    end: usize,
+    /// Terminal width for this cluster; `3` is the replacement sentinel.
+    columns: u3 = 0,
+};
 
 const Property = enum { other, cr, lf, control, extend, zwj, ri, prepend, spacing_mark, l, v, t, lv, lvt, ep };
 const InCB = enum { none, consonant, extend, linker };
@@ -18,6 +23,8 @@ pub const Iterator = struct {
         if (self.pos >= self.bytes.len) return null;
         const start = self.pos;
         const first = self.takeToken();
+        var measure = ClusterMeasure{};
+        measure.add(first.scalar);
         const first_classification = first.classification;
         var previous = first_classification.property;
         var ri_count: usize = if (previous == .ri) 1 else 0;
@@ -34,6 +41,7 @@ pub const Iterator = struct {
             if (breakBefore(previous, current, ri_count, zwj_after_ep, incb_linker_after_consonant, current_incb)) break;
 
             _ = self.takeToken();
+            measure.add(lookahead.scalar);
             if (current == .ri) ri_count += 1 else if (current != .extend) ri_count = 0;
             if (current == .zwj) {
                 zwj_after_ep = ep_before_zwj;
@@ -60,7 +68,7 @@ pub const Iterator = struct {
             }
             previous = current;
         }
-        return .{ .start = start, .end = self.pos };
+        return .{ .start = start, .end = self.pos, .columns = measure.finish() };
     }
 
     fn takeToken(self: *Iterator) Token {
@@ -78,6 +86,31 @@ pub const Iterator = struct {
     fn decodeAt(self: *const Iterator, offset: usize) Token {
         const token = scalar.at(self.bytes, offset);
         return .{ .scalar = token, .classification = classify(token) };
+    }
+};
+
+const ClusterMeasure = struct {
+    columns: usize = 0,
+    has_base: bool = false,
+    has_pictograph: bool = false,
+    has_ri: bool = false,
+
+    fn add(self: *ClusterMeasure, token: scalar.Token) void {
+        const cp = token.codepoint orelse return;
+        if (cp < 0x20 or cp == 0x7f) return;
+        if (token.cell_width != 0) {
+            self.has_base = true;
+            self.columns += token.cell_width;
+        }
+        if (token.grapheme.extended_pictographic) self.has_pictograph = true;
+        if (cp >= 0x1f1e6 and cp <= 0x1f1ff) self.has_ri = true;
+    }
+
+    fn finish(self: ClusterMeasure) u3 {
+        if (!self.has_base) return 0;
+        if (self.has_pictograph or self.has_ri) return 2;
+        if (self.columns > 2) return 3;
+        return @intCast(self.columns);
     }
 };
 
