@@ -58,6 +58,26 @@ pub const Iterator = struct {
                 continue;
             }
 
+            // The line is already wider than the limit because its first
+            // cluster was oversized. Zero-column suffixes still belong to
+            // that visual line.
+            if (cluster_columns == 0 and self.columns > self.options.max_columns) {
+                self.columns = next_columns;
+                continue;
+            }
+
+            // A legal break that already fits is always preferable to an
+            // overflow. `allow` only extends an unbreakable run when there
+            // is no such break.
+            if (self.candidate) |candidate| {
+                self.graphemes = candidate.graphemes;
+                self.boundaries = candidate.boundaries;
+                self.line_start = candidate.line.end;
+                self.columns = 0;
+                self.candidate = null;
+                return candidate.line;
+            }
+
             switch (self.options.overflow) {
                 .allow => {
                     self.columns = next_columns;
@@ -70,18 +90,12 @@ pub const Iterator = struct {
                     }
                 },
                 .grapheme => {
-                    if (self.candidate) |candidate| {
-                        self.graphemes = candidate.graphemes;
-                        self.boundaries = candidate.boundaries;
-                        self.line_start = candidate.line.end;
-                        self.columns = 0;
-                        self.candidate = null;
-                        return candidate.line;
-                    }
                     if (span.start == self.line_start) {
-                        self.line_start = span.end;
-                        self.columns = 0;
-                        return .{ .start = span.start, .end = span.end, .columns = next_columns };
+                        // Keep an oversized cluster pending. A following
+                        // zero-column grapheme belongs to it, and a following
+                        // hard terminator must be consumed before we return.
+                        self.columns = next_columns;
+                        continue;
                     }
                     const line = Line{ .start = self.line_start, .end = span.start, .columns = self.columns };
                     self.graphemes = before_graphemes;

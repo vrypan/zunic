@@ -75,16 +75,20 @@ while (lines.next()) |line| {
 }
 ```
 
-The default `.grapheme` overflow policy breaks an unbreakable word before the
-grapheme that would overflow. Use `.overflow = .allow` to keep that word on
-one oversized line. Spans retain whitespace, tabs, controls, and malformed
-bytes; apply the renderer's filtering policy before writing terminal output.
+The iterator prefers the last legal break that fits. The default `.grapheme`
+overflow policy then breaks an unbreakable word before the grapheme that would
+overflow; use `.overflow = .allow` to keep that run on one oversized line.
+Zero-column suffixes remain attached to an oversized line, and a following
+hard separator is consumed without producing a phantom line. Spans retain
+whitespace, tabs, controls, and malformed bytes; apply the renderer's
+filtering policy before writing terminal output.
 
 ## Development
 
 Run `make benchmark` to measure ReleaseFast throughput for UTF-8, grapheme,
-width, line-break, and wrapping workloads. Compare five-sample results on the
-same machine; they are not cross-machine rankings. Use `make benchmark` with
+width, line-break, and wrapping workloads. It reports seven samples per case;
+compare results on the same machine rather than treating them as
+cross-machine rankings. Use `make benchmark` with
 `BENCHMARK_ARGS=--smoke` for a quicker smoke run.
 
 ```sh

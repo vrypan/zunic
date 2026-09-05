@@ -12,6 +12,7 @@ pub fn build(b: *std.Build) void {
         "src/root_test.zig",
         "src/conformance_test.zig",
         "src/wrap_test.zig",
+        "src/wrap_regression_test.zig",
     };
     for (roots) |root| {
         const test_mod = b.createModule(.{
@@ -22,6 +23,15 @@ pub fn build(b: *std.Build) void {
         test_mod.addImport("zunic", zunic);
         test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = test_mod })).step);
     }
+
+    const regression_mod = b.createModule(.{
+        .root_source_file = b.path("src/wrap_regression_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    regression_mod.addImport("zunic", zunic);
+    const regression_step = b.step("wrap-regressions", "Run wrapper regression tests");
+    regression_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = regression_mod })).step);
 
     const benchmark_mod = b.createModule(.{
         .root_source_file = b.path("src/benchmark.zig"),

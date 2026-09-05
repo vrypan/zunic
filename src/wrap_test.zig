@@ -28,3 +28,11 @@ test "wrap validates width and empty lines" {
     try expectLines("\n", .{ .max_columns = 1 }, &.{""}, &.{0});
     try expectLines("a\n\n", .{ .max_columns = 1 }, &.{ "a", "" }, &.{ 1, 0 });
 }
+
+test "wrap selects fitting candidates and finalizes oversized lines" {
+    try expectLines("a bcdef", .{ .max_columns = 4, .overflow = .allow }, &.{ "a ", "bcdef" }, &.{ 2, 5 });
+    try expectLines("界\n", .{ .max_columns = 1 }, &.{"界"}, &.{2});
+    try expectLines("界\x00", .{ .max_columns = 1 }, &.{"界\x00"}, &.{2});
+    try expectLines("界\n\n", .{ .max_columns = 1 }, &.{ "界", "" }, &.{ 2, 0 });
+    try expectLines("longword\n", .{ .max_columns = 2, .overflow = .allow }, &.{"longword"}, &.{8});
+}

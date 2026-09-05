@@ -22,6 +22,7 @@ dictionary segmentation for SA text, terminal-width line fitting, or emergency
 breaking.
 
 `wrap.iterator(bytes, .{ .max_columns = n })` adds a separate terminal policy:
-it greedily fits the package width policy, never splits an extended grapheme,
-and consumes hard Unicode line separators. It is not locale tailoring or
-hyphenation.
+it chooses the last fitting legal boundary, never splits an extended grapheme,
+and consumes hard Unicode line separators. When an unbreakable run is already
+oversized, zero-column suffixes stay attached and its following separator does
+not create a phantom line. It is not locale tailoring or hyphenation.
