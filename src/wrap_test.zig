@@ -36,3 +36,7 @@ test "wrap selects fitting candidates and finalizes oversized lines" {
     try expectLines("界\n\n", .{ .max_columns = 1 }, &.{ "界", "" }, &.{ 2, 0 });
     try expectLines("longword\n", .{ .max_columns = 2, .overflow = .allow }, &.{"longword"}, &.{8});
 }
+
+test "wrap retains terminal width for ASCII controls" {
+    try expectLines("a\x00b\x7f", .{ .max_columns = 1 }, &.{ "a\x00", "b\x7f" }, &.{ 1, 1 });
+}

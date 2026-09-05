@@ -46,8 +46,7 @@ pub const Iterator = struct {
                 return line;
             }
 
-            const measure = width.measureCluster(self.bytes[span.start..span.end]);
-            const cluster_columns: usize = if (measure.columns == 3) 1 else measure.columns;
+            const cluster_columns = clusterColumns(self.bytes, span);
             const next_columns = self.columns + cluster_columns;
             const boundary = self.boundaryAt(span.end);
             const can_break = boundary.value.offset == span.end and boundary.value.opportunity != .prohibited;
@@ -157,4 +156,18 @@ fn hardBreak(bytes: []const u8) bool {
         0x0B, 0x0C, 0x0D, 0x0A, 0x85, 0x2028, 0x2029 => true,
         else => false,
     };
+}
+
+/// Grapheme iteration has already established that this is one cluster. For a
+/// one-byte ASCII cluster, terminal width is determined without decoding it or
+/// consulting emoji properties. All other clusters retain the shared width
+/// policy verbatim.
+fn clusterColumns(bytes: []const u8, span: grapheme.Span) usize {
+    if (span.end == span.start + 1) {
+        const byte = bytes[span.start];
+        if (byte < 0x20 or byte == 0x7f) return 0;
+        if (byte < 0x80) return 1;
+    }
+    const measure = width.measureCluster(bytes[span.start..span.end]);
+    return if (measure.columns == 3) 1 else measure.columns;
 }
