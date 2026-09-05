@@ -148,7 +148,7 @@ pub const Iterator = struct {
 
     fn decodeAt(self: *const Iterator, offset: usize) Token {
         const token = scalar.at(self.bytes, offset);
-        return .{ .scalar = token, .raw = rawClass(token.codepoint) };
+        return .{ .scalar = token, .raw = rawClass(token) };
     }
 
     fn consume(self: *Iterator, raw: Class, current: Class, cp: u21) void {
@@ -264,9 +264,8 @@ fn breakBefore(it: *const Iterator, raw: Class, current: Class, cp: u21, next_ra
     return .allowed; // LB31
 }
 
-fn rawClass(maybe_cp: ?u21) Class {
-    const cp = maybe_cp orelse return .al;
-    return @enumFromInt(@intFromEnum(properties.lineBreak(cp)));
+fn rawClass(token: scalar.Token) Class {
+    return @enumFromInt(@intFromEnum(token.line_break));
 }
 
 // LB1. The fallback for malformed UTF-8 is AL in rawClass.
