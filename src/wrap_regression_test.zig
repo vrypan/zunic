@@ -123,7 +123,7 @@ test "viewport wrapping stays lazy" {
 }
 
 test "ASCII paragraph fast path matches reference exhaustively" {
-    const alphabet = [_]u8{ 'a', 'Z', ' ', '\n', '\r', 0x0B, 0x0C };
+    const alphabet = [_]u8{ 'a', 'Z', '7', '\'', ' ', '\n', '\r', 0x0B, 0x0C };
     var buffer: [5]u8 = undefined;
     for (0..6) |length| {
         const combinations = std.math.pow(usize, alphabet.len, length);

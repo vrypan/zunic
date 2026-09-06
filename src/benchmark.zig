@@ -23,6 +23,7 @@ const wrap_cases = [_]WrapCase{
     .{ .name = "cjk-4k-allow-full", .corpus = .{ .name = "cjk", .seed = "日本語の文章と漢字を測定します。 ", .length = 4096 }, .max_columns = 40, .overflow = .allow },
     .{ .name = "emoji-4k-grapheme-24-lines", .corpus = .{ .name = "emoji", .seed = "👩‍👩‍👧‍👦 🇬🇷 👋🏿 ", .length = 4096 }, .max_columns = 40, .overflow = .grapheme, .max_lines = 24 },
     .{ .name = "hard-breaks-4k-allow-24-lines", .corpus = .{ .name = "hard", .seed = "alpha\nβeta\x0c界\xc2\x85emoji👩‍👩‍👧‍👦 ", .length = 4096 }, .max_columns = 80, .overflow = .allow, .max_lines = 24 },
+    .{ .name = "ascii-text-4k-grapheme-full", .corpus = .{ .name = "ascii-text", .seed = "the 3 quick brown foxes don't jump over 27 lazy dogs ", .length = 4096 }, .max_columns = 40, .overflow = .grapheme },
     .{ .name = "long-word-4k-grapheme-full", .corpus = .{ .name = "word", .seed = "supercalifragilisticexpialidocious", .length = 4096 }, .max_columns = 40, .overflow = .grapheme },
     .{ .name = "zero-width-4k-allow-full", .corpus = .{ .name = "zero", .seed = "e\xcc\x81\xcc\x81\xcc\x81\xcc\x81", .length = 4096 }, .max_columns = 1, .overflow = .allow },
     .{ .name = "malformed-4k-grapheme-full", .corpus = .{ .name = "malformed", .seed = "ok \xff \xc0\x80 text ", .length = 4096 }, .max_columns = 40, .overflow = .grapheme },

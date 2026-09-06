@@ -167,3 +167,34 @@ test "scalar.at ASCII shortcut matches the general path at every offset" {
         for (0..bytes.len + 1) |start| try expectSameToken(bytes, start);
     }
 }
+
+test "paragraph classifiers agree at all byte positions and lengths" {
+    var storage: [40]u8 = undefined;
+    for (0..40) |position| {
+        for (0..256) |value| {
+            @memset(&storage, 'a');
+            storage[position] = @intCast(value);
+            for ([_]usize{ 1, 15, 16, 17, 31, 32, 33, 40 }) |length| {
+                if (position >= length) continue;
+                const bytes = storage[0..length];
+                try std.testing.expectEqual(
+                    scan.ascii.scalarParagraph(bytes),
+                    scan.ascii.simdParagraph(bytes),
+                );
+            }
+        }
+    }
+}
+
+test "paragraph accepts the documented alphabet and rejects the rest" {
+    for (0..256) |value| {
+        const byte: u8 = @intCast(value);
+        var buffer = [_]u8{ 'a', byte, 'a' };
+        const expected_simple = switch (byte) {
+            'a'...'z', 'A'...'Z', '0'...'9', ' ', '\'', 0x0A...0x0D => true,
+            else => false,
+        };
+        const got = scan.ascii.scalarParagraph(&buffer) != .none;
+        try std.testing.expectEqual(expected_simple, got);
+    }
+}
