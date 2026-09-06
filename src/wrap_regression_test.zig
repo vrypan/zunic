@@ -123,7 +123,10 @@ test "viewport wrapping stays lazy" {
 }
 
 test "ASCII paragraph fast path matches reference exhaustively" {
-    const alphabet = [_]u8{ 'a', 'Z', '7', '\'', ' ', '\n', '\r', 0x0B, 0x0C };
+    // 0x0B and 0x0C are both line-break class BK and grapheme class Control,
+    // so one of them represents the pair; LF and CR are separate classes and
+    // stay. `zig build wrap-exhaustive` sweeps both.
+    const alphabet = [_]u8{ 'a', 'Z', '7', '\'', ' ', '\n', '\r', 0x0B };
     var buffer: [5]u8 = undefined;
     for (0..6) |length| {
         const combinations = std.math.pow(usize, alphabet.len, length);

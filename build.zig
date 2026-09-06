@@ -45,6 +45,16 @@ pub fn build(b: *std.Build) void {
     const regression_step = b.step("wrap-regressions", "Run wrapper regression tests");
     regression_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = regression_mod })).step);
 
+    const exhaustive_mod = b.createModule(.{
+        .root_source_file = b.path("src/wrap_exhaustive_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    exhaustive_mod.addImport("zunic", zunic);
+    exhaustive_mod.addImport("build_options", build_options.createModule());
+    const exhaustive_step = b.step("wrap-exhaustive", "Run the full-alphabet wrapping sweep");
+    exhaustive_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = exhaustive_mod })).step);
+
     const benchmark_mod = b.createModule(.{
         .root_source_file = b.path("src/benchmark.zig"),
         .target = target,
