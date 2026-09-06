@@ -41,6 +41,11 @@ segmentation, and emergency breaks remain caller responsibilities.
 - **Optimized wrapping.** Grapheme segmentation, UAX #14 boundaries,
   and terminal cell widths are used by `zunic.wrap` to provide out-of-the-box
   text wrapping.
+- **Checked ASCII fast path.** Runs of plain ASCII take a vectorized
+  scan on aarch64 and x86_64. It is portable `@Vector` code with no
+  intrinsics, checked against the scalar implementation for every byte
+  value at every alignment. It needs no configuration, and the backend
+  is selectable at build time.
 
 ## Usage
 
@@ -56,6 +61,19 @@ Add the module in your application's `build.zig`:
 const zunic = b.dependency("zunic", .{});
 exe.root_module.addImport("zunic", zunic.module("zunic"));
 ```
+
+No build flags are required. The vectorized ASCII fast path is enabled by
+default wherever a backend exists, currently aarch64 and x86_64, and falls
+back to the scalar path everywhere else. To pin a backend, pass the option
+through the dependency rather than to your own build:
+
+```zig
+const zunic = b.dependency("zunic", .{ .@"wrap-fast-path" = .off });
+```
+
+Accepted values are `.auto` (the default), `.scalar`, `.simd`, and `.off`.
+`-Dwrap-fast-path` applies when building zunic itself, such as running its
+tests or benchmarks.
 
 Then import `zunic` in application code. This example iterates user-visible
 graphemes, measures their terminal width, and prints only usable line-break
