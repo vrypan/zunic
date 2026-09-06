@@ -3,6 +3,8 @@ const scan = @import("scan.zig");
 const grapheme = @import("grapheme.zig");
 const line_break = @import("line_break.zig");
 const utf8 = @import("utf8.zig");
+const scalar = @import("scalar.zig");
+const properties = @import("properties.zig");
 
 fn expectScannerMatchesComposedIterators(bytes: []const u8) !void {
     var scanner = scan.Scanner(false){ .bytes = bytes };
@@ -108,5 +110,60 @@ test "ASCII detectors agree at all byte positions and slice offsets" {
             try std.testing.expectEqual(expected, scan.ascii.scalarAllLetters(storage[0..33]));
             try std.testing.expectEqual(expected, scan.ascii.simdAllLetters(storage[0..33]));
         }
+    }
+}
+
+/// `scalar.at` without the ASCII shortcut, written straight from the general
+/// rules, so the shortcut is checked against the path it replaces.
+fn referenceAt(bytes: []const u8, start: usize) scalar.Token {
+    const step = utf8.step(bytes[start..]);
+    const cp = step.cp;
+    return .{
+        .start = start,
+        .end = start + step.len,
+        .codepoint = cp,
+        .grapheme = if (cp) |v| properties.graphemeProperties(v) else .{ .gcb = .other, .incb = .none, .extended_pictographic = false },
+        .line_break = if (cp) |v| properties.lineBreak(v) else .al,
+        .cell_width = if (cp) |v| scalar.codepointWidth(v) else 0,
+    };
+}
+
+fn expectSameToken(bytes: []const u8, start: usize) !void {
+    const want = referenceAt(bytes, start);
+    const got = scalar.at(bytes, start);
+    try std.testing.expectEqual(want.start, got.start);
+    try std.testing.expectEqual(want.end, got.end);
+    try std.testing.expectEqual(want.codepoint, got.codepoint);
+    try std.testing.expectEqual(want.line_break, got.line_break);
+    try std.testing.expectEqual(want.cell_width, got.cell_width);
+    try std.testing.expectEqual(want.grapheme.gcb, got.grapheme.gcb);
+    try std.testing.expectEqual(want.grapheme.incb, got.grapheme.incb);
+    try std.testing.expectEqual(want.grapheme.extended_pictographic, got.grapheme.extended_pictographic);
+}
+
+test "scalar.at ASCII shortcut matches the general path for every byte" {
+    // Every byte value alone, at the end of input, and followed by bytes that
+    // would change a multi-byte decode.
+    const tails = [_][]const u8{ "", "a", "\x80", "\xcc\x81", "\xff", "\n" };
+    for (0..256) |value| {
+        var buffer: [8]u8 = undefined;
+        buffer[0] = @intCast(value);
+        for (tails) |tail| {
+            @memcpy(buffer[1..][0..tail.len], tail);
+            try expectSameToken(buffer[0 .. 1 + tail.len], 0);
+        }
+    }
+}
+
+test "scalar.at ASCII shortcut matches the general path at every offset" {
+    const cases = [_][]const u8{
+        "plain ascii text, with punctuation 123.",
+        "mixed \xce\xba\xe1\xbd\xb9 ascii and greek",
+        "e\xcc\x81 combining, \xf0\x9f\x91\x8b emoji, \xff malformed",
+        "\x00\x01\x7f\x20 controls and space",
+        "\r\n\x0b\x0c hard separators",
+    };
+    for (cases) |bytes| {
+        for (0..bytes.len + 1) |start| try expectSameToken(bytes, start);
     }
 }

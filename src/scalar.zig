@@ -33,6 +33,18 @@ pub fn iterator(bytes: []const u8) Iterator {
 }
 
 pub fn at(bytes: []const u8, start: usize) Token {
+    // ASCII is one byte, one scalar, one column, and both property tables
+    // index it directly, so the decode and the range searches are skipped.
+    // This is the same result the general path below produces.
+    if (start < bytes.len and bytes[start] < 0x80) return .{
+        .start = start,
+        .end = start + 1,
+        .codepoint = bytes[start],
+        .grapheme = properties.grapheme_ascii[bytes[start]],
+        .line_break = properties.line_break_ascii[bytes[start]],
+        .cell_width = 1,
+    };
+
     const step = utf8.step(bytes[start..]);
     const cp = step.cp;
     return .{
