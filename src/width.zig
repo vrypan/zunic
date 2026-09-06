@@ -43,7 +43,14 @@ pub fn textWidth(bytes: []const u8) usize {
     // Printable ASCII is one cluster of one column per byte, so the whole
     // measurement is the byte count.
     if (ascii_scan.allPrintable(bytes)) return bytes.len;
+    return generalTextWidth(bytes);
+}
 
+// `grapheme.Iterator.next` is inline so each instantiation can drop the
+// cluster measure it does not read. Keeping the loop out of line here stops
+// that body from crowding the ASCII shortcut's inlining budget above, the same
+// split `wrap.nextGeneral` makes for the same reason.
+noinline fn generalTextWidth(bytes: []const u8) usize {
     var it = grapheme.iterator(bytes);
     var total: usize = 0;
     while (it.next()) |span| {

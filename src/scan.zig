@@ -38,6 +38,10 @@ pub const Counters = struct {
     decoded_scalars: usize = 0,
     property_lookups: usize = 0,
     max_buffered: usize = 0,
+    /// Line-break transition entries read. One per consumed scalar is the
+    /// floor; a boundary that queried and then re-consumed the same
+    /// `(state, category)` pair would show one extra per cluster.
+    transition_reads: usize = 0,
 };
 
 pub fn Scanner(comptime instrumented: bool) type {
@@ -48,6 +52,10 @@ pub fn Scanner(comptime instrumented: bool) type {
         buf1: ?scalar.ClassifiedToken = null,
         classifier: scalar.Classifier(instrumented) = .{},
         lb: line_break.State = .{},
+        /// The boundary step consumes the lookahead's line-break category with
+        /// the same table entry that supplied its opcode. This records that the
+        /// next `next()` must not consume that scalar a second time.
+        lb_consumed: bool = false,
         counters: if (instrumented) Counters else void = if (instrumented) .{} else {},
 
         const Self = @This();
@@ -55,7 +63,7 @@ pub fn Scanner(comptime instrumented: bool) type {
         pub inline fn next(self: *Self) ?Cluster {
             const first_decoded = self.take() orelse return null;
             const first = first_decoded.scalarToken();
-            self.lb.consumeCategory(first_decoded.record.line_break_category);
+            if (self.lb_consumed) self.lb_consumed = false else self.consumeLineBreak(first_decoded.record.line_break_category);
             const start = first.start;
             const hard = line_break.isHardClass(first.line_break);
             var state = grapheme.ClusterState.init(grapheme.classify(first));
@@ -73,20 +81,46 @@ pub fn Scanner(comptime instrumented: bool) type {
                     // buffered as the next cluster's first scalar; its
                     // line-break consumption happens there, after the
                     // boundary in front of it has been decided here.
+                    // One entry serves both the boundary decision and the
+                    // consumption the next call would otherwise repeat.
+                    // `opportunityForCategory` was a pure query over the same
+                    // `(state, category)` pair that the next call consumed, so
+                    // advancing here is observationally identical.
+                    const opcode = self.consumeLineBreakAndOpcode(decoded.record.line_break_category);
+                    self.lb_consumed = true;
+                    // Decode the scalar after the lookahead unconditionally,
+                    // even though only opcodes 3-7 read it. This is never
+                    // wasted: the token stays in `buf1` and becomes the next
+                    // cluster's first scalar. Issuing it a cluster early hides
+                    // the latency of its property-table lookup, which is worth
+                    // 4-7% on real documents (japanese, mandarin, english,
+                    // source_code). Deferring it to the contextual arm, as
+                    // `line_break.Iterator` does, looks like less work and
+                    // measures slower; see private/benchmarks/017-*.md.
                     const opportunity = if (self.peek1()) |following|
-                        self.lb.opportunityForCategory(decoded.record.line_break_category, self.bytes, following.record.line_break, following.record, true, following.end, &self.classifier)
+                        line_break.State.opportunityForOpcode(opcode, self.bytes, following.record.line_break, following.record, true, following.end, &self.classifier)
                     else
-                        self.lb.opportunityForCategory(decoded.record.line_break_category, self.bytes, .al, comptime properties.record(0), false, lookahead.end, &self.classifier);
+                        line_break.State.opportunityForOpcode(opcode, self.bytes, .al, comptime properties.record(0), false, lookahead.end, &self.classifier);
                     self.updateCounters();
                     return .{ .start = start, .end = end, .columns = measure.finish(), .hard = hard, .can_break = opportunity != .prohibited };
                 }
                 self.buf0 = self.buf1;
                 self.buf1 = null;
-                self.lb.consumeCategory(decoded.record.line_break_category);
+                self.consumeLineBreak(decoded.record.line_break_category);
                 state.consume(classification);
                 measure.add(lookahead);
                 end = lookahead.end;
             }
+        }
+
+        inline fn consumeLineBreak(self: *Self, category: u8) void {
+            if (instrumented) self.counters.transition_reads += 1;
+            self.lb.consumeCategory(category);
+        }
+
+        inline fn consumeLineBreakAndOpcode(self: *Self, category: u8) u8 {
+            if (instrumented) self.counters.transition_reads += 1;
+            return self.lb.consumeCategoryAndOpcode(category);
         }
 
         fn decode(self: *Self) scalar.ClassifiedToken {

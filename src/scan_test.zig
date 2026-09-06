@@ -67,6 +67,71 @@ test "fused scanner matches composed iterators on randomized atoms" {
     }
 }
 
+/// Decoding `grapheme.Span.columns` must equal what a standalone
+/// `measureCluster` over the same bytes reports. Before 017 `lens.Iterator`
+/// recovered the measure by re-measuring the cluster; it now decodes the
+/// sentinel the span already carries. This pins the bijection that makes the
+/// second pass removable: `0` is "no base", `3` is "one column, not
+/// renderable", and `1`/`2` are renderable column counts.
+fn expectSpanMeasureMatchesStandalone(bytes: []const u8) !void {
+    var it = grapheme.iterator(bytes);
+    while (it.next()) |span| {
+        const standalone = width.measureCluster(bytes[span.start..span.end]);
+        const decoded_columns: u2 = if (span.columns == 3) 1 else @intCast(span.columns);
+        const decoded_renderable = span.columns == 1 or span.columns == 2;
+        try std.testing.expectEqual(standalone.columns, decoded_columns);
+        try std.testing.expectEqual(standalone.renderable, decoded_renderable);
+    }
+}
+
+test "cluster spans carry the same measure a standalone measurement reports" {
+    const cases = [_][]const u8{
+        "",
+        "a",
+        "hello, world 123",
+        // zero-column: a lone combining mark, and a control.
+        "\xcc\x81",
+        "\x00",
+        "\x7f",
+        // two columns: a wide scalar, an emoji, a regional-indicator pair.
+        "\u{754c}",
+        "\u{1f44b}",
+        "\u{1f1ec}\u{1f1f7}",
+        // a lone regional indicator, which is its own cluster.
+        "\u{1f1ec}",
+        // more than two columns of base in one cluster, the old `3` sentinel.
+        "\u{754c}\u{0e33}",
+        // emoji ZWJ sequence and a skin-tone modifier sequence.
+        "\u{1f469}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f466}",
+        "\u{1f44b}\u{1f3ff}",
+        // malformed bytes, alone and embedded.
+        "\xff",
+        "\xc0\x80",
+        "valid \xff bytes \xc0\x80 remain bounded \xc2",
+        "Καλημέρα cafe\xcc\x81 — λέξεις και τόνοι.",
+        "日本語の文章と漢字を測定します。",
+        "क्षि हिन्दी 한국어 조합",
+        "e\xcc\x81\xcc\x81\xcc\x81 \x00\x7f \n\n \r\r\n",
+    };
+    for (cases) |bytes| try expectSpanMeasureMatchesStandalone(bytes);
+
+    // The same equivalence over the randomized atom sweep.
+    const atoms = [_][]const u8{ "a", " ", "界", "\x00", "\n", "\xff", "e\xcc\x81", "🇬🇷", "👩‍👩‍👧‍👦", "1", ",", ".", "(", ")", "$", "\r\n", "\xc2\x85", "\u{0e33}", "\u{1f44b}\u{1f3ff}" };
+    var random = std.Random.DefaultPrng.init(0xc01_5e17);
+    var buffer: [256]u8 = undefined;
+    for (0..300) |_| {
+        var length: usize = 0;
+        const count = random.random().intRangeAtMost(usize, 0, 32);
+        for (0..count) |_| {
+            const atom = atoms[random.random().uintLessThan(usize, atoms.len)];
+            if (length + atom.len > buffer.len) break;
+            @memcpy(buffer[length..][0..atom.len], atom);
+            length += atom.len;
+        }
+        try expectSpanMeasureMatchesStandalone(buffer[0..length]);
+    }
+}
+
 fn countScalars(bytes: []const u8) usize {
     var count: usize = 0;
     var pos: usize = 0;
@@ -93,6 +158,51 @@ test "fused scanner decodes each scalar once with a bounded buffer" {
     }
 }
 
+fn countClusters(bytes: []const u8) usize {
+    var it = grapheme.iterator(bytes);
+    var count: usize = 0;
+    while (it.next() != null) count += 1;
+    return count;
+}
+
+test "each consumed scalar costs exactly one line-break transition read" {
+    // The boundary step consumes the lookahead's category with the same entry
+    // that supplied its opcode, so the total is the scalar count. Before 017
+    // the boundary queried and the next call re-consumed the same
+    // `(state, category)` pair, costing `scalars + clusters - 1`; the last
+    // cluster ends at EOT without a boundary query.
+    const cases = [_][]const u8{
+        "",
+        "a",
+        "ab",
+        "hello, world 123",
+        "wörter über zwölf tage",
+        "日本語の文章と漢字を測定します。",
+        "👩‍👩‍👧‍👦 🇬🇷 👋🏿",
+        "e\xcc\x81\xcc\x81\xcc\x81\xcc\x81\xcc\x81",
+        "valid \xff bytes \xc0\x80 remain bounded",
+        "Καλημέρα cafe\xcc\x81 — λέξεις και τόνοι.",
+    };
+    for (cases) |bytes| {
+        var scanner = scan.Scanner(true){ .bytes = bytes };
+        while (scanner.next()) |_| {}
+        try std.testing.expectEqual(countScalars(bytes), scanner.counters.transition_reads);
+        // Confirm the fold actually removed work rather than the corpus having
+        // no cluster boundaries to fold at.
+        if (bytes.len != 0) try std.testing.expect(countClusters(bytes) >= 1);
+        try std.testing.expect(scanner.counters.transition_reads <=
+            countScalars(bytes) + countClusters(bytes));
+    }
+    // A multi-cluster corpus must show a strictly smaller count than the
+    // pre-017 formula, otherwise the fold is not on the executed path.
+    const many = "hello, world 123";
+    var scanner = scan.Scanner(true){ .bytes = many };
+    while (scanner.next()) |_| {}
+    try std.testing.expect(countClusters(many) > 1);
+    try std.testing.expect(scanner.counters.transition_reads <
+        countScalars(many) + countClusters(many) - 1);
+}
+
 test "predicate-heavy scanning reuses records and counts LB25 lookahead" {
     const cases = [_][]const u8{
         "界‘界’界\xcc\x81 “quoted” (text) ไทย ภาษา",
@@ -111,6 +221,35 @@ test "predicate-heavy scanning reuses records and counts LB25 lookahead" {
     // LB25 inspects the digit once ahead of the normal two-token buffer.
     try std.testing.expectEqual(@as(usize, 6), scanner.counters.decoded_scalars);
     try std.testing.expectEqual(@as(usize, 6), scanner.counters.property_lookups);
+    // A contextual opcode must still reach the second buffer slot. Without
+    // this the deferral in `Scanner.next` could silently become "never look
+    // ahead" and every rule in opcodes 3-7 would go unexercised here.
+    try std.testing.expectEqual(@as(usize, 2), scanner.counters.max_buffered);
+}
+
+test "cluster boundaries decode one scalar ahead" {
+    // The scanner materializes the scalar after the lookahead at every cluster
+    // boundary, not only for the contextual opcodes that read it. That early
+    // decode is a deliberate prefetch of the next property-table lookup and is
+    // worth 4-7% on real documents; a change that lets this drop to 1 is a
+    // performance regression even though it looks like less work.
+    const cases = [_][]const u8{
+        "hello, world 123",
+        "wörter über zwölf tage",
+        "日本語の文章と漢字を測定します。",
+        "👩‍👩‍👧‍👦 🇬🇷 👋🏿",
+        "e\xcc\x81\xcc\x81\xcc\x81",
+        "valid \xff bytes \xc0\x80 remain bounded",
+    };
+    for (cases) |bytes| {
+        var it = scan.Scanner(true){ .bytes = bytes };
+        while (it.next()) |_| {}
+        // A single-cluster input has no boundary, so it never reaches the
+        // second slot; anything with a boundary must.
+        const expected: usize = if (countClusters(bytes) > 1) 2 else 1;
+        try std.testing.expectEqual(expected, it.counters.max_buffered);
+        try expectScannerMatchesComposedIterators(bytes);
+    }
 }
 
 test "ASCII detectors agree at all byte positions and slice offsets" {

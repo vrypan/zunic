@@ -102,12 +102,17 @@ pub fn Iterator(comptime include_measure: bool) type {
                 .start = .init(span.start),
                 .end = .init(span.end),
             };
-            const measure = width_engine.measureCluster(self.inner.bytes[span.start..span.end]);
+            // The grapheme engine already measured this cluster while it
+            // segmented it, and `grapheme.ClusterMeasure.finish` encodes the
+            // whole measure: `3` is "one column, not renderable", `0` is "no
+            // base", and `1`/`2` are renderable column counts. Decoding that
+            // here is exact, and re-measuring the same bytes would decode and
+            // classify every scalar of the cluster a second time.
             return .{
                 .start = .init(span.start),
                 .end = .init(span.end),
-                .columns = measure.columns,
-                .renderable = measure.renderable,
+                .columns = if (span.columns == 3) 1 else @intCast(span.columns),
+                .renderable = span.columns == 1 or span.columns == 2,
             };
         }
     };

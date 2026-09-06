@@ -2,8 +2,9 @@ const std = @import("std");
 const zunic = @import("zunic");
 
 // The public traversal and checksum coordinate types changed in 0.3.0, so
-// results from earlier harnesses are deliberately not comparable.
-const harness_version = "3";
+// results from earlier harnesses are deliberately not comparable. Version 4
+// adds the `measured` operation; version 3 archives do not contain that row.
+const harness_version = "4";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
 const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
@@ -45,6 +46,7 @@ pub fn main(init: std.process.Init) !void {
         const text = try makeCorpus(allocator, corpus);
         try printSamples(output, corpus.name, "utf8", text, target_bytes, utf8Checksum, io);
         try printSamples(output, corpus.name, "grapheme", text, target_bytes, graphemeChecksum, io);
+        try printSamples(output, corpus.name, "measured", text, target_bytes, measuredChecksum, io);
         try printSamples(output, corpus.name, "width", text, target_bytes, widthChecksum, io);
         try printSamples(output, corpus.name, "line_break", text, target_bytes, lineBreakChecksum, io);
     }
@@ -122,6 +124,20 @@ fn graphemeChecksum(text: []const u8) u64 {
     while (it.next()) |span| {
         sum = mix(sum, span.start.value);
         sum = mix(sum, span.end.value);
+    }
+    return sum;
+}
+/// Walks the measured grapheme lens, the only public traversal that reports
+/// per-cluster columns and renderability. Nothing else in this harness
+/// observes `Graphemes(true)`.
+fn measuredChecksum(text: []const u8) u64 {
+    var it = zunic.graphemes(text).measured().iterator();
+    var sum: u64 = 0xcbf29ce484222325;
+    while (it.next()) |span| {
+        sum = mix(sum, span.start.value);
+        sum = mix(sum, span.end.value);
+        sum = mix(sum, span.columns);
+        sum = mix(sum, @intFromBool(span.renderable));
     }
     return sum;
 }

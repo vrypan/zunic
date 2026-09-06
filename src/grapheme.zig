@@ -78,7 +78,7 @@ pub const Iterator = struct {
     // locals: routing it through the struct costs 7-15% on short-scalar
     // corpora (measured for 008). The scanner differential tests in
     // scan_test.zig keep the two in agreement.
-    pub fn next(self: *Iterator) ?Span {
+    pub inline fn next(self: *Iterator) ?Span {
         if (self.pos >= self.bytes.len) return null;
         const start = self.pos;
         const first = self.takeToken();
