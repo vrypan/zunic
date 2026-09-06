@@ -101,8 +101,8 @@ def compare(args):
     for key in ("zig", "machine", "benchmark_args"):
         if before_meta.get(key) != after_meta.get(key):
             raise SystemExit(f"incompatible runs: {key} differs")
-    before_harness = {k: v for k, v in before_meta["harness"].items() if k != "wrap_fast_path"}
-    after_harness = {k: v for k, v in after_meta["harness"].items() if k != "wrap_fast_path"}
+    before_harness = {k: v for k, v in before_meta["harness"].items() if k not in {"wrap_fast_path", "line_break_engine"}}
+    after_harness = {k: v for k, v in after_meta["harness"].items() if k not in {"wrap_fast_path", "line_break_engine"}}
     if before_harness != after_harness:
         raise SystemExit("incompatible runs: harness metadata differs")
     for key in sorted(set(before) | set(after)):

@@ -127,3 +127,79 @@ test "interior hard breaks are mandatory" {
         try std.testing.expect(saw_mandatory);
     }
 }
+
+test "Unicode 16 reduced peer differences" {
+    const P = unicode.line_break.Opportunity.prohibited;
+    const A = unicode.line_break.Opportunity.allowed;
+    const M = unicode.line_break.Opportunity.mandatory;
+    // LB15a; reduced peer difference 0.
+    try expectLineBreaks("« ك", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 2, .opportunity = P }, .{ .offset = 3, .opportunity = P }, .{ .offset = 5, .opportunity = M } });
+    // LB15a; reduced peer difference 1.
+    try expectLineBreaks("« أ", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 2, .opportunity = P }, .{ .offset = 3, .opportunity = P }, .{ .offset = 5, .opportunity = M } });
+    // LB18; reduced peer difference 2.
+    try expectLineBreaks("\" (", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 2, .opportunity = A }, .{ .offset = 3, .opportunity = M } });
+    // LB20a; reduced peer difference 3.
+    try expectLineBreaks("-n", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 2, .opportunity = M } });
+    // LB20a; reduced peer difference 4.
+    try expectLineBreaks("-i", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 2, .opportunity = M } });
+    // LB20a; reduced peer difference 5.
+    try expectLineBreaks("-s", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 2, .opportunity = M } });
+    // LB20a; reduced peer difference 6.
+    try expectLineBreaks("-e", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 2, .opportunity = M } });
+    // LB18; reduced peer difference 7.
+    try expectLineBreaks("' (", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 2, .opportunity = A }, .{ .offset = 3, .opportunity = M } });
+    // LB30 / LB31; reduced peer difference 8.
+    try expectLineBreaks("○（", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = M } });
+    // LB30 / LB31; reduced peer difference 9.
+    try expectLineBreaks("S（", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = A }, .{ .offset = 4, .opportunity = M } });
+    // LB30 / LB31; reduced peer difference 10.
+    try expectLineBreaks("V（", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = A }, .{ .offset = 4, .opportunity = M } });
+    // LB30 / LB31; reduced peer difference 11.
+    try expectLineBreaks("P（", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = A }, .{ .offset = 4, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 12.
+    try expectLineBreaks("為“官", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 13.
+    try expectLineBreaks("，“可", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 14.
+    try expectLineBreaks("言”亦", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = P }, .{ .offset = 6, .opportunity = A }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 15.
+    try expectLineBreaks("用“呼", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 16.
+    try expectLineBreaks("話”这", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = P }, .{ .offset = 6, .opportunity = A }, .{ .offset = 9, .opportunity = M } });
+    // LB30 / LB31; reduced peer difference 17.
+    try expectLineBreaks("n（", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = A }, .{ .offset = 4, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 18.
+    try expectLineBreaks("话”最", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = P }, .{ .offset = 6, .opportunity = A }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 19.
+    try expectLineBreaks("语“各", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 20.
+    try expectLineBreaks("语”来", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = P }, .{ .offset = 6, .opportunity = A }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 21.
+    try expectLineBreaks("稱“為", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 22.
+    try expectLineBreaks("意“很", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 23.
+    try expectLineBreaks("的“，", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 24.
+    try expectLineBreaks("為“含", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 25.
+    try expectLineBreaks("言”的", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = P }, .{ .offset = 6, .opportunity = A }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 26.
+    try expectLineBreaks("称“類", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 27.
+    try expectLineBreaks("为“這", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+    // LB19 / LB19a / LB31; reduced peer difference 28.
+    try expectLineBreaks("是“該", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+    // LB20a; reduced peer difference 29.
+    try expectLineBreaks("-о", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 3, .opportunity = M } });
+    // LB20a; reduced peer difference 30.
+    try expectLineBreaks("-с", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 3, .opportunity = M } });
+    // LB18; reduced peer difference 31.
+    try expectLineBreaks("» (", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 2, .opportunity = P }, .{ .offset = 3, .opportunity = A }, .{ .offset = 4, .opportunity = M } });
+    // LB20a; reduced peer difference 32.
+    try expectLineBreaks("-т", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 3, .opportunity = M } });
+    // LB20a; reduced peer difference 33.
+    try expectLineBreaks("-R", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 2, .opportunity = M } });
+    // LB20a; reduced peer difference 34.
+    try expectLineBreaks("-V", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 2, .opportunity = M } });
+}

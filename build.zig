@@ -4,25 +4,31 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const WrapFastPath = enum { off, scalar, auto, simd };
+    const LineBreakEngine = enum { generic, machine };
     const wrap_fast_path = b.option(WrapFastPath, "wrap-fast-path", "ASCII fast-path backend for wrapping and width") orelse .auto;
+    // Plan 015: correctness and three-pair performance acceptance passed.
+    const line_break_engine = b.option(LineBreakEngine, "line-break-engine", "Unicode line-break transition backend") orelse .machine;
     if (wrap_fast_path == .simd and switch (target.result.cpu.arch) {
         .aarch64, .x86_64 => false,
         else => true,
     }) @panic("-Dwrap-fast-path=simd requires an aarch64 or x86_64 target");
     const build_options = b.addOptions();
     build_options.addOption(WrapFastPath, "wrap_fast_path", wrap_fast_path);
+    build_options.addOption(LineBreakEngine, "line_break_engine", line_break_engine);
 
     const zunic = b.addModule("zunic", .{
         .root_source_file = b.path("src/root.zig"),
     });
     zunic.addImport("build_options", build_options.createModule());
     const test_step = b.step("test", "Run zunic tests");
+    const transition_step = b.step("line-break-tests", "Run line-break transition differential tests");
     const roots = [_][]const u8{
         "src/root_test.zig",
         "src/conformance_test.zig",
         "src/wrap_test.zig",
         "src/wrap_regression_test.zig",
         "src/scan_test.zig",
+        "src/line_break.zig",
     };
     for (roots) |root| {
         const test_mod = b.createModule(.{
@@ -30,9 +36,11 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
-        test_mod.addImport("zunic", zunic);
+        if (!std.mem.eql(u8, root, "src/line_break.zig")) test_mod.addImport("zunic", zunic);
         test_mod.addImport("build_options", build_options.createModule());
-        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = test_mod })).step);
+        const run_test = b.addRunArtifact(b.addTest(.{ .root_module = test_mod }));
+        test_step.dependOn(&run_test.step);
+        if (std.mem.eql(u8, root, "src/line_break.zig")) transition_step.dependOn(&run_test.step);
     }
 
     const regression_mod = b.createModule(.{

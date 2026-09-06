@@ -47,21 +47,20 @@ pub fn Scanner(comptime instrumented: bool) type {
         buf0: ?scalar.ClassifiedToken = null,
         buf1: ?scalar.ClassifiedToken = null,
         classifier: scalar.Classifier(instrumented) = .{},
-        lb: line_break.State = .{},
+        lb: line_break.ActiveState = .{},
         lb_started: bool = false,
         counters: if (instrumented) Counters else void = if (instrumented) .{} else {},
 
         const Self = @This();
 
-        pub fn next(self: *Self) ?Cluster {
+        pub inline fn next(self: *Self) ?Cluster {
             const first_decoded = self.take() orelse return null;
             const first = first_decoded.scalarToken();
             const first_cp = first.codepoint orelse 0;
             if (self.lb_started) {
-                const current = self.lb.resolveWithRecord(first.line_break, first_decoded.record);
-                self.lb.consumeWithRecord(first.line_break, current, first_cp, first_decoded.record);
+                self.lb.consumeRecord(first_cp, first_decoded.record);
             } else {
-                self.lb = line_break.State.firstWithRecord(first.line_break, first_cp, first_decoded.record);
+                self.lb = line_break.ActiveState.firstWithRecord(first.line_break, first_cp, first_decoded.record);
                 self.lb_started = true;
             }
             const start = first.start;
@@ -77,22 +76,21 @@ pub fn Scanner(comptime instrumented: bool) type {
                 const lookahead = decoded.scalarToken();
                 const classification = grapheme.classify(lookahead);
                 const cp = lookahead.codepoint orelse 0;
-                const current = self.lb.resolveWithRecord(lookahead.line_break, decoded.record);
                 if (state.breakBeforeNext(classification)) {
                     // The cluster ends before `lookahead`, which stays
                     // buffered as the next cluster's first scalar; its
                     // line-break consumption happens there, after the
                     // boundary in front of it has been decided here.
                     const opportunity = if (self.peek1()) |following|
-                        self.lb.opportunityWithRecords(self.bytes, lookahead.line_break, current, cp, decoded.record, following.record.line_break, following.record, true, following.end, &self.classifier)
+                        self.lb.opportunityForRecord(self.bytes, cp, decoded.record, following.record.line_break, following.record, true, following.end, &self.classifier)
                     else
-                        self.lb.opportunityWithRecords(self.bytes, lookahead.line_break, current, cp, decoded.record, .al, comptime properties.record(0), false, lookahead.end, &self.classifier);
+                        self.lb.opportunityForRecord(self.bytes, cp, decoded.record, .al, comptime properties.record(0), false, lookahead.end, &self.classifier);
                     self.updateCounters();
                     return .{ .start = start, .end = end, .columns = measure.finish(), .hard = hard, .can_break = opportunity != .prohibited };
                 }
                 self.buf0 = self.buf1;
                 self.buf1 = null;
-                self.lb.consumeWithRecord(lookahead.line_break, current, cp, decoded.record);
+                self.lb.consumeRecord(cp, decoded.record);
                 state.consume(classification);
                 measure.add(lookahead);
                 end = lookahead.end;

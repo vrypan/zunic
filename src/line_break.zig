@@ -6,8 +6,11 @@
 //! letters therefore resolve to AL; SA marks resolve to CM as required by LB1.
 const properties = @import("properties.zig");
 const scalar = @import("scalar.zig");
+const semantic_machine = @import("line_break_machine.zig");
+const std = @import("std");
+const build_options = @import("build_options");
 
-pub const Opportunity = enum { prohibited, allowed, mandatory };
+pub const Opportunity = semantic_machine.Opportunity;
 pub const Boundary = struct { offset: usize, opportunity: Opportunity };
 
 const Class = properties.LineBreak;
@@ -82,14 +85,28 @@ pub const State = struct {
     }
 
     pub fn opportunityWithRecords(self: *const State, bytes: []const u8, raw: Class, current: Class, cp: u21, r: properties.Record, next_raw: Class, next_record: properties.Record, has_next: bool, next_end: usize, classifier: anytype) Opportunity {
-        return breakBefore(self, bytes, raw, current, cp, r, next_raw, next_record, has_next, next_end, classifier);
+        return breakBefore(self.context(), bytes, raw, current, cp, r, next_raw, next_record, has_next, next_end, classifier);
     }
 
     pub fn consume(self: *State, raw: Class, current: Class, cp: u21) void {
         self.consumeWithRecord(raw, current, cp, properties.record(cp));
     }
 
+    pub fn consumeRecord(self: *State, cp: u21, r: properties.Record) void {
+        self.consumeWithRecord(r.line_break, self.resolveWithRecord(r.line_break, r), cp, r);
+    }
+
+    pub fn opportunityForRecord(self: *const State, bytes: []const u8, cp: u21, r: properties.Record, next_raw: Class, next_record: properties.Record, has_next: bool, next_end: usize, classifier: anytype) Opportunity {
+        return self.opportunityWithRecords(bytes, r.line_break, self.resolveWithRecord(r.line_break, r), cp, r, next_raw, next_record, has_next, next_end, classifier);
+    }
+
     pub fn consumeWithRecord(self: *State, raw: Class, current: Class, cp: u21, r: properties.Record) void {
+        // This compatibility implementation is independent of generated data.
+        self.consumeWithRecordGeneric(raw, current, cp, r);
+    }
+
+    /// Generic reference update retained for transition differential tests.
+    fn consumeWithRecordGeneric(self: *State, raw: Class, current: Class, cp: u21, r: properties.Record) void {
         self.before_previous = self.previous;
         self.before_previous_cp = self.previous_base_cp;
         self.before_previous_record = self.previous_base_record;
@@ -99,6 +116,11 @@ pub const State = struct {
         if (raw != .cm and raw != .zwj) self.previous_base_record = r;
         if (raw != .cm and raw != .zwj) self.previous_at_sot = false;
         self.updateState(raw, current, cp, r);
+    }
+
+    /// Generic reference decision retained for transition differential tests.
+    fn opportunityWithRecordsGeneric(self: *const State, bytes: []const u8, raw: Class, current: Class, cp: u21, r: properties.Record, next_raw: Class, next_record: properties.Record, has_next: bool, next_end: usize, classifier: anytype) Opportunity {
+        return breakBefore(self.context(), bytes, raw, current, cp, r, next_raw, next_record, has_next, next_end, classifier);
     }
 
     fn updateState(self: *State, raw: Class, current: Class, cp: u21, r: properties.Record) void {
@@ -128,14 +150,73 @@ pub const State = struct {
             self.ri_count = 0;
         }
     }
+
+    fn context(self: *const State) BreakContext {
+        return .{
+            .previous = self.previous,
+            .previous_raw = self.previous_raw,
+            .before_previous = self.before_previous,
+            .previous_base_is_dotted_circle = self.previous_base_cp == 0x25CC,
+            .before_previous_is_dotted_circle = self.before_previous_cp == 0x25CC,
+            .previous_base_east_asian_wide = self.previous_base_record.east_asian_wide,
+            .previous_base_lb_qu_pf = self.previous_base_record.lb_qu_pf,
+            .previous_base_lb_cp30 = self.previous_base_record.lb_cp30,
+            .previous_base_ep_cn = self.previous_base_record.ep_cn,
+            .before_previous_east_asian_wide = self.before_previous_record.east_asian_wide,
+            .previous_at_sot = self.previous_at_sot,
+            .zw_sp = self.zw_sp,
+            .op_sp = self.op_sp,
+            .qu_pi_sp = self.qu_pi_sp,
+            .cl_cp_sp = self.cl_cp_sp,
+            .b2_sp = self.b2_sp,
+            .hl_ba_hy = self.hl_ba_hy,
+            .word_initial_hy = self.word_initial_hy,
+            .po_pr_before_op = self.po_pr_before_op,
+            .num_is_sy = self.num_is_sy,
+            .number_cl_cp = self.number_cl_cp,
+            .aksara_vi = self.aksara_vi,
+            .ri_odd = self.ri_count % 2 == 1,
+        };
+    }
 };
+
+const BreakContext = packed struct(u64) {
+    previous: Class,
+    previous_raw: Class,
+    before_previous: Class,
+    previous_base_is_dotted_circle: bool,
+    before_previous_is_dotted_circle: bool,
+    previous_base_east_asian_wide: bool,
+    previous_base_lb_qu_pf: bool,
+    previous_base_lb_cp30: bool,
+    previous_base_ep_cn: bool,
+    before_previous_east_asian_wide: bool,
+    previous_at_sot: bool,
+    zw_sp: bool,
+    op_sp: bool,
+    qu_pi_sp: bool,
+    cl_cp_sp: bool,
+    b2_sp: bool,
+    hl_ba_hy: bool,
+    word_initial_hy: bool,
+    po_pr_before_op: bool,
+    num_is_sy: bool,
+    number_cl_cp: bool,
+    aksara_vi: bool,
+    ri_odd: bool,
+    _padding: u26 = 0,
+};
+
+/// The state selected for internal iterators and fused scanners.  `State`
+/// remains public and source-compatible for lens consumers.
+pub const ActiveState = if (build_options.line_break_engine == .machine) semantic_machine.State else State;
 
 pub const Iterator = struct {
     bytes: []const u8,
     pos: usize = 0,
     initialized: bool = false,
     finished: bool = false,
-    state: State = .{},
+    state: ActiveState = .{},
     next_token: ?Token = null,
 
     pub fn next(self: *Iterator) ?Boundary {
@@ -147,7 +228,7 @@ pub const Iterator = struct {
                 return .{ .offset = 0, .opportunity = .mandatory };
             }
             const token = self.takeToken();
-            self.state = State.firstWithRecord(token.record.line_break, token.codepoint orelse 0, token.record);
+            self.state = ActiveState.firstWithRecord(token.record.line_break, token.codepoint orelse 0, token.record);
             return .{ .offset = 0, .opportunity = .prohibited };
         }
         if (self.pos == self.bytes.len) {
@@ -157,14 +238,12 @@ pub const Iterator = struct {
 
         const offset = self.pos;
         const token = self.takeToken();
-        const raw = token.record.line_break;
         const cp = token.codepoint orelse 0;
-        const current = self.state.resolveWithRecord(raw, token.record);
         const following = self.peekToken();
         const next_raw = following.record.line_break;
         var classifier = scalar.Classifier(false){};
-        const opportunity = self.state.opportunityWithRecords(self.bytes, raw, current, cp, token.record, next_raw, following.record, following.end != following.start, following.end, &classifier);
-        self.state.consumeWithRecord(raw, current, cp, token.record);
+        const opportunity = self.state.opportunityForRecord(self.bytes, cp, token.record, next_raw, following.record, following.end != following.start, following.end, &classifier);
+        self.state.consumeRecord(cp, token.record);
         return .{ .offset = offset, .opportunity = opportunity };
     }
 
@@ -195,7 +274,7 @@ pub fn isHardClass(c: Class) bool {
 }
 
 // LB4-LB31, after LB1 resolution. Earlier rules take precedence.
-fn breakBefore(it: *const State, bytes: []const u8, raw: Class, current: Class, cp: u21, r: properties.Record, next_raw: Class, next_record: properties.Record, has_next: bool, next_end: usize, classifier: anytype) Opportunity {
+fn breakBefore(it: BreakContext, bytes: []const u8, raw: Class, current: Class, cp: u21, r: properties.Record, next_raw: Class, next_record: properties.Record, has_next: bool, next_end: usize, classifier: anytype) Opportunity {
     // LB5 and LB6: preserve CRLF, and force boundaries around hard breaks.
     if (it.previous_raw == .cr and raw == .lf) return .prohibited;
     // LB4: a boundary following a hard break is mandatory.  The conformance
@@ -225,11 +304,11 @@ fn breakBefore(it: *const State, bytes: []const u8, raw: Class, current: Class, 
     if (it.b2_sp and current == .b2) return .prohibited;
     if (it.previous == .sp) return .allowed; // LB18
     if (current == .qu and !r.lb_qu_pi) return .prohibited; // LB19
-    if (current == .qu and (!it.previous_base_record.east_asian_wide or !has_next or !next_record.east_asian_wide)) return .prohibited; // LB19a
+    if (current == .qu and (!it.previous_base_east_asian_wide or !has_next or !next_record.east_asian_wide)) return .prohibited; // LB19a
     if (it.previous == .qu and it.previous_at_sot) return .prohibited; // LB19a
-    if (it.previous == .qu and !it.before_previous_record.east_asian_wide) return .prohibited; // LB19a
+    if (it.previous == .qu and !it.before_previous_east_asian_wide) return .prohibited; // LB19a
     if (it.previous == .qu and !r.east_asian_wide) return .prohibited; // LB19a
-    if (it.previous == .qu and !it.previous_base_record.lb_qu_pf) return .prohibited;
+    if (it.previous == .qu and !it.previous_base_lb_qu_pf) return .prohibited;
     if (it.previous == .cb or current == .cb) return .allowed;
     if (current == .ba or current == .hy or current == .ns or it.previous == .bb) return .prohibited;
     if (it.hl_ba_hy and current != .hl) return .prohibited; // LB21a
@@ -255,14 +334,14 @@ fn breakBefore(it: *const State, bytes: []const u8, raw: Class, current: Class, 
     if (it.previous == .pr and isHangul(current)) return .prohibited;
     if (isAlphabetic(it.previous) and isAlphabetic(current)) return .prohibited;
     if (it.previous == .ap and isAksara(current, cp)) return .prohibited;
-    if (isAksara(it.previous, it.previous_base_cp) and (current == .vf or current == .vi)) return .prohibited;
+    if (isAksaraState(it.previous, it.previous_base_is_dotted_circle) and (current == .vf or current == .vi)) return .prohibited;
     if (it.aksara_vi and (current == .ak or cp == 0x25CC)) return .prohibited;
-    if (isAksara(it.previous, it.previous_base_cp) and isAksara(current, cp) and next_raw == .vf) return .prohibited;
+    if (isAksaraState(it.previous, it.previous_base_is_dotted_circle) and isAksara(current, cp) and next_raw == .vf) return .prohibited;
     if (it.previous == .is and isAlphabetic(current)) return .prohibited;
     if ((isAlphabetic(it.previous) or it.previous == .nu) and current == .op and r.lb_op30) return .prohibited;
-    if (it.previous == .cp and it.previous_base_record.lb_cp30 and (isAlphabetic(current) or current == .nu)) return .prohibited;
-    if (it.previous == .ri and current == .ri and it.ri_count % 2 == 1) return .prohibited;
-    if ((it.previous == .eb or it.previous_base_record.ep_cn) and current == .em) return .prohibited;
+    if (it.previous == .cp and it.previous_base_lb_cp30 and (isAlphabetic(current) or current == .nu)) return .prohibited;
+    if (it.previous == .ri and current == .ri and it.ri_odd) return .prohibited;
+    if ((it.previous == .eb or it.previous_base_ep_cn) and current == .em) return .prohibited;
 
     return .allowed; // LB31
 }
@@ -299,6 +378,9 @@ fn isHangul(c: Class) bool {
 fn isAksara(c: Class, cp: u21) bool {
     return c == .ak or c == .as or cp == 0x25CC;
 }
+fn isAksaraState(c: Class, is_dotted_circle: bool) bool {
+    return c == .ak or c == .as or is_dotted_circle;
+}
 fn isLb15aStart(c: Class) bool {
     return isHard(c) or c == .op or c == .qu or c == .gl or c == .sp or c == .zw;
 }
@@ -316,4 +398,181 @@ fn hangulPair(left: Class, right: Class) bool {
     if (left == .jl) return right == .jl or right == .jv or right == .h2 or right == .h3;
     if (left == .jv or left == .h2) return right == .jv or right == .jt;
     return (left == .jt or left == .h3) and right == .jt;
+}
+
+const TransitionTestToken = scalar.ClassifiedToken;
+
+fn expectMachineMatchesGeneric(bytes: []const u8) !void {
+    errdefer std.debug.print("transition input bytes: {x}\n", .{bytes});
+    var tokens: [512]TransitionTestToken = undefined;
+    var count: usize = 0;
+    var classifier = scalar.Classifier(false){};
+    var pos: usize = 0;
+    while (pos < bytes.len) {
+        if (count == tokens.len) return error.TestUnexpectedResult;
+        const token = classifier.at(bytes, pos);
+        tokens[count] = token;
+        count += 1;
+        pos = token.end;
+    }
+    if (count == 0) return;
+
+    const first = tokens[0];
+    var hybrid = State.firstWithRecord(first.record.line_break, first.codepoint orelse 0, first.record);
+    var generic = hybrid;
+    var semantic = semantic_machine.State.firstWithRecord(first.record.line_break, first.codepoint orelse 0, first.record);
+    var consume_only = semantic;
+    var lookahead_classifier = scalar.Classifier(false){};
+    const eot = lookahead_classifier.at(bytes, bytes.len);
+
+    for (1..count) |i| {
+        const token = tokens[i];
+        const next = if (i + 1 < count) tokens[i + 1] else eot;
+        const raw = token.record.line_break;
+        const cp = token.codepoint orelse 0;
+        const hybrid_current = hybrid.resolveWithRecord(raw, token.record);
+        const generic_current = generic.resolveWithRecord(raw, token.record);
+        try std.testing.expectEqual(generic_current, hybrid_current);
+        const hybrid_opportunity = hybrid.opportunityWithRecords(bytes, raw, hybrid_current, cp, token.record, next.record.line_break, next.record, i + 1 < count, next.end, &lookahead_classifier);
+        var generic_classifier = scalar.Classifier(false){};
+        const generic_opportunity = generic.opportunityWithRecordsGeneric(bytes, raw, generic_current, cp, token.record, next.record.line_break, next.record, i + 1 < count, next.end, &generic_classifier);
+        const saved_id = semantic.id;
+        for (0..2) |_| {
+            const actual = semantic.opportunityForRecord(bytes, cp, token.record, next.record.line_break, next.record, i + 1 < count, next.end, &generic_classifier);
+            if (generic_opportunity != actual) std.debug.print("semantic mismatch at scalar {d}, state {d}\n", .{ i, saved_id });
+            try std.testing.expectEqual(generic_opportunity, actual);
+            try std.testing.expectEqual(saved_id, semantic.id);
+        }
+        semantic.consumeRecord(cp, token.record);
+        consume_only.consumeRecord(cp, token.record);
+        try std.testing.expectEqual(semantic.id, consume_only.id);
+        try std.testing.expectEqual(generic_opportunity, hybrid_opportunity);
+        hybrid.consumeWithRecord(raw, hybrid_current, cp, token.record);
+        generic.consumeWithRecordGeneric(raw, generic_current, cp, token.record);
+        try std.testing.expectEqualDeep(generic, hybrid);
+    }
+}
+
+test "semantic transitions agree with generic engine" {
+    const cases = [_][]const u8{
+        "",
+        "a",
+        "ordinary alphabetic text stays ordinary",
+        "Καλημέρα ελληνικά γράμματα",
+        "кириллица и слова",
+        "日本語の文章と漢字を測定します。",
+        "a\n\r\n\xc2\x85\x0b\x0c\xe2\x80\xa8\xe2\x80\xa9b",
+        "e\xcc\x81 a\xe2\x81\xa0b \xff\xc0\x80",
+        "USD (1.23) and $ (45,678.90) -R",
+        "🇬🇷🇬🇷 👩‍👩‍👧‍👦 👋🏿",
+        "क्षि हिन्दी 한국어 조합",
+    };
+    for (cases) |bytes| try expectMachineMatchesGeneric(bytes);
+}
+
+test "semantic transitions across mixed contexts" {
+    const atoms = [_][]const u8{
+        "a",
+        "界",
+        " ",
+        "\n",
+        "\r\n",
+        "(",
+        ")",
+        "1",
+        ",",
+        "-",
+        "\xff",
+        "e\xcc\x81",
+        "🇬🇷",
+        "👩‍👩‍👧‍👦",
+        "क्षि",
+    };
+    var random = std.Random.DefaultPrng.init(0x0147_a55);
+    var bytes: [512]u8 = undefined;
+    for (0..400) |_| {
+        var len: usize = 0;
+        for (0..random.random().intRangeAtMost(usize, 1, 48)) |_| {
+            const atom = atoms[random.random().uintLessThan(usize, atoms.len)];
+            if (len + atom.len > bytes.len) break;
+            @memcpy(bytes[len..][0..atom.len], atom);
+            len += atom.len;
+        }
+        try expectMachineMatchesGeneric(bytes[0..len]);
+    }
+}
+
+test "generated semantic machine fits its data budget" {
+    const data = @import("line_break_machine_data.zig");
+    try std.testing.expectEqual(@as(usize, 1), @sizeOf(semantic_machine.State));
+    try std.testing.expectEqual(data.data_bytes, @sizeOf(@TypeOf(data.transitions)) + @sizeOf(@TypeOf(data.category_map)));
+    try std.testing.expect(data.data_bytes <= 32 * 1024);
+}
+
+test "generated machine keeps glue before alphabetics prohibited" {
+    const glue_cp: u21 = 0x00a0;
+    const alphabetic_cp: u21 = 0x23e9;
+    const glue_record = properties.record(glue_cp);
+    const alphabetic_record = properties.record(alphabetic_cp);
+    var state = State.firstWithRecord(.gl, glue_cp, glue_record);
+    const current = state.resolveWithRecord(.al, alphabetic_record);
+    var classifier = scalar.Classifier(false){};
+    try std.testing.expectEqual(.prohibited, state.opportunityWithRecords("\xc2\xa0\xe2\x8f\xa9", .al, current, alphabetic_cp, alphabetic_record, .al, properties.record(0), false, 5, &classifier));
+}
+
+test "semantic machine exhaustive category triples and malformed tails" {
+    // Select witnesses independently from the generated table: retain every
+    // predicate observed by the standard, but not unrelated width/GB fields.
+    var seen = [_]bool{false} ** (48 * 512);
+    var witnesses: [128]u21 = undefined;
+    var count: usize = 0;
+    for (0..0x110000) |value| {
+        if (value >= 0xd800 and value <= 0xdfff) continue;
+        const cp: u21 = @intCast(value);
+        const r = properties.record(cp);
+        const bits = [_]bool{
+            r.east_asian_wide, r.lb_qu_pi, r.lb_qu_pf,    r.lb_op30,
+            r.lb_cp30,         r.ep_cn,    r.lb_sa_mn_mc, cp == 0x2010,
+            cp == 0x25cc,
+        };
+        var key: usize = @as(usize, @intFromEnum(r.line_break)) * 512;
+        for (bits, 0..) |bit, shift| key += @as(usize, @intFromBool(bit)) << @intCast(shift);
+        if (seen[key]) continue;
+        seen[key] = true;
+        try std.testing.expect(count < witnesses.len);
+        witnesses[count] = cp;
+        count += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 68), count);
+    var bytes: [12]u8 = undefined;
+    for (witnesses[0..count]) |a| {
+        const first_end: usize = try std.unicode.utf8Encode(a, &bytes);
+        for (witnesses[0..count]) |b| {
+            const second_end: usize = first_end + try std.unicode.utf8Encode(b, bytes[first_end..]);
+            try expectMachineMatchesGeneric(bytes[0..second_end]);
+            for (witnesses[0..count]) |c| {
+                const end = second_end + try std.unicode.utf8Encode(c, bytes[second_end..]);
+                try expectMachineMatchesGeneric(bytes[0..end]);
+            }
+        }
+    }
+    for (0..256) |leading| {
+        const malformed = [_]u8{ 'a', @intCast(leading), 0x80, 0x80, '\n', 0xe2, 0x81, 0xa0 };
+        for (2..malformed.len + 1) |end| try expectMachineMatchesGeneric(malformed[0..end]);
+    }
+    var long_bytes: [512]u8 = undefined;
+    var random = std.Random.DefaultPrng.init(0x015_cafe);
+    for (0..1000) |_| {
+        var len: usize = 0;
+        for (0..128) |_| {
+            const cp = witnesses[random.random().uintLessThan(usize, count)];
+            len += try std.unicode.utf8Encode(cp, long_bytes[len..]);
+        }
+        try expectMachineMatchesGeneric(long_bytes[0..len]);
+    }
+    for ([_]u21{ ' ', 0x0300, 0x1f1e6 }) |cp| {
+        var len: usize = 0;
+        for (0..128) |_| len += try std.unicode.utf8Encode(cp, long_bytes[len..]);
+        try expectMachineMatchesGeneric(long_bytes[0..len]);
+    }
 }

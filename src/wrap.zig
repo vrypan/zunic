@@ -35,15 +35,20 @@ fn IteratorImpl(comptime instrumented: bool) type {
 
         const Self = @This();
 
-        pub fn next(self: *Self) ?Line {
+        pub inline fn next(self: *Self) ?Line {
             if (self.ascii_paragraph == null) self.ascii_paragraph = ascii_scan.paragraph(self.bytes);
             switch (self.ascii_paragraph.?) {
                 // The ASCII consumers keep their own termination state and
                 // never buffer a pending line, so they skip those checks.
                 .letters => return self.nextAsciiLetters(),
                 .simple => return self.nextAsciiParagraph(),
-                .none => {},
+                .none => return self.nextGeneral(),
             }
+        }
+
+        // Keep scanner code out of the ASCII dispatch's inlining budget.
+        // Changing line-break backends must not change ASCII specialization.
+        noinline fn nextGeneral(self: *Self) ?Line {
             if (self.pending_line) |line| {
                 self.pending_line = null;
                 return line;
@@ -156,7 +161,7 @@ fn IteratorImpl(comptime instrumented: bool) type {
             return .{ .start = self.line_start, .end = self.bytes.len, .columns = self.columns };
         }
 
-        fn nextAsciiLetters(self: *Self) ?Line {
+        inline fn nextAsciiLetters(self: *Self) ?Line {
             if (self.line_start == self.bytes.len) {
                 self.finished = true;
                 return null;
@@ -170,7 +175,7 @@ fn IteratorImpl(comptime instrumented: bool) type {
             return .{ .start = start, .end = end, .columns = end - start };
         }
 
-        fn nextAsciiParagraph(self: *Self) ?Line {
+        inline fn nextAsciiParagraph(self: *Self) ?Line {
             if (self.line_start == self.bytes.len) {
                 self.finished = true;
                 return null;
