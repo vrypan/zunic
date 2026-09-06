@@ -1,6 +1,7 @@
 //! Terminal-cell width policy shared by text measurement and rendering.
 const grapheme = @import("grapheme.zig");
 const scalar = @import("scalar.zig");
+const ascii_scan = @import("ascii_scan.zig");
 
 pub const Measure = struct {
     /// `0`, `1`, or `2` for renderable clusters; `3` marks a replacement.
@@ -38,6 +39,10 @@ pub fn measureCluster(bytes: []const u8) Measure {
 /// Width after terminal filtering. Invalid bytes and control characters are
 /// dropped, matching Screen; emoji sequences are measured as one cluster.
 pub fn textWidth(bytes: []const u8) usize {
+    // Printable ASCII is one cluster of one column per byte, so the whole
+    // measurement is the byte count.
+    if (ascii_scan.allPrintable(bytes)) return bytes.len;
+
     var it = grapheme.iterator(bytes);
     var total: usize = 0;
     while (it.next()) |span| {

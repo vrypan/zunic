@@ -5,6 +5,7 @@ const line_break = @import("line_break.zig");
 const utf8 = @import("utf8.zig");
 const scalar = @import("scalar.zig");
 const properties = @import("properties.zig");
+const width = @import("width.zig");
 
 fn expectScannerMatchesComposedIterators(bytes: []const u8) !void {
     var scanner = scan.Scanner(false){ .bytes = bytes };
@@ -196,5 +197,63 @@ test "paragraph accepts the documented alphabet and rejects the rest" {
         };
         const got = scan.ascii.scalarParagraph(&buffer) != .none;
         try std.testing.expectEqual(expected_simple, got);
+    }
+}
+
+/// `textWidth` without the printable-ASCII shortcut.
+fn referenceTextWidth(bytes: []const u8) usize {
+    var it = grapheme.iterator(bytes);
+    var total: usize = 0;
+    while (it.next()) |span| total += if (span.columns == 3) 1 else span.columns;
+    return total;
+}
+
+test "textWidth shortcut matches the grapheme iterator for every byte" {
+    var storage: [40]u8 = undefined;
+    for (0..40) |position| {
+        for (0..256) |value| {
+            @memset(&storage, 'a');
+            storage[position] = @intCast(value);
+            for ([_]usize{ 1, 15, 16, 17, 31, 33, 40 }) |length| {
+                if (position >= length) continue;
+                const bytes = storage[0..length];
+                try std.testing.expectEqual(referenceTextWidth(bytes), width.textWidth(bytes));
+            }
+        }
+    }
+}
+
+test "textWidth shortcut matches the grapheme iterator on mixed text" {
+    const cases = [_][]const u8{
+        "",
+        " ",
+        "plain ascii, punctuation 123.",
+        "tab\there and newline\nhere",
+        "\x00\x1f\x7f controls",
+        "wide \xe6\x97\xa5\xe6\x9c\xac cjk",
+        "combining e\xcc\x81 and emoji \xf0\x9f\x91\x8b\xf0\x9f\x8f\xbf",
+        "malformed \xff \xc0\x80 bytes",
+        "regional \xf0\x9f\x87\xac\xf0\x9f\x87\xb7 indicator",
+    };
+    for (cases) |bytes| {
+        try std.testing.expectEqual(referenceTextWidth(bytes), width.textWidth(bytes));
+    }
+}
+
+test "printable detectors agree at all byte positions and lengths" {
+    var storage: [48]u8 = undefined;
+    for (0..40) |position| {
+        for (0..256) |value| {
+            @memset(&storage, 'a');
+            storage[position] = @intCast(value);
+            for ([_]usize{ 1, 15, 16, 17, 31, 32, 33, 40 }) |length| {
+                if (position >= length) continue;
+                const bytes = storage[0..length];
+                try std.testing.expectEqual(
+                    scan.ascii.scalarAllPrintable(bytes),
+                    scan.ascii.simdAllPrintable(bytes),
+                );
+            }
+        }
     }
 }

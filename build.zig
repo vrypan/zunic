@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const WrapFastPath = enum { off, scalar, auto, simd };
-    const wrap_fast_path = b.option(WrapFastPath, "wrap-fast-path", "ASCII wrapping acceleration backend") orelse .auto;
+    const wrap_fast_path = b.option(WrapFastPath, "wrap-fast-path", "ASCII fast-path backend for wrapping and width") orelse .auto;
     if (wrap_fast_path == .simd and switch (target.result.cpu.arch) {
         .aarch64, .x86_64 => false,
         else => true,

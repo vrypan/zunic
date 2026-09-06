@@ -77,6 +77,37 @@ pub fn simdParagraph(bytes: []const u8) Paragraph {
     return if (letters) .letters else .simple;
 }
 
+/// Returns whether every byte is printable ASCII (0x20..0x7E). Every such
+/// byte is its own extended grapheme cluster of width 1, so text made only of
+/// them measures exactly its own length. Controls, DEL, and anything above
+/// ASCII are excluded: they either measure zero or can combine with a
+/// neighbour, so they fall back to the general path.
+pub fn allPrintable(bytes: []const u8) bool {
+    return switch (selectedBackend()) {
+        .off => false,
+        .scalar => scalarAllPrintable(bytes),
+        .auto => if (simdSupported() and bytes.len >= simd_width) simdAllPrintable(bytes) else scalarAllPrintable(bytes),
+        .simd => simdAllPrintable(bytes),
+    };
+}
+
+pub fn scalarAllPrintable(bytes: []const u8) bool {
+    for (bytes) |byte| if (byte < 0x20 or byte > 0x7E) return false;
+    return true;
+}
+
+pub fn simdAllPrintable(bytes: []const u8) bool {
+    if (!simdSupported()) return scalarAllPrintable(bytes);
+    const V = @Vector(simd_width, u8);
+    var index: usize = 0;
+    while (index + simd_width <= bytes.len) : (index += simd_width) {
+        const chunk: V = bytes[index..][0..simd_width].*;
+        const printable = (chunk >= @as(V, @splat(0x20))) & (chunk <= @as(V, @splat(0x7E)));
+        if (!@reduce(.And, printable)) return false;
+    }
+    return scalarAllPrintable(bytes[index..]);
+}
+
 pub fn scalarAllLetters(bytes: []const u8) bool {
     for (bytes) |byte| if (!isLetter(byte)) return false;
     return true;
