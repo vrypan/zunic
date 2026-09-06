@@ -28,3 +28,19 @@ test "grapheme clusters retain the shared terminal measure" {
         try std.testing.expectEqual(measured.columns, span.columns);
     }
 }
+
+test "ASCII arrays agree with the fused record" {
+    // The trie is verified exhaustively against the pinned UCD by
+    // src/tools/test-properties.py. What that cannot see is scalar.at's ASCII
+    // shortcut, which reads two separate arrays and hard-codes one column.
+    const properties = @import("properties.zig");
+    var cp: u7 = 0;
+    while (true) {
+        const r = properties.record(cp);
+        try std.testing.expectEqual(properties.grapheme_ascii[cp], properties.graphemeOf(r));
+        try std.testing.expectEqual(properties.line_break_ascii[cp], r.line_break);
+        try std.testing.expectEqual(@as(u2, 1), r.width);
+        if (cp == 127) break;
+        cp += 1;
+    }
+}

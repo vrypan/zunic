@@ -12,10 +12,7 @@ pub const Boundary = struct { offset: usize, opportunity: Opportunity };
 
 const Class = properties.LineBreak;
 
-const Token = struct {
-    scalar: scalar.Token,
-    raw: Class,
-};
+const Token = scalar.ClassifiedToken;
 
 /// Internal UAX #14 transition state, separated from the byte iterator so a
 /// fused scanner can drive it from an already-decoded token stream. The
@@ -23,12 +20,18 @@ const Token = struct {
 /// `resolveCurrent`, ask `opportunityBefore` for the boundary in front of the
 /// scalar, then `consume` it. The first scalar of the text is consumed with
 /// `first` instead and has no boundary decision.
+/// The `WithRecord`/`WithRecords` variants accept retained scalar facts so the
+/// scanner and iterator never repeat a property lookup to evaluate a rule.
+/// Keep the original entry points for callers supplying raw classes and code
+/// points. Cached base records follow the same LB9 lifetime as base code points.
 pub const State = struct {
     previous: Class = .al,
     previous_raw: Class = .al,
     previous_base_cp: u21 = 0,
     before_previous: Class = .al,
     before_previous_cp: u21 = 0,
+    previous_base_record: properties.Record = properties.record(0),
+    before_previous_record: properties.Record = properties.record(0),
     previous_at_sot: bool = false,
     zw_sp: bool = false,
     op_sp: bool = false,
@@ -44,20 +47,29 @@ pub const State = struct {
     ri_count: usize = 0,
 
     pub fn first(raw: Class, cp: u21) State {
+        return firstWithRecord(raw, cp, properties.record(cp));
+    }
+
+    pub fn firstWithRecord(raw: Class, cp: u21, r: properties.Record) State {
         var state = State{};
-        const current = resolve(raw, cp, .al, .bk);
+        const current = resolve(raw, r, .al, .bk);
         state.previous = current;
         state.previous_raw = raw;
         state.previous_base_cp = cp;
+        state.previous_base_record = r;
         state.previous_at_sot = true;
-        state.updateState(raw, current, cp);
-        state.qu_pi_sp = current == .qu and properties.isQuPi(cp);
+        state.updateState(raw, current, cp, r);
+        state.qu_pi_sp = current == .qu and r.lb_qu_pi;
         state.word_initial_hy = current == .hy or cp == 0x2010;
         return state;
     }
 
     pub fn resolveCurrent(self: *const State, raw: Class, cp: u21) Class {
-        return resolve(raw, cp, self.previous, self.previous_raw);
+        return self.resolveWithRecord(raw, properties.record(cp));
+    }
+
+    pub fn resolveWithRecord(self: *const State, raw: Class, r: properties.Record) Class {
+        return resolve(raw, r, self.previous, self.previous_raw);
     }
 
     /// `next_raw`/`next_cp`/`has_next` describe the scalar following this one
@@ -65,20 +77,31 @@ pub const State = struct {
     /// `next_end` is that scalar's end offset within `bytes` so LB25 can
     /// examine the second following scalar when required.
     pub fn opportunityBefore(self: *const State, bytes: []const u8, raw: Class, current: Class, cp: u21, next_raw: Class, next_cp: u21, has_next: bool, next_end: usize) Opportunity {
-        return breakBefore(self, bytes, raw, current, cp, next_raw, next_cp, has_next, next_end);
+        var classifier = scalar.Classifier(false){};
+        return self.opportunityWithRecords(bytes, raw, current, cp, properties.record(cp), next_raw, properties.record(next_cp), has_next, next_end, &classifier);
+    }
+
+    pub fn opportunityWithRecords(self: *const State, bytes: []const u8, raw: Class, current: Class, cp: u21, r: properties.Record, next_raw: Class, next_record: properties.Record, has_next: bool, next_end: usize, classifier: anytype) Opportunity {
+        return breakBefore(self, bytes, raw, current, cp, r, next_raw, next_record, has_next, next_end, classifier);
     }
 
     pub fn consume(self: *State, raw: Class, current: Class, cp: u21) void {
+        self.consumeWithRecord(raw, current, cp, properties.record(cp));
+    }
+
+    pub fn consumeWithRecord(self: *State, raw: Class, current: Class, cp: u21, r: properties.Record) void {
         self.before_previous = self.previous;
         self.before_previous_cp = self.previous_base_cp;
+        self.before_previous_record = self.previous_base_record;
         self.previous = current;
         self.previous_raw = raw;
         if (raw != .cm and raw != .zwj) self.previous_base_cp = cp;
+        if (raw != .cm and raw != .zwj) self.previous_base_record = r;
         if (raw != .cm and raw != .zwj) self.previous_at_sot = false;
-        self.updateState(raw, current, cp);
+        self.updateState(raw, current, cp, r);
     }
 
-    fn updateState(self: *State, raw: Class, current: Class, cp: u21) void {
+    fn updateState(self: *State, raw: Class, current: Class, cp: u21, r: properties.Record) void {
         const was_op_sp = self.op_sp;
         const was_qu_pi_sp = self.qu_pi_sp;
         const was_cl_cp_sp = self.cl_cp_sp;
@@ -88,10 +111,10 @@ pub const State = struct {
         const was_aksara_vi = self.aksara_vi;
         self.zw_sp = raw == .zw or (raw == .sp and self.zw_sp);
         self.op_sp = current == .op or (raw == .sp and was_op_sp);
-        self.qu_pi_sp = if (raw == .cm or raw == .zwj) was_qu_pi_sp else (current == .qu and properties.isQuPi(cp) and isLb15aStart(self.before_previous)) or (raw == .sp and was_qu_pi_sp);
+        self.qu_pi_sp = if (raw == .cm or raw == .zwj) was_qu_pi_sp else (current == .qu and r.lb_qu_pi and isLb15aStart(self.before_previous)) or (raw == .sp and was_qu_pi_sp);
         self.cl_cp_sp = (current == .cl or current == .cp) or (raw == .sp and was_cl_cp_sp);
         self.b2_sp = current == .b2 or (raw == .sp and was_b2_sp);
-        self.hl_ba_hy = self.before_previous == .hl and (current == .hy or (current == .ba and !properties.isEastAsianWide(cp)));
+        self.hl_ba_hy = self.before_previous == .hl and (current == .hy or (current == .ba and !r.east_asian_wide));
         self.word_initial_hy = if (raw == .cm or raw == .zwj) was_word_initial_hy else (current == .hy or cp == 0x2010) and isWordInitialBreakContext(self.before_previous);
         self.po_pr_before_op = current == .op and (self.before_previous == .po or self.before_previous == .pr);
         self.number_cl_cp = (current == .cl or current == .cp) and was_num_is_sy;
@@ -124,7 +147,7 @@ pub const Iterator = struct {
                 return .{ .offset = 0, .opportunity = .mandatory };
             }
             const token = self.takeToken();
-            self.state = State.first(token.raw, token.scalar.codepoint orelse 0);
+            self.state = State.firstWithRecord(token.record.line_break, token.codepoint orelse 0, token.record);
             return .{ .offset = 0, .opportunity = .prohibited };
         }
         if (self.pos == self.bytes.len) {
@@ -134,21 +157,21 @@ pub const Iterator = struct {
 
         const offset = self.pos;
         const token = self.takeToken();
-        const raw = token.raw;
-        const cp = token.scalar.codepoint orelse 0;
-        const current = self.state.resolveCurrent(raw, cp);
+        const raw = token.record.line_break;
+        const cp = token.codepoint orelse 0;
+        const current = self.state.resolveWithRecord(raw, token.record);
         const following = self.peekToken();
-        const next_raw = following.raw;
-        const next_cp = following.scalar.codepoint orelse 0;
-        const opportunity = self.state.opportunityBefore(self.bytes, raw, current, cp, next_raw, next_cp, following.scalar.end != following.scalar.start, following.scalar.end);
-        self.state.consume(raw, current, cp);
+        const next_raw = following.record.line_break;
+        var classifier = scalar.Classifier(false){};
+        const opportunity = self.state.opportunityWithRecords(self.bytes, raw, current, cp, token.record, next_raw, following.record, following.end != following.start, following.end, &classifier);
+        self.state.consumeWithRecord(raw, current, cp, token.record);
         return .{ .offset = offset, .opportunity = opportunity };
     }
 
     fn takeToken(self: *Iterator) Token {
         const token = self.next_token orelse self.decodeAt(self.pos);
         self.next_token = null;
-        self.pos = token.scalar.end;
+        self.pos = token.end;
         return token;
     }
 
@@ -158,8 +181,8 @@ pub const Iterator = struct {
     }
 
     fn decodeAt(self: *const Iterator, offset: usize) Token {
-        const token = scalar.at(self.bytes, offset);
-        return .{ .scalar = token, .raw = token.line_break };
+        var classifier = scalar.Classifier(false){};
+        return classifier.at(self.bytes, offset);
     }
 };
 
@@ -172,7 +195,7 @@ pub fn isHardClass(c: Class) bool {
 }
 
 // LB4-LB31, after LB1 resolution. Earlier rules take precedence.
-fn breakBefore(it: *const State, bytes: []const u8, raw: Class, current: Class, cp: u21, next_raw: Class, next_cp: u21, has_next: bool, next_end: usize) Opportunity {
+fn breakBefore(it: *const State, bytes: []const u8, raw: Class, current: Class, cp: u21, r: properties.Record, next_raw: Class, next_record: properties.Record, has_next: bool, next_end: usize, classifier: anytype) Opportunity {
     // LB5 and LB6: preserve CRLF, and force boundaries around hard breaks.
     if (it.previous_raw == .cr and raw == .lf) return .prohibited;
     if (isHard(it.previous_raw)) return .allowed;
@@ -193,17 +216,17 @@ fn breakBefore(it: *const State, bytes: []const u8, raw: Class, current: Class, 
     if (isClosing(current)) return .prohibited;
     if (it.op_sp) return .prohibited;
     if (it.qu_pi_sp) return .prohibited; // LB15a
-    if (current == .qu and properties.isQuPf(cp) and (!has_next or isLb15bFollower(next_raw))) return .prohibited; // LB15b
+    if (current == .qu and r.lb_qu_pf and (!has_next or isLb15bFollower(next_raw))) return .prohibited; // LB15b
     if (current == .is) return .prohibited; // LB15d
     if (it.cl_cp_sp and current == .ns) return .prohibited;
     if (it.b2_sp and current == .b2) return .prohibited;
     if (it.previous == .sp) return .allowed; // LB18
-    if (current == .qu and !properties.isQuPi(cp)) return .prohibited; // LB19
-    if (current == .qu and (!properties.isEastAsianWide(it.previous_base_cp) or !has_next or !properties.isEastAsianWide(next_cp))) return .prohibited; // LB19a
+    if (current == .qu and !r.lb_qu_pi) return .prohibited; // LB19
+    if (current == .qu and (!it.previous_base_record.east_asian_wide or !has_next or !next_record.east_asian_wide)) return .prohibited; // LB19a
     if (it.previous == .qu and it.previous_at_sot) return .prohibited; // LB19a
-    if (it.previous == .qu and !properties.isEastAsianWide(it.before_previous_cp)) return .prohibited; // LB19a
-    if (it.previous == .qu and !properties.isEastAsianWide(cp)) return .prohibited; // LB19a
-    if (it.previous == .qu and !properties.isQuPf(it.previous_base_cp)) return .prohibited;
+    if (it.previous == .qu and !it.before_previous_record.east_asian_wide) return .prohibited; // LB19a
+    if (it.previous == .qu and !r.east_asian_wide) return .prohibited; // LB19a
+    if (it.previous == .qu and !it.previous_base_record.lb_qu_pf) return .prohibited;
     if (it.previous == .cb or current == .cb) return .allowed;
     if (current == .ba or current == .hy or current == .ns or it.previous == .bb) return .prohibited;
     if (it.hl_ba_hy and current != .hl) return .prohibited; // LB21a
@@ -220,7 +243,7 @@ fn breakBefore(it: *const State, bytes: []const u8, raw: Class, current: Class, 
     if ((it.previous == .po or it.previous == .pr) and current == .nu) return .prohibited;
     if (it.previous == .hy and current == .nu) return .prohibited;
     if (it.previous == .is and current == .nu) return .prohibited;
-    if ((it.previous == .po or it.previous == .pr) and current == .op and (next_raw == .nu or secondFollowingIsNu(bytes, next_raw, next_end))) return .prohibited;
+    if ((it.previous == .po or it.previous == .pr) and current == .op and (next_raw == .nu or secondFollowingIsNu(bytes, next_raw, next_end, classifier))) return .prohibited;
     if (it.po_pr_before_op and (current == .nu or (current == .is and next_raw == .nu))) return .prohibited;
 
     // LB26-LB30b: Hangul, Brahmic syllables, alphabetics, and emoji.
@@ -233,20 +256,20 @@ fn breakBefore(it: *const State, bytes: []const u8, raw: Class, current: Class, 
     if (it.aksara_vi and (current == .ak or cp == 0x25CC)) return .prohibited;
     if (isAksara(it.previous, it.previous_base_cp) and isAksara(current, cp) and next_raw == .vf) return .prohibited;
     if (it.previous == .is and isAlphabetic(current)) return .prohibited;
-    if ((isAlphabetic(it.previous) or it.previous == .nu) and current == .op and properties.isOp30(cp)) return .prohibited;
-    if (it.previous == .cp and properties.isCp30(it.previous_base_cp) and (isAlphabetic(current) or current == .nu)) return .prohibited;
+    if ((isAlphabetic(it.previous) or it.previous == .nu) and current == .op and r.lb_op30) return .prohibited;
+    if (it.previous == .cp and it.previous_base_record.lb_cp30 and (isAlphabetic(current) or current == .nu)) return .prohibited;
     if (it.previous == .ri and current == .ri and it.ri_count % 2 == 1) return .prohibited;
-    if ((it.previous == .eb or properties.isExtendedPictographicCn(it.previous_base_cp)) and current == .em) return .prohibited;
+    if ((it.previous == .eb or it.previous_base_record.ep_cn) and current == .em) return .prohibited;
 
     return .allowed; // LB31
 }
 
 // LB1. The fallback for malformed UTF-8 is AL in rawClass.
-fn resolve(raw: Class, cp: u21, previous: Class, previous_raw: Class) Class {
+fn resolve(raw: Class, r: properties.Record, previous: Class, previous_raw: Class) Class {
     return switch (raw) {
         .ai, .sg, .xx => .al,
         .cj => .ns,
-        .sa => if (properties.isSaMnMc(cp)) .cm else .al,
+        .sa => if (r.lb_sa_mn_mc) .cm else .al,
         .cm, .zwj => if (isHard(previous_raw) or previous == .sp or previous_raw == .zw) .al else previous,
         else => raw,
     };
@@ -282,9 +305,9 @@ fn isLb15bFollower(c: Class) bool {
 fn isWordInitialBreakContext(c: Class) bool {
     return isHard(c) or c == .sp or c == .zw or c == .cb or c == .gl;
 }
-fn secondFollowingIsNu(bytes: []const u8, next_raw: Class, next_end: usize) bool {
+fn secondFollowingIsNu(bytes: []const u8, next_raw: Class, next_end: usize, classifier: anytype) bool {
     if (next_raw != .is) return false;
-    return scalar.at(bytes, next_end).line_break == .nu;
+    return classifier.at(bytes, next_end).record.line_break == .nu;
 }
 fn hangulPair(left: Class, right: Class) bool {
     if (left == .jl) return right == .jl or right == .jv or right == .h2 or right == .h3;

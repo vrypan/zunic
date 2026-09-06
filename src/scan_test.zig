@@ -88,8 +88,29 @@ test "fused scanner decodes each scalar once with a bounded buffer" {
         var scanner = scan.Scanner(true){ .bytes = bytes };
         while (scanner.next()) |_| {}
         try std.testing.expectEqual(countScalars(bytes), scanner.counters.decoded_scalars);
+        try std.testing.expectEqual(countScalars(bytes), scanner.counters.property_lookups);
         try std.testing.expect(scanner.counters.max_buffered <= 2);
     }
+}
+
+test "predicate-heavy scanning reuses records and counts LB25 lookahead" {
+    const cases = [_][]const u8{
+        "界‘界’界\xcc\x81 “quoted” (text) ไทย ภาษา",
+        "\u{1FC00}\u{1F3FB} א-ב \u{0E31}",
+        "$（.1) €(.2) $\xff(.3)",
+    };
+    for (cases) |bytes| {
+        var scanner = scan.Scanner(true){ .bytes = bytes };
+        while (scanner.next()) |_| {}
+        try expectScannerMatchesComposedIterators(bytes);
+        try std.testing.expect(scanner.counters.property_lookups <= scanner.counters.decoded_scalars);
+        try std.testing.expect(scanner.counters.decoded_scalars < 2 * countScalars(bytes));
+    }
+    var scanner = scan.Scanner(true){ .bytes = "$（.1)" };
+    while (scanner.next()) |_| {}
+    // LB25 inspects the digit once ahead of the normal two-token buffer.
+    try std.testing.expectEqual(@as(usize, 6), scanner.counters.decoded_scalars);
+    try std.testing.expectEqual(@as(usize, 6), scanner.counters.property_lookups);
 }
 
 test "ASCII detectors agree at all byte positions and slice offsets" {
@@ -132,6 +153,10 @@ fn referenceAt(bytes: []const u8, start: usize) scalar.Token {
 fn expectSameToken(bytes: []const u8, start: usize) !void {
     const want = referenceAt(bytes, start);
     const got = scalar.at(bytes, start);
+    var classifier = scalar.Classifier(true){};
+    const classified = classifier.at(bytes, start).scalarToken();
+    try std.testing.expectEqualDeep(got, classified);
+    try std.testing.expectEqual(@as(usize, if (got.codepoint != null) 1 else 0), classifier.property_lookups);
     try std.testing.expectEqual(want.start, got.start);
     try std.testing.expectEqual(want.end, got.end);
     try std.testing.expectEqual(want.codepoint, got.codepoint);

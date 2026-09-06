@@ -9,13 +9,17 @@
 //! machines; the scanner never rewinds. The only exception is LB25's second
 //! following scalar, which `line_break.State.opportunityBefore` re-decodes on
 //! demand at PO/PR before OP boundaries — at most one extra decode per
-//! cluster end. Total decodes are therefore below twice the scalar count,
+//! cluster end. These lookahead decodes use the same counted classifier.
+//! Every valid decode loads one property record; rule predicates reuse its
+//! bits, including those of previous base scalars retained by the state.
+//! Total decodes are therefore below twice the scalar count,
 //! independent of wrapping width and line count. The bound is enforced by
 //! instrumented-scanner counters in tests; instrumentation is a comptime
 //! option and compiles to nothing in production builds.
 const scalar = @import("scalar.zig");
 const grapheme = @import("grapheme.zig");
 const line_break = @import("line_break.zig");
+const properties = @import("properties.zig");
 
 pub const ascii = @import("ascii_scan.zig");
 
@@ -32,6 +36,7 @@ pub const Cluster = struct {
 
 pub const Counters = struct {
     decoded_scalars: usize = 0,
+    property_lookups: usize = 0,
     max_buffered: usize = 0,
 };
 
@@ -39,8 +44,9 @@ pub fn Scanner(comptime instrumented: bool) type {
     return struct {
         bytes: []const u8,
         decode_pos: usize = 0,
-        buf0: ?scalar.Token = null,
-        buf1: ?scalar.Token = null,
+        buf0: ?scalar.ClassifiedToken = null,
+        buf1: ?scalar.ClassifiedToken = null,
+        classifier: scalar.Classifier(instrumented) = .{},
         lb: line_break.State = .{},
         lb_started: bool = false,
         counters: if (instrumented) Counters else void = if (instrumented) .{} else {},
@@ -48,13 +54,14 @@ pub fn Scanner(comptime instrumented: bool) type {
         const Self = @This();
 
         pub fn next(self: *Self) ?Cluster {
-            const first = self.take() orelse return null;
+            const first_decoded = self.take() orelse return null;
+            const first = first_decoded.scalarToken();
             const first_cp = first.codepoint orelse 0;
             if (self.lb_started) {
-                const current = self.lb.resolveCurrent(first.line_break, first_cp);
-                self.lb.consume(first.line_break, current, first_cp);
+                const current = self.lb.resolveWithRecord(first.line_break, first_decoded.record);
+                self.lb.consumeWithRecord(first.line_break, current, first_cp, first_decoded.record);
             } else {
-                self.lb = line_break.State.first(first.line_break, first_cp);
+                self.lb = line_break.State.firstWithRecord(first.line_break, first_cp, first_decoded.record);
                 self.lb_started = true;
             }
             const start = first.start;
@@ -65,39 +72,48 @@ pub fn Scanner(comptime instrumented: bool) type {
             var end = first.end;
 
             while (true) {
-                const lookahead = self.peek0() orelse
+                const decoded = self.peek0() orelse
                     return .{ .start = start, .end = end, .columns = measure.finish(), .hard = hard, .can_break = true };
+                const lookahead = decoded.scalarToken();
                 const classification = grapheme.classify(lookahead);
                 const cp = lookahead.codepoint orelse 0;
-                const current = self.lb.resolveCurrent(lookahead.line_break, cp);
+                const current = self.lb.resolveWithRecord(lookahead.line_break, decoded.record);
                 if (state.breakBeforeNext(classification)) {
                     // The cluster ends before `lookahead`, which stays
                     // buffered as the next cluster's first scalar; its
                     // line-break consumption happens there, after the
                     // boundary in front of it has been decided here.
                     const opportunity = if (self.peek1()) |following|
-                        self.lb.opportunityBefore(self.bytes, lookahead.line_break, current, cp, following.line_break, following.codepoint orelse 0, true, following.end)
+                        self.lb.opportunityWithRecords(self.bytes, lookahead.line_break, current, cp, decoded.record, following.record.line_break, following.record, true, following.end, &self.classifier)
                     else
-                        self.lb.opportunityBefore(self.bytes, lookahead.line_break, current, cp, .al, 0, false, lookahead.end);
+                        self.lb.opportunityWithRecords(self.bytes, lookahead.line_break, current, cp, decoded.record, .al, comptime properties.record(0), false, lookahead.end, &self.classifier);
+                    self.updateCounters();
                     return .{ .start = start, .end = end, .columns = measure.finish(), .hard = hard, .can_break = opportunity != .prohibited };
                 }
                 self.buf0 = self.buf1;
                 self.buf1 = null;
-                self.lb.consume(lookahead.line_break, current, cp);
+                self.lb.consumeWithRecord(lookahead.line_break, current, cp, decoded.record);
                 state.consume(classification);
                 measure.add(lookahead);
                 end = lookahead.end;
             }
         }
 
-        fn decode(self: *Self) scalar.Token {
-            if (instrumented) self.counters.decoded_scalars += 1;
-            const token = scalar.at(self.bytes, self.decode_pos);
+        fn decode(self: *Self) scalar.ClassifiedToken {
+            const token = self.classifier.at(self.bytes, self.decode_pos);
+            self.updateCounters();
             self.decode_pos = token.end;
             return token;
         }
 
-        fn take(self: *Self) ?scalar.Token {
+        fn updateCounters(self: *Self) void {
+            if (instrumented) {
+                self.counters.decoded_scalars = self.classifier.decoded_scalars;
+                self.counters.property_lookups = self.classifier.property_lookups;
+            }
+        }
+
+        fn take(self: *Self) ?scalar.ClassifiedToken {
             if (self.buf0) |token| {
                 self.buf0 = self.buf1;
                 self.buf1 = null;
@@ -107,7 +123,7 @@ pub fn Scanner(comptime instrumented: bool) type {
             return self.decode();
         }
 
-        fn peek0(self: *Self) ?scalar.Token {
+        fn peek0(self: *Self) ?scalar.ClassifiedToken {
             if (self.buf0 == null) {
                 if (self.decode_pos >= self.bytes.len) return null;
                 self.buf0 = self.decode();
@@ -116,7 +132,7 @@ pub fn Scanner(comptime instrumented: bool) type {
             return self.buf0;
         }
 
-        fn peek1(self: *Self) ?scalar.Token {
+        fn peek1(self: *Self) ?scalar.ClassifiedToken {
             if (self.buf1 == null) {
                 if (self.decode_pos >= self.bytes.len) return null;
                 self.buf1 = self.decode();
