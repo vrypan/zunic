@@ -4,24 +4,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const WrapFastPath = enum { off, scalar, auto, simd };
-    const LineBreakEngine = enum { generic, machine };
     const wrap_fast_path = b.option(WrapFastPath, "wrap-fast-path", "ASCII fast-path backend for wrapping and width") orelse .auto;
-    // Plan 015: correctness and three-pair performance acceptance passed.
-    const line_break_engine = b.option(LineBreakEngine, "line-break-engine", "Unicode line-break transition backend") orelse .machine;
     if (wrap_fast_path == .simd and switch (target.result.cpu.arch) {
         .aarch64, .x86_64 => false,
         else => true,
     }) @panic("-Dwrap-fast-path=simd requires an aarch64 or x86_64 target");
     const build_options = b.addOptions();
     build_options.addOption(WrapFastPath, "wrap_fast_path", wrap_fast_path);
-    build_options.addOption(LineBreakEngine, "line_break_engine", line_break_engine);
 
     const zunic = b.addModule("zunic", .{
         .root_source_file = b.path("src/root.zig"),
     });
     zunic.addImport("build_options", build_options.createModule());
     const test_step = b.step("test", "Run zunic tests");
-    const transition_step = b.step("line-break-tests", "Run line-break transition differential tests");
+    const transition_step = b.step("line-break-tests", "Run line-break machine protocol tests");
     const roots = [_][]const u8{
         "src/root_test.zig",
         "src/conformance_test.zig",

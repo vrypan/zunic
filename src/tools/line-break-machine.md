@@ -65,11 +65,12 @@ not a boundary was queried. The fused scanner retains its existing classified
 token buffer and `Cluster` interface; only LB25 may decode a second following
 scalar. Existing scanner work-bound and lens tests remain unchanged.
 
-`line_break.State` retains its public fields and methods as an independent,
-branch-based compatibility implementation. `Iterator.state` now has the
-selected backend's representation; concrete field layout is not preserved.
+`line_break.State` is the generated machine state. The old branch-based State,
+its methods/fields, `ActiveState`, and the `-Dline-break-engine` build selector
+have been removed. This intentionally breaks low-level compatibility; recover
+historical implementations from Git commit `2620ac3` if needed.
 Lens signatures, laziness, independent iterators and allocation behavior are
-unchanged. The build selector is `-Dline-break-engine=generic|machine`.
+unchanged. There is one production engine and no retained generic test engine.
 
 The wrapper's general method is isolated from its inline ASCII dispatch.
 This changes compiler specialization, not the fitting algorithm or Cluster
@@ -84,14 +85,17 @@ witnesses and total successor/action ranges. Zig transition tests independently
 select all 68 categories from real records, enumerate all pairs/triples,
 check seeded longer streams and malformed byte tails, repeat queries, and
 consume copied state without querying. Run them independently with
-`zig build line-break-tests -Dline-break-engine=machine`.
+`zig build line-break-tests`.
 
-Private `rust-comparison/verify-semantic.zig` compares full ordered boundary
-streams with the independent generic State over all eight real corpora.
+Private `rust-comparison/verify-semantic.zig` checks full ordered boundary
+streams between Iterator and direct machine State on all eight real corpora.
+These and the exhaustive Zig protocol tests check integration consistency,
+not independent rule correctness. The pinned Unicode fixtures remain the
+standard-based checks; generator tests also validate compilation/minimization.
 Rust remains a throughput peer, not the Unicode 16 correctness oracle.
 
 Known inherited limitation: SA Mn/Mc characters resolve to CM, but the current
 LB9/base-inheritance checks still use raw CM/ZWJ classes. For example,
-`a\u{0e31}` incorrectly permits the boundary at byte 1 in both engines.
+`a\u{0e31}` incorrectly permits the boundary at byte 1, inherited from the removed engine.
 The pinned fixtures do not expose this case. This needs a separate correctness
-fix; passing fixtures and reference differentials is not exhaustive conformance.
+fix; passing fixtures and protocol tests is not exhaustive conformance.

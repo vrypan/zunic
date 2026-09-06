@@ -7,7 +7,7 @@
 //! Work bound: each scalar is decoded and classified once, held in a buffer
 //! of at most two tokens, and consumed exactly once by both transition
 //! machines; the scanner never rewinds. The only exception is LB25's second
-//! following scalar, which `line_break.State.opportunityBefore` re-decodes on
+//! following scalar, which `line_break.State.opportunityForRecord` re-decodes on
 //! demand at PO/PR before OP boundaries — at most one extra decode per
 //! cluster end. These lookahead decodes use the same counted classifier.
 //! Every valid decode loads one property record; rule predicates reuse its
@@ -47,7 +47,7 @@ pub fn Scanner(comptime instrumented: bool) type {
         buf0: ?scalar.ClassifiedToken = null,
         buf1: ?scalar.ClassifiedToken = null,
         classifier: scalar.Classifier(instrumented) = .{},
-        lb: line_break.ActiveState = .{},
+        lb: line_break.State = .{},
         lb_started: bool = false,
         counters: if (instrumented) Counters else void = if (instrumented) .{} else {},
 
@@ -60,7 +60,7 @@ pub fn Scanner(comptime instrumented: bool) type {
             if (self.lb_started) {
                 self.lb.consumeRecord(first_cp, first_decoded.record);
             } else {
-                self.lb = line_break.ActiveState.firstWithRecord(first.line_break, first_cp, first_decoded.record);
+                self.lb = line_break.State.firstWithRecord(first.line_break, first_cp, first_decoded.record);
                 self.lb_started = true;
             }
             const start = first.start;
