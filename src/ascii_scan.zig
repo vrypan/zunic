@@ -16,12 +16,13 @@ pub fn selectedBackend() Backend {
 }
 
 /// Recognizes the ASCII subset whose grapheme and line-break behavior is
-/// fully represented by letters, digits, apostrophes, spaces, and hard
-/// separators. Over this alphabet UAX #14 places a break opportunity exactly
-/// after a run of spaces, which is the rule `wrap.nextAsciiParagraph`
-/// implements; `scan_test.zig` checks that exhaustively. Punctuation stays
-/// out: `.` and `,` are context dependent, since `.5` is a number and takes a
-/// break before it while a sentence-ending `.` does not.
+/// reproduced by `wrap.nextAsciiParagraph`: a break opportunity after a run
+/// of spaces, suppressed before an infix separator that does not begin a
+/// number. `wrap_exhaustive_test.zig` checks that against the real rules.
+///
+/// Excluded on purpose, each because it creates an opportunity this rule does
+/// not model: `-` (BA breaks after), `!` `?` (EX), `/` (SY), `(` `)` (OP/CP),
+/// and `$` `%` `+` (PO/PR number contexts).
 /// Auto covers every architecture with a vector backend. The kernel is
 /// portable @Vector code that lowers to baseline SSE2 on x86_64, and the scan
 /// tests check it against the scalar path at every alignment.
@@ -35,8 +36,12 @@ pub fn paragraph(bytes: []const u8) Paragraph {
 }
 
 fn isSimple(byte: u8) bool {
-    return isLetter(byte) or (byte >= '0' and byte <= '9') or byte == ' ' or
-        byte == '\'' or (byte >= 0x0A and byte <= 0x0D);
+    return switch (byte) {
+        'a'...'z', 'A'...'Z', '0'...'9', ' ' => true,
+        0x0A...0x0D => true,
+        '"', '#', '&', '\'', '*', ',', '.', ':', ';', '=', '@', '_' => true,
+        else => false,
+    };
 }
 
 /// One pass that answers both questions: the letters-only case is a subset of
@@ -62,12 +67,26 @@ pub fn simdParagraph(bytes: []const u8) Paragraph {
         const is_letter = (lower >= @as(V, @splat('a'))) & (lower <= @as(V, @splat('z')));
         if (@reduce(.And, is_letter)) continue;
         letters = false;
-        const is_digit = (chunk >= @as(V, @splat('0'))) & (chunk <= @as(V, @splat('9')));
         const is_space = chunk == @as(V, @splat(' '));
-        const is_apostrophe = chunk == @as(V, @splat('\''));
+        // Letters and spaces are the overwhelmingly common mix, so settle it
+        // before building the punctuation masks below.
+        if (@reduce(.And, is_letter | is_space)) continue;
+        const is_digit = (chunk >= @as(V, @splat('0'))) & (chunk <= @as(V, @splat('9')));
         // 0x0A..0x0D is exactly LF, VT, FF, CR.
         const is_hard = (chunk >= @as(V, @splat(0x0A))) & (chunk <= @as(V, @splat(0x0D)));
-        if (!@reduce(.And, is_letter | is_digit | is_space | is_apostrophe | is_hard)) return .none;
+        // The accepted punctuation, as ranges where the bytes are adjacent:
+        // 0x22..0x23 is `"#`, 0x26..0x27 is `&'`, 0x3A..0x3B is `:;`.
+        const q1 = (chunk >= @as(V, @splat(0x22))) & (chunk <= @as(V, @splat(0x23)));
+        const q2 = (chunk >= @as(V, @splat(0x26))) & (chunk <= @as(V, @splat(0x27)));
+        const q3 = (chunk >= @as(V, @splat(0x3A))) & (chunk <= @as(V, @splat(0x3B)));
+        const q4 = chunk == @as(V, @splat('*'));
+        const q5 = chunk == @as(V, @splat(','));
+        const q6 = chunk == @as(V, @splat('.'));
+        const q7 = chunk == @as(V, @splat('='));
+        const q8 = chunk == @as(V, @splat('@'));
+        const q9 = chunk == @as(V, @splat('_'));
+        const punct = q1 | q2 | q3 | q4 | q5 | q6 | q7 | q8 | q9;
+        if (!@reduce(.And, is_letter | is_digit | is_space | is_hard | punct)) return .none;
     }
     for (bytes[index..]) |byte| {
         if (isLetter(byte)) continue;

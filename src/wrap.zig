@@ -188,8 +188,11 @@ fn IteratorImpl(comptime instrumented: bool) type {
                 }
                 // UAX #14 permits a break after a run of spaces, not between
                 // adjacent spaces. Record the opportunity when the following
-                // non-space confirms the end of that run.
-                if (byte != ' ' and pos > start and self.bytes[pos - 1] == ' ') {
+                // non-space confirms the end of that run, unless the rules
+                // forbid breaking in front of that character.
+                if (byte != ' ' and pos > start and self.bytes[pos - 1] == ' ' and
+                    !noBreakBefore(self.bytes, pos))
+                {
                     candidate = .{ .start = start, .end = pos, .columns = columns };
                 }
                 const next_columns = columns + 1;
@@ -219,6 +222,17 @@ fn IteratorImpl(comptime instrumented: bool) type {
             self.line_start = pos;
             return .{ .start = start, .end = pos, .columns = columns };
         }
+    };
+}
+
+/// `. , ; :` are UAX #14 infix separators (class IS), which take no break in
+/// front of them, except when a digit follows: LB25 then reads the pair as the
+/// start of a number, where a break before it is allowed. The ASCII alphabet
+/// in `ascii_scan.isSimple` is chosen so this is the only such exception.
+fn noBreakBefore(bytes: []const u8, pos: usize) bool {
+    return switch (bytes[pos]) {
+        '.', ',', ';', ':' => !(pos + 1 < bytes.len and bytes[pos + 1] >= '0' and bytes[pos + 1] <= '9'),
+        else => false,
     };
 }
 

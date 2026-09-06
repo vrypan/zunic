@@ -192,7 +192,8 @@ test "paragraph accepts the documented alphabet and rejects the rest" {
         const byte: u8 = @intCast(value);
         var buffer = [_]u8{ 'a', byte, 'a' };
         const expected_simple = switch (byte) {
-            'a'...'z', 'A'...'Z', '0'...'9', ' ', '\'', 0x0A...0x0D => true,
+            'a'...'z', 'A'...'Z', '0'...'9', ' ', 0x0A...0x0D => true,
+            '"', '#', '&', '\'', '*', ',', '.', ':', ';', '=', '@', '_' => true,
             else => false,
         };
         const got = scan.ascii.scalarParagraph(&buffer) != .none;
