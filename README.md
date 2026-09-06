@@ -7,17 +7,10 @@ extended-grapheme segmentation, default Unicode 16.0.0 UAX #14 line-break
 boundaries, and a terminal cell-width policy. Its grapheme and line-break
 implementations pass the official Unicode 16.0.0 conformance fixtures.
 
-`zunic.scalar.iterator(bytes)` is the low-level compositional API. It yields
-borrowed byte spans, an optional decoded code point, and its grapheme and
-line-break properties; malformed bytes consume one byte with the package's
-normal fallback properties.
-
-`zunic.line_break.iterator(bytes)` returns a boundary at every UTF-8
-code-point byte offset, including offset zero and the end of the input. Each boundary is
-`.prohibited`, `.allowed`, or `.mandatory`; the final boundary is mandatory.
-The iterator is allocation-free and reports default UAX #14 opportunities only.
-Choosing a break for a terminal width, locale/CLDR tailoring, dictionary
-segmentation, and emergency breaks remain caller responsibilities.
+Open a lens for the question you have: `zunic.graphemes(bytes)` partitions
+user-visible text, `zunic.wrap(bytes, options)` chooses display lines, and
+`zunic.lines(bytes)` exposes hard-break-delimited lines. Lenses borrow their
+input, do not allocate, and scan only when iterated or counted.
 
 ## Why zunic
 
@@ -34,13 +27,11 @@ segmentation, and emergency breaks remain caller responsibilities.
   panics. An invalid byte is consumed as one span with defined fallback
   properties, so a terminal reading arbitrary bytes keeps making
   progress.
-- **One pass over the text.** `scalar.iterator` yields the byte span,
-  the decoded code point, the cell width, and the grapheme and
-  line-break properties together, instead of forcing a separate pass per
-  property.
-- **Optimized wrapping.** Grapheme segmentation, UAX #14 boundaries,
-  and terminal cell widths are used by `zunic.wrap` to provide out-of-the-box
-  text wrapping.
+- **Question-shaped API.** Typed byte, grapheme, and column coordinates keep
+  coordinate systems distinct. Use `.measured()` only when a render loop
+  needs a cluster's terminal width.
+- **Optimized wrapping.** Grapheme segmentation, UAX #14 boundaries, and
+  terminal widths are fused only where wrapping needs all three facts.
 - **Checked ASCII fast path.** Runs of plain ASCII take a vectorized
   scan on aarch64 and x86_64. It is portable `@Vector` code with no
   intrinsics, checked against the scalar implementation for every byte
@@ -52,7 +43,7 @@ segmentation, and emergency breaks remain caller responsibilities.
 Add the dependency:
 
 ```sh
-zig fetch --save git+https://github.com/vrypan/zunic.git#v0.2.2
+zig fetch --save git+https://github.com/vrypan/zunic.git#v0.3.0
 ```
 
 Add the module in your application's `build.zig`:
@@ -75,9 +66,8 @@ Accepted values are `.auto` (the default), `.scalar`, `.simd`, and `.off`.
 `-Dwrap-fast-path` applies when building zunic itself, such as running its
 tests or benchmarks.
 
-Then import `zunic` in application code. This example iterates user-visible
-graphemes, measures their terminal width, and prints only usable line-break
-boundaries:
+Then import `zunic` in application code. This example opens a measured
+grapheme lens and reads its borrowed spans:
 
 ```zig
 const std = @import("std");
@@ -86,38 +76,28 @@ const zunic = @import("zunic");
 pub fn main() void {
     const text = "Hello, 👋 world";
 
-    var graphemes = zunic.grapheme.iterator(text);
+    var graphemes = zunic.graphemes(text).measured().iterator();
     while (graphemes.next()) |span| {
-        const cluster = text[span.start..span.end];
+        const cluster = text[span.start.value..span.end.value];
         std.debug.print("{s}: {} columns\n", .{
             cluster,
-            zunic.width.textWidth(cluster),
+            span.columns,
         });
-    }
-
-    var breaks = zunic.line_break.iterator(text);
-    while (breaks.next()) |boundary| {
-        if (boundary.opportunity != .prohibited) {
-            std.debug.print("break at byte {} ({s})\n", .{
-                boundary.offset,
-                @tagName(boundary.opportunity),
-            });
-        }
     }
 }
 ```
 
 ## Wrapping terminal text
 
-`zunic.wrap.iterator` chooses greedy lines by terminal columns. It preserves
+`zunic.wrap` opens greedy display lines by terminal columns. It preserves
 extended grapheme clusters and default UAX #14 break opportunities. Hard line
 separators are consumed rather than included in the returned span.
 
 ```zig
-var lines = try zunic.wrap.iterator(text, .{ .max_columns = 80 });
+var lines = (try zunic.wrap(text, .{ .max_columns = 80 })).iterator();
 while (lines.next()) |line| {
-    const visible = text[line.start..line.end];
-    std.debug.print("{s} ({d} columns)\n", .{ visible, line.columns });
+    const visible = text[line.start.value..line.end.value];
+    std.debug.print("{s} ({d} columns)\n", .{ visible, line.columns.value });
 }
 ```
 

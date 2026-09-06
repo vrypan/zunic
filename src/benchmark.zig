@@ -1,10 +1,12 @@
 const std = @import("std");
 const zunic = @import("zunic");
 
-const harness_version = "2";
+// The public traversal and checksum coordinate types changed in 0.3.0, so
+// results from earlier harnesses are deliberately not comparable.
+const harness_version = "3";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
-const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.wrap.Overflow, max_lines: ?usize = null };
+const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
 
 const legacy_corpora = [_]Corpus{
     .{ .name = "ascii", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 96 },
@@ -115,16 +117,16 @@ fn utf8Checksum(text: []const u8) u64 {
     return sum;
 }
 fn graphemeChecksum(text: []const u8) u64 {
-    var it = zunic.grapheme.iterator(text);
+    var it = zunic.graphemes(text).iterator();
     var sum: u64 = 0xcbf29ce484222325;
     while (it.next()) |span| {
-        sum = mix(sum, span.start);
-        sum = mix(sum, span.end);
+        sum = mix(sum, span.start.value);
+        sum = mix(sum, span.end.value);
     }
     return sum;
 }
 fn widthChecksum(text: []const u8) u64 {
-    return mix(0xcbf29ce484222325, zunic.width.textWidth(text));
+    return mix(0xcbf29ce484222325, zunic.width(text));
 }
 fn lineBreakChecksum(text: []const u8) u64 {
     var it = zunic.line_break.iterator(text);
@@ -137,16 +139,17 @@ fn lineBreakChecksum(text: []const u8) u64 {
 }
 const WrapResult = struct { checksum: u64, lines: usize, emitted_bytes: usize };
 fn wrapChecksum(text: []const u8, case: WrapCase) WrapResult {
-    var it = zunic.wrap.iterator(text, .{ .max_columns = case.max_columns, .overflow = case.overflow }) catch unreachable;
+    var wrapped = zunic.wrap(text, .{ .max_columns = case.max_columns, .overflow = case.overflow }) catch unreachable;
+    var it = wrapped.iterator();
     var sum: u64 = 0xcbf29ce484222325;
     var lines: usize = 0;
     var emitted: usize = 0;
     while (it.next()) |line| {
-        sum = mix(sum, line.start);
-        sum = mix(sum, line.end);
-        sum = mix(sum, line.columns);
+        sum = mix(sum, line.start.value);
+        sum = mix(sum, line.end.value);
+        sum = mix(sum, line.columns.value);
         lines += 1;
-        emitted += line.end - line.start;
+        emitted += line.end.value - line.start.value;
         if (case.max_lines) |limit| if (lines == limit) break;
     }
     return .{ .checksum = sum, .lines = lines, .emitted_bytes = emitted };

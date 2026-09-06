@@ -10,7 +10,9 @@ const Cluster = struct {
     hard: bool,
 };
 
-pub fn collect(allocator: std.mem.Allocator, bytes: []const u8, options: unicode.wrap.Options) ![]unicode.wrap.Line {
+pub const Line = struct { start: usize, end: usize, columns: usize };
+
+pub fn collect(allocator: std.mem.Allocator, bytes: []const u8, options: unicode.WrapOptions) ![]Line {
     if (options.max_columns == 0) return error.InvalidWidth;
 
     var clusters: std.ArrayList(Cluster) = .empty;
@@ -18,28 +20,27 @@ pub fn collect(allocator: std.mem.Allocator, bytes: []const u8, options: unicode
 
     var boundaries = unicode.line_break.iterator(bytes);
     var boundary = boundaries.next();
-    var graphemes = unicode.grapheme.iterator(bytes);
+    var graphemes = unicode.graphemes(bytes).measured().iterator();
     while (graphemes.next()) |span| {
         while (boundary) |value| {
-            if (value.offset >= span.end) break;
+            if (value.offset >= span.end.value) break;
             boundary = boundaries.next();
         }
-        const measured = unicode.width.measureCluster(bytes[span.start..span.end]);
         try clusters.append(allocator, .{
-            .start = span.start,
-            .end = span.end,
-            .columns = if (measured.columns == 3) 1 else measured.columns,
-            .can_break = boundary != null and boundary.?.offset == span.end and boundary.?.opportunity != .prohibited,
-            .hard = isHard(bytes[span.start..span.end]),
+            .start = span.start.value,
+            .end = span.end.value,
+            .columns = span.columns,
+            .can_break = boundary != null and boundary.?.offset == span.end.value and boundary.?.opportunity != .prohibited,
+            .hard = isHard(bytes[span.start.value..span.end.value]),
         });
     }
 
-    var result: std.ArrayList(unicode.wrap.Line) = .empty;
+    var result: std.ArrayList(Line) = .empty;
     errdefer result.deinit(allocator);
     var index: usize = 0;
     var line_start: usize = 0;
     var columns: usize = 0;
-    var candidate: ?struct { end_index: usize, line: unicode.wrap.Line } = null;
+    var candidate: ?struct { end_index: usize, line: Line } = null;
 
     while (index < clusters.items.len) {
         const cluster = clusters.items[index];

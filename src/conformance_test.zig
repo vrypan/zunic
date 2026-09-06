@@ -1,5 +1,6 @@
 const std = @import("std");
 const unicode = @import("root.zig");
+const grapheme = @import("grapheme.zig");
 
 const fixture = @embedFile("data/GraphemeBreakTest-16.0.0.txt");
 const line_break_fixture = @embedFile("data/LineBreakTest-16.0.0.txt");
@@ -28,7 +29,7 @@ test "Unicode 16.0.0 GraphemeBreakTest" {
 
         var actual: [64]usize = undefined;
         var actual_len: usize = 0;
-        var it = unicode.grapheme.iterator(bytes[0..len]);
+        var it = grapheme.iterator(bytes[0..len]);
         while (it.next()) |span| {
             actual[actual_len] = span.start;
             actual_len += 1;
@@ -68,7 +69,14 @@ test "Unicode 16.0.0 LineBreakTest" {
         var it = unicode.line_break.iterator(bytes[0..len]);
         while (it.next()) |boundary| {
             if (actual_len == actual.len) return error.TestUnexpectedResult;
-            actual[actual_len] = boundary;
+            // The fixture represents mandatory hard boundaries with the same
+            // `÷` marker as ordinary allowed boundaries.  Preserve its
+            // break/no-break comparison while dedicated tests pin the richer
+            // mandatory result.
+            actual[actual_len] = if (boundary.opportunity == .mandatory and boundary.offset != len)
+                .{ .offset = boundary.offset, .opportunity = .allowed }
+            else
+                boundary;
             actual_len += 1;
         }
         try std.testing.expectEqualSlices(unicode.line_break.Boundary, expected[0..expected_len], actual[0..actual_len]);
@@ -99,4 +107,23 @@ test "line-break iterator edge cases" {
     try expectLineBreaks("\xf0\x9f\x87\xa6\xf0\x9f\x87\xa7\xf0\x9f\x87\xa8", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 4, .opportunity = P }, .{ .offset = 8, .opportunity = A }, .{ .offset = 12, .opportunity = M } });
     try expectLineBreaks("\xf0\x9f\x91\x8b\xf0\x9f\x8f\xbf", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 4, .opportunity = P }, .{ .offset = 8, .opportunity = M } });
     try expectLineBreaks("\xe0\xa4\x95\xe0\xa5\x8d\xe0\xa4\x95", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 3, .opportunity = P }, .{ .offset = 6, .opportunity = P }, .{ .offset = 9, .opportunity = M } });
+}
+
+test "interior hard breaks are mandatory" {
+    const M = unicode.line_break.Opportunity.mandatory;
+    const P = unicode.line_break.Opportunity.prohibited;
+    inline for ([_][]const u8{ "\n", "\r", "\r\n", "\xc2\x85", "\x0b", "\x0c", "\xe2\x80\xa8", "\xe2\x80\xa9" }) |hard| {
+        var bytes: [16]u8 = undefined;
+        bytes[0] = 'a';
+        @memcpy(bytes[1..][0..hard.len], hard);
+        bytes[hard.len + 1] = 'b';
+        var it = unicode.line_break.iterator(bytes[0 .. hard.len + 2]);
+        try std.testing.expectEqual(P, it.next().?.opportunity);
+        _ = it.next(); // Boundaries inside CRLF are prohibited.
+        var saw_mandatory = false;
+        while (it.next()) |boundary| {
+            if (boundary.offset == hard.len + 1 and boundary.opportunity == M) saw_mandatory = true;
+        }
+        try std.testing.expect(saw_mandatory);
+    }
 }

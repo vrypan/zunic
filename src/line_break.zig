@@ -198,7 +198,10 @@ pub fn isHardClass(c: Class) bool {
 fn breakBefore(it: *const State, bytes: []const u8, raw: Class, current: Class, cp: u21, r: properties.Record, next_raw: Class, next_record: properties.Record, has_next: bool, next_end: usize, classifier: anytype) Opportunity {
     // LB5 and LB6: preserve CRLF, and force boundaries around hard breaks.
     if (it.previous_raw == .cr and raw == .lf) return .prohibited;
-    if (isHard(it.previous_raw)) return .allowed;
+    // LB4: a boundary following a hard break is mandatory.  The conformance
+    // fixture only records break/no-break, so retain this stronger fact for
+    // callers that turn opportunities into display lines.
+    if (isHard(it.previous_raw)) return .mandatory;
     if (isHard(raw)) return .prohibited;
 
     // LB7-LB10: ZW and spaces, ZWJ, and combining sequences.

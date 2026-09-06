@@ -10,15 +10,16 @@ const std = @import("std");
 const unicode = @import("zunic");
 const reference = @import("wrap_reference.zig");
 
-fn expectProductionMatchesReference(bytes: []const u8, options: unicode.wrap.Options) !void {
+fn expectProductionMatchesReference(bytes: []const u8, options: unicode.WrapOptions) !void {
     const expected = try reference.collect(std.testing.allocator, bytes, options);
     defer std.testing.allocator.free(expected);
 
-    var actual = try unicode.wrap.iterator(bytes, options);
+    var actual = (try unicode.wrap(bytes, options)).iterator();
     for (expected) |want| {
         const got = actual.next() orelse return error.TestUnexpectedResult;
-        if (!std.meta.eql(want, got)) std.debug.print("wrap mismatch bytes={s} width={d} overflow={s} want={any} got={any}\n", .{ bytes, options.max_columns, @tagName(options.overflow), want, got });
-        try std.testing.expectEqualDeep(want, got);
+        try std.testing.expectEqual(want.start, got.start.value);
+        try std.testing.expectEqual(want.end, got.end.value);
+        try std.testing.expectEqual(want.columns, got.columns.value);
     }
     try std.testing.expect(actual.next() == null);
     try std.testing.expect(actual.next() == null);

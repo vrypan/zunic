@@ -1,12 +1,12 @@
 const std = @import("std");
 const unicode = @import("root.zig");
 
-fn expectLines(bytes: []const u8, options: unicode.wrap.Options, expected: []const []const u8, expected_columns: []const usize) !void {
-    var it = try unicode.wrap.iterator(bytes, options);
+fn expectLines(bytes: []const u8, options: unicode.WrapOptions, expected: []const []const u8, expected_columns: []const usize) !void {
+    var it = (try unicode.wrap(bytes, options)).iterator();
     for (expected, expected_columns) |want, columns| {
         const line = it.next() orelse return error.TestUnexpectedResult;
-        try std.testing.expectEqualStrings(want, bytes[line.start..line.end]);
-        try std.testing.expectEqual(columns, line.columns);
+        try std.testing.expectEqualStrings(want, bytes[line.start.value..line.end.value]);
+        try std.testing.expectEqual(columns, line.columns.value);
     }
     try std.testing.expect(it.next() == null);
 }
@@ -24,7 +24,7 @@ test "wrap preserves graphemes and hard breaks" {
 }
 
 test "wrap validates width and empty lines" {
-    try std.testing.expectError(error.InvalidWidth, unicode.wrap.iterator("x", .{ .max_columns = 0 }));
+    try std.testing.expectError(error.InvalidWidth, unicode.wrap("x", .{ .max_columns = 0 }));
     try expectLines("\n", .{ .max_columns = 1 }, &.{""}, &.{0});
     try expectLines("a\n\n", .{ .max_columns = 1 }, &.{ "a", "" }, &.{ 1, 0 });
 }

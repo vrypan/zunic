@@ -4,28 +4,68 @@ const unicode = @import("root.zig");
 test "unicode component compiles as an independent root" {
     const step = unicode.utf8.step("x");
     try std.testing.expectEqual(@as(usize, 1), step.len);
-    try std.testing.expectEqual(@as(u3, 2), unicode.width.measureCluster("🇬🇷").columns);
+    try std.testing.expectEqual(@as(usize, 2), unicode.width("🇬🇷"));
 }
 
-test "scalar iterator retains byte spans and facts" {
-    var it = unicode.scalar.iterator("a\xff界");
-    const a = it.next().?;
-    try std.testing.expectEqual(@as(usize, 0), a.start);
-    try std.testing.expectEqual(@as(?u21, 'a'), a.codepoint);
-    const invalid = it.next().?;
-    try std.testing.expect(invalid.codepoint == null);
-    try std.testing.expectEqual(@as(usize, 2), invalid.end);
-    const cjk = it.next().?;
-    try std.testing.expectEqual(@as(?u21, 0x754C), cjk.codepoint);
-    try std.testing.expect(it.next() == null);
-}
-
-test "grapheme clusters retain the shared terminal measure" {
+test "grapheme lens retains byte spans and optional terminal measure" {
     const text = "e\xcc\x81界👩‍👩‍👧‍👦\x00";
-    var it = unicode.grapheme.iterator(text);
+    var it = unicode.graphemes(text).measured().iterator();
     while (it.next()) |span| {
-        const measured = unicode.width.measureCluster(text[span.start..span.end]);
+        const measured = @import("width.zig").measureCluster(text[span.start.value..span.end.value]);
         try std.testing.expectEqual(measured.columns, span.columns);
+        try std.testing.expectEqual(measured.renderable, span.renderable);
+    }
+}
+
+test "lens coordinates preserve grapheme and column ambiguity" {
+    const text = "\xcc\x81a界b";
+    try std.testing.expectEqual(@as(usize, 4), unicode.width(text));
+
+    // Leading zero-width clusters share column zero; `byteAt` selects the
+    // earliest one.  The second cell of 界 is deliberately a straddle.
+    const zero = unicode.byteAt(text, .init(0));
+    try std.testing.expectEqual(@as(usize, 0), zero.cluster.start.value);
+    try std.testing.expectEqual(@as(usize, 0), zero.column.value);
+    const wide = unicode.byteAt(text, .init(2));
+    try std.testing.expectEqual(@as(usize, 3), wide.cluster.start.value);
+    try std.testing.expectEqual(@as(usize, 1), wide.column.value);
+    try std.testing.expect(wide.column.value != 2); // requested column straddles
+
+    // A byte within a cluster maps to that cluster's first column.
+    try std.testing.expectEqual(@as(usize, 1), unicode.columnAt(text, .init(4)).value);
+    const past = unicode.byteAt(text, .init(99));
+    try std.testing.expectEqual(text.len, past.cluster.start.value);
+    try std.testing.expectEqual(@as(usize, 4), past.column.value);
+}
+
+test "ColumnHit carries no policy field" {
+    comptime {
+        if (@hasField(unicode.ColumnHit, "straddled") or @hasField(unicode.ColumnHit, "straddles"))
+            @compileError("ColumnHit derives straddling from requested != column; do not store it");
+    }
+}
+
+test "grapheme indexing is caller-owned" {
+    var spans: [3]unicode.Span = undefined;
+    const indexed = unicode.graphemes("a界b").indexed(&spans);
+    try std.testing.expectEqual(@as(usize, 3), indexed.count());
+    try std.testing.expectEqual(@as(usize, 1), indexed.at(.init(1)).?.start.value);
+}
+
+test "lines is wrapping without a finite column limit" {
+    const text = "a\n界\r\nb";
+    var lines = unicode.lines(text).iterator();
+    var wrapped = (try unicode.wrap(text, .{ .max_columns = std.math.maxInt(usize) })).iterator();
+    while (true) {
+        const left = lines.next();
+        const right = wrapped.next();
+        try std.testing.expectEqual(left != null, right != null);
+        if (left) |line| {
+            const other = right.?;
+            try std.testing.expectEqual(line.start.value, other.start.value);
+            try std.testing.expectEqual(line.end.value, other.end.value);
+            try std.testing.expectEqual(line.columns.value, other.columns.value);
+        } else break;
     }
 }
 

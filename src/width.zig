@@ -4,8 +4,9 @@ const scalar = @import("scalar.zig");
 const ascii_scan = @import("ascii_scan.zig");
 
 pub const Measure = struct {
-    /// `0`, `1`, or `2` for renderable clusters; `3` marks a replacement.
-    columns: u3,
+    /// Renderable clusters occupy zero, one, or two columns.  Non-renderable
+    /// input is explicit rather than encoded as an in-band sentinel.
+    columns: u2,
     renderable: bool,
 };
 
@@ -32,7 +33,7 @@ pub fn measureCluster(bytes: []const u8) Measure {
     }
     if (!has_base) return .{ .columns = 0, .renderable = false };
     if (has_pictograph or has_ri) return .{ .columns = 2, .renderable = true };
-    if (columns > 2) return .{ .columns = 3, .renderable = false };
+    if (columns > 2) return .{ .columns = 1, .renderable = false };
     return .{ .columns = @intCast(columns), .renderable = true };
 }
 

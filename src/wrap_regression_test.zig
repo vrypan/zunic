@@ -2,22 +2,23 @@ const std = @import("std");
 const unicode = @import("zunic");
 const reference = @import("wrap_reference.zig");
 
-fn expectProductionMatchesReference(bytes: []const u8, options: unicode.wrap.Options) !void {
+fn expectProductionMatchesReference(bytes: []const u8, options: unicode.WrapOptions) !void {
     const expected = try reference.collect(std.testing.allocator, bytes, options);
     defer std.testing.allocator.free(expected);
 
-    var actual = try unicode.wrap.iterator(bytes, options);
+    var actual = (try unicode.wrap(bytes, options)).iterator();
     for (expected) |want| {
         const got = actual.next() orelse return error.TestUnexpectedResult;
-        if (!std.meta.eql(want, got)) std.debug.print("wrap mismatch bytes={s} width={d} overflow={s} want={any} got={any}\n", .{ bytes, options.max_columns, @tagName(options.overflow), want, got });
-        try std.testing.expectEqualDeep(want, got);
+        try std.testing.expectEqual(want.start, got.start.value);
+        try std.testing.expectEqual(want.end, got.end.value);
+        try std.testing.expectEqual(want.columns, got.columns.value);
     }
     try std.testing.expect(actual.next() == null);
     try std.testing.expect(actual.next() == null);
 }
 
 test "wrap matches independent reference regressions" {
-    const Case = struct { bytes: []const u8, width: usize, overflow: unicode.wrap.Overflow };
+    const Case = struct { bytes: []const u8, width: usize, overflow: unicode.Overflow };
     const cases = [_]Case{
         .{ .bytes = "a bcdef", .width = 4, .overflow = .allow },
         .{ .bytes = "abc def", .width = 3, .overflow = .grapheme },
@@ -98,8 +99,8 @@ test "wrapping decodes each scalar once at all scales and widths" {
             const bytes = buffer[0..length];
             const expected = countScalars(bytes);
             for ([_]usize{ 1, 3, 40 }) |max_columns| {
-                for ([_]unicode.wrap.Overflow{ .grapheme, .allow }) |overflow| {
-                    var it = try unicode.wrap.instrumentedIterator(bytes, .{ .max_columns = max_columns, .overflow = overflow });
+                for ([_]unicode.Overflow{ .grapheme, .allow }) |overflow| {
+                    var it = try unicode.testing.instrumentedIterator(bytes, .{ .max_columns = max_columns, .overflow = overflow });
                     while (it.next()) |_| {}
                     try std.testing.expectEqual(expected, it.scanner.counters.decoded_scalars);
                     try std.testing.expect(it.scanner.counters.max_buffered <= 2);
@@ -117,7 +118,7 @@ test "viewport wrapping stays lazy" {
         @memcpy(buffer[length..][0..seed.len], seed);
     }
     const bytes = buffer[0..length];
-    var it = try unicode.wrap.instrumentedIterator(bytes, .{ .max_columns = 20, .overflow = .grapheme });
+    var it = try unicode.testing.instrumentedIterator(bytes, .{ .max_columns = 20, .overflow = .grapheme });
     for (0..4) |_| _ = it.next() orelse return error.TestUnexpectedResult;
     try std.testing.expect(it.scanner.counters.decoded_scalars < countScalars(bytes) / 2);
 }
