@@ -13,6 +13,8 @@ from collections import defaultdict
 from pathlib import Path
 import re
 
+from line_break_categories import category_key as line_break_category_key
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 OUT = ROOT / "properties.zig"
@@ -104,7 +106,7 @@ INCB_ORDER = ["None", "InCB; Consonant", "InCB; Extend", "InCB; Linker"]
 
 # Bit layout of Record, mirrored by the packed struct emitted below. Zig packs
 # from the least significant bit, so this order is the struct field order.
-BIT_GCB, BIT_INCB, BIT_EP, BIT_LB, BIT_WIDTH, BIT_PRED = 0, 4, 6, 7, 13, 15
+BIT_GCB, BIT_INCB, BIT_EP, BIT_LB, BIT_WIDTH, BIT_PRED, BIT_LB_CATEGORY = 0, 4, 6, 7, 13, 15, 23
 PREDICATES = ["lb_op30", "lb_cp30", "lb_qu_pi", "lb_qu_pf", "lb_ba_hyphen",
               "lb_sa_mn_mc", "east_asian_wide", "ep_cn"]
 BLOCK_SHIFT = 8
@@ -195,11 +197,32 @@ def build_records(gcb, incb, ep, lb, eaw, categories, lb_names):
         for offset, bit in enumerate(bits):
             value |= int(bit) << (BIT_PRED + offset)
         records[cp] = value
-    return records
+
+    # The semantic-machine category is an opaque internal acceleration field.
+    # Its schema is the exact tuple consumed by line_break_semantics.py, and
+    # first-scalar ordering makes the IDs deterministic from the pinned UCD.
+    category_ids = {}
+    scalar_order = list(range(0xD800)) + list(range(0xE000, MAXCP)) + list(range(0xD800, 0xE000))
+    for cp in scalar_order:
+        value = records[cp]
+        raw = lb_d[cp]
+        bits = tuple(bool(value & (1 << (BIT_PRED + offset))) for offset in range(len(PREDICATES)))
+        key = line_break_category_key(
+            raw, bits[6], bits[2] if raw == "QU" else False,
+            bits[3] if raw == "QU" else False, bits[0] if raw == "OP" else False,
+            bits[1] if raw == "CP" else False, bits[7], bits[5] if raw == "SA" else False,
+            cp == 0x2010, cp == 0x25CC)
+        category_id = category_ids.setdefault(key, len(category_ids))
+        assert category_id < 128
+        records[cp] = value | category_id << BIT_LB_CATEGORY
+    malformed = line_break_category_key("AL")
+    default = line_break_category_key("XX")
+    return records, category_ids[malformed], category_ids[default]
 
 
-def emit_record_table(out, records, lb_names):
-    default = (GCB_ORDER.index("Other") << BIT_GCB) | (lb_names.index("XX") << BIT_LB) | (1 << BIT_WIDTH)
+def emit_record_table(out, records, lb_names, malformed_category, default_category):
+    default = ((GCB_ORDER.index("Other") << BIT_GCB) | (lb_names.index("XX") << BIT_LB) |
+               (1 << BIT_WIDTH) | (default_category << BIT_LB_CATEGORY))
 
     blocks, index = {}, []
     for base in range(0, MAXCP, BLOCK_SIZE):
@@ -218,9 +241,11 @@ def emit_record_table(out, records, lb_names):
     out.write("    width: u2,\n")
     for name in PREDICATES:
         out.write(f"    {name}: bool,\n")
-    out.write("    _padding: u9 = 0,\n")
+    out.write("    line_break_category: u7,\n")
+    out.write("    _padding: u2 = 0,\n")
     out.write("};\n\n")
 
+    out.write(f"pub const line_break_malformed_category: u7 = {malformed_category};\n")
     out.write(f"pub const record_default: Record = @bitCast(@as(u32, 0x{default:X}));\n")
     out.write(f"pub const record_block_shift = {BLOCK_SHIFT};\n\n")
 
@@ -264,13 +289,13 @@ def main():
     incb = parse(FILES["incb"], {"InCB; Consonant", "InCB; Extend", "InCB; Linker"})
     eaw = parse(FILES["eaw"])
     lb_names = sorted(lb)
-    records = build_records(gcb, incb, ep, lb, eaw, dense_categories(FILES["ud"]), lb_names)
+    records, malformed_category, default_category = build_records(gcb, incb, ep, lb, eaw, dense_categories(FILES["ud"]), lb_names)
     with OUT.open("w", encoding="utf-8") as out:
         out.write("//! Generated from pinned Unicode 16.0.0 UCD files. Do not edit.\n")
         out.write("//! Run src/tools/generate-properties.py to regenerate.\n\n")
         emit_grapheme_api(out, gcb, incb, ep)
         emit_line_break_api(out, lb)
-        emit_record_table(out, records, lb_names)
+        emit_record_table(out, records, lb_names, malformed_category, default_category)
 
 
 if __name__ == "__main__":

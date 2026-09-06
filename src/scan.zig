@@ -48,7 +48,6 @@ pub fn Scanner(comptime instrumented: bool) type {
         buf1: ?scalar.ClassifiedToken = null,
         classifier: scalar.Classifier(instrumented) = .{},
         lb: line_break.State = .{},
-        lb_started: bool = false,
         counters: if (instrumented) Counters else void = if (instrumented) .{} else {},
 
         const Self = @This();
@@ -56,13 +55,7 @@ pub fn Scanner(comptime instrumented: bool) type {
         pub inline fn next(self: *Self) ?Cluster {
             const first_decoded = self.take() orelse return null;
             const first = first_decoded.scalarToken();
-            const first_cp = first.codepoint orelse 0;
-            if (self.lb_started) {
-                self.lb.consumeRecord(first_cp, first_decoded.record);
-            } else {
-                self.lb = line_break.State.firstWithRecord(first.line_break, first_cp, first_decoded.record);
-                self.lb_started = true;
-            }
+            self.lb.consumeCategory(first_decoded.record.line_break_category);
             const start = first.start;
             const hard = line_break.isHardClass(first.line_break);
             var state = grapheme.ClusterState.init(grapheme.classify(first));
@@ -75,22 +68,21 @@ pub fn Scanner(comptime instrumented: bool) type {
                     return .{ .start = start, .end = end, .columns = measure.finish(), .hard = hard, .can_break = true };
                 const lookahead = decoded.scalarToken();
                 const classification = grapheme.classify(lookahead);
-                const cp = lookahead.codepoint orelse 0;
                 if (state.breakBeforeNext(classification)) {
                     // The cluster ends before `lookahead`, which stays
                     // buffered as the next cluster's first scalar; its
                     // line-break consumption happens there, after the
                     // boundary in front of it has been decided here.
                     const opportunity = if (self.peek1()) |following|
-                        self.lb.opportunityForRecord(self.bytes, cp, decoded.record, following.record.line_break, following.record, true, following.end, &self.classifier)
+                        self.lb.opportunityForCategory(decoded.record.line_break_category, self.bytes, following.record.line_break, following.record, true, following.end, &self.classifier)
                     else
-                        self.lb.opportunityForRecord(self.bytes, cp, decoded.record, .al, comptime properties.record(0), false, lookahead.end, &self.classifier);
+                        self.lb.opportunityForCategory(decoded.record.line_break_category, self.bytes, .al, comptime properties.record(0), false, lookahead.end, &self.classifier);
                     self.updateCounters();
                     return .{ .start = start, .end = end, .columns = measure.finish(), .hard = hard, .can_break = opportunity != .prohibited };
                 }
                 self.buf0 = self.buf1;
                 self.buf1 = null;
-                self.lb.consumeRecord(cp, decoded.record);
+                self.lb.consumeCategory(decoded.record.line_break_category);
                 state.consume(classification);
                 measure.add(lookahead);
                 end = lookahead.end;

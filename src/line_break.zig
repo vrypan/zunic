@@ -14,7 +14,7 @@ pub const Boundary = struct { offset: usize, opportunity: Opportunity };
 
 const Class = properties.LineBreak;
 
-const Token = scalar.ClassifiedToken;
+const Token = scalar.LineBreakToken;
 
 /// Generated transition state shared by the iterator and fused scanner.
 pub const State = semantic_machine.State;
@@ -25,7 +25,9 @@ pub const Iterator = struct {
     initialized: bool = false,
     finished: bool = false,
     state: State = .{},
-    next_token: ?Token = null,
+    buffered_end: usize = 0,
+    buffered_record: properties.Record = undefined,
+    has_buffered: bool = false,
 
     pub fn next(self: *Iterator) ?Boundary {
         if (self.finished) return null;
@@ -36,7 +38,7 @@ pub const Iterator = struct {
                 return .{ .offset = 0, .opportunity = .mandatory };
             }
             const token = self.takeToken();
-            self.state = State.firstWithRecord(token.record.line_break, token.codepoint orelse 0, token.record);
+            self.state.consumeCategory(token.record.line_break_category);
             return .{ .offset = 0, .opportunity = .prohibited };
         }
         if (self.pos == self.bytes.len) {
@@ -46,30 +48,45 @@ pub const Iterator = struct {
 
         const offset = self.pos;
         const token = self.takeToken();
-        const cp = token.codepoint orelse 0;
-        const following = self.peekToken();
-        const next_raw = following.record.line_break;
-        var classifier = scalar.Classifier(false){};
-        const opportunity = self.state.opportunityForRecord(self.bytes, cp, token.record, next_raw, following.record, following.end != following.start, following.end, &classifier);
-        self.state.consumeRecord(cp, token.record);
+        const opcode = self.state.consumeCategoryAndOpcode(token.record.line_break_category);
+        const opportunity: Opportunity = switch (opcode) {
+            0 => .prohibited,
+            1 => .allowed,
+            2 => .mandatory,
+            3...7 => blk: {
+                // Only contextual actions decode the following scalar. The
+                // buffered token becomes the next iteration's current token.
+                const following = self.peekToken();
+                var classifier = scalar.Classifier(false){};
+                break :blk State.opportunityForOpcode(opcode, self.bytes, following.record.line_break, following.record, following.end != self.pos, following.end, &classifier);
+            },
+            else => unreachable,
+        };
         return .{ .offset = offset, .opportunity = opportunity };
     }
 
     fn takeToken(self: *Iterator) Token {
-        const token = self.next_token orelse self.decodeAt(self.pos);
-        self.next_token = null;
+        const token = if (self.has_buffered) Token{
+            .end = self.buffered_end,
+            .record = self.buffered_record,
+        } else self.decodeAt(self.pos);
+        self.has_buffered = false;
         self.pos = token.end;
         return token;
     }
 
     fn peekToken(self: *Iterator) Token {
-        if (self.next_token == null) self.next_token = self.decodeAt(self.pos);
-        return self.next_token.?;
+        if (!self.has_buffered) {
+            const token = self.decodeAt(self.pos);
+            self.buffered_end = token.end;
+            self.buffered_record = token.record;
+            self.has_buffered = true;
+        }
+        return .{ .end = self.buffered_end, .record = self.buffered_record };
     }
 
     fn decodeAt(self: *const Iterator, offset: usize) Token {
-        var classifier = scalar.Classifier(false){};
-        return classifier.at(self.bytes, offset);
+        return scalar.lineBreakAt(self.bytes, offset);
     }
 };
 
@@ -168,7 +185,7 @@ test "semantic transitions across mixed contexts" {
 test "generated semantic machine fits its data budget" {
     const data = @import("line_break_machine_data.zig");
     try std.testing.expectEqual(@as(usize, 1), @sizeOf(semantic_machine.State));
-    try std.testing.expectEqual(data.data_bytes, @sizeOf(@TypeOf(data.transitions)) + @sizeOf(@TypeOf(data.category_map)));
+    try std.testing.expectEqual(data.data_bytes, @sizeOf(@TypeOf(data.transitions)));
     try std.testing.expect(data.data_bytes <= 32 * 1024);
 }
 

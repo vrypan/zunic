@@ -128,6 +128,20 @@ def main():
     table = parse_zig()
     block_mask = (1 << table["shift"]) - 1
 
+    def category_key(cp):
+        raw = lb[cp]
+        wide = eaw[cp] in ("W", "F", "H")
+        return (raw, wide, raw == "QU" and category[cp] == "Pi",
+                raw == "QU" and category[cp] == "Pf", raw == "OP" and not wide,
+                raw == "CP" and not wide, ep[cp] == "Extended_Pictographic" and category[cp] == "Cn",
+                raw == "SA" and category[cp] in ("Mn", "Mc"), cp == 0x2010, cp == 0x25CC)
+
+    category_ids = {}
+    expected_category = [0] * MAXCP
+    scalar_order = list(range(0xD800)) + list(range(0xE000, MAXCP)) + list(range(0xD800, 0xE000))
+    for cp in scalar_order:
+        expected_category[cp] = category_ids.setdefault(category_key(cp), len(category_ids))
+
     def field(raw, name):
         offset, width = table["layout"][name]
         return (raw >> offset) & ((1 << width) - 1)
@@ -163,6 +177,7 @@ def main():
             "lb_sa_mn_mc": int(lb_class == "SA" and cat in ("Mn", "Mc")),
             "east_asian_wide": int(wide),
             "ep_cn": int(pictographic and cat == "Cn"),
+            "line_break_category": expected_category[cp],
             "_padding": 0,
         }
         for name, want in expected.items():

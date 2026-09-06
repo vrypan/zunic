@@ -34,6 +34,25 @@ pub const ClassifiedToken = struct {
     }
 };
 
+/// Compact token for consumers that need line-break facts but not a public
+/// scalar token or grapheme classification.
+pub const LineBreakToken = struct {
+    end: usize,
+    record: properties.Record,
+};
+
+pub fn lineBreakAt(bytes: []const u8, start: usize) LineBreakToken {
+    if (start < bytes.len and bytes[start] < 0x80) {
+        const base = comptime @as(usize, properties.record_index[0]) << properties.record_block_shift;
+        return .{ .end = start + 1, .record = @bitCast(properties.record_data[base + bytes[start]]) };
+    }
+    const decoded = utf8.step(bytes[start..]);
+    return .{
+        .end = start + decoded.len,
+        .record = if (decoded.cp) |cp| properties.record(cp) else malformedRecord(),
+    };
+}
+
 /// The scanner and LB25 lookahead share this decoder, including its optional
 /// counters. Every valid decode performs exactly one fused property lookup.
 pub fn Classifier(comptime instrumented: bool) type {
@@ -64,15 +83,20 @@ pub fn Classifier(comptime instrumented: bool) type {
                 .start = start,
                 .end = start + step.len,
                 .codepoint = null,
-                .record = comptime blk: {
-                    var r = properties.record(0);
-                    r.gcb = .other;
-                    r.line_break = .al;
-                    r.width = 0;
-                    break :blk r;
-                },
+                .record = malformedRecord(),
             };
         }
+    };
+}
+
+inline fn malformedRecord() properties.Record {
+    return comptime blk: {
+        var r = properties.record(0);
+        r.gcb = .other;
+        r.line_break = .al;
+        r.width = 0;
+        r.line_break_category = properties.line_break_malformed_category;
+        break :blk r;
     };
 }
 

@@ -9,11 +9,16 @@ not copied Unicode 15 Rust table bytes.
 
 ## Construction and state identity
 
-`line_break_semantics.py` reads the checked-in fused property records and
-enumerates actual scalar categories. It retains raw class and East Asian
-width, relevant quote/parenthesis predicates, SA-mark and EP-unassigned
-predicates, and the U+2010/U+25CC exceptions. There are 68 categories.
-The compact category key is proven injective across those categories.
+`generate-properties.py` and `line_break_semantics.py` share the deterministic
+category key in `line_break_categories.py`. The property generator assigns IDs
+in valid-scalar order and embeds each seven-bit ID in previously unused record
+bits. The independent property test reconstructs and checks the ID for every
+Unicode code point; the machine generator also rejects any ID/order mismatch.
+The semantic compiler reads those records and enumerates actual scalar
+categories. It retains raw class and East Asian width, relevant quote/
+parenthesis predicates, SA-mark and EP-unassigned predicates, and the
+U+2010/U+25CC exceptions. There are 68 categories. Embedding the category
+does not increase the 32-bit property record or its 168 deduplicated blocks.
 
 Starting at SOT, breadth-first reachability follows `consume` for every
 category, recording a scalar witness for each of 215 reachable histories.
@@ -28,7 +33,7 @@ output rows. Successor-partition refinement continues until stable: states
 are merged only when both outputs and future successor equivalence agree.
 The resulting 103-state machine uses a one-byte state ID and u16 entries:
 low byte is successor, high byte is decision opcode. SOT is state zero.
-Transitions plus category map occupy 14,392 bytes; the budget is 32 KiB.
+The transition table occupies 14,008 bytes; the budget is 32 KiB.
 
 ## Rule mapping and precedence
 
@@ -56,7 +61,11 @@ offline compiler function, not a fallback in the runtime loop.
 The runtime has eight opcodes: prohibited, allowed, mandatory, and five
 bounded handlers (LB15c, LB15b, LB25, LB19a, LB28a). The generator checks the
 entire output signature of every handler; new patterns fail generation.
-No runtime generic shadow state or partial-table fallback remains.
+The direct iterator combines decision and consumption so it loads each entry
+once. It decodes and buffers a following token only for contextual opcodes
+3–7; final opcodes 0–2 stay on the compact path. Its private token carries only
+an end offset and fused record. No runtime generic shadow state or partial-table
+fallback remains.
 
 ## Scanner protocol and compatibility
 
@@ -64,6 +73,12 @@ Boundary queries are pure. Consumption advances once per scalar, whether or
 not a boundary was queried. The fused scanner retains its existing classified
 token buffer and `Cluster` interface; only LB25 may decode a second following
 scalar. Existing scanner work-bound and lens tests remain unchanged.
+
+UTF-8 stepping uses an explicit validity-preserving decoder. It rejects stray
+continuations, overlong sequences, surrogates and values above U+10FFFF, and
+retains one-byte recovery for malformed input. Tests compare it with the
+standard-library implementation for every valid scalar, leading byte and
+truncation length, explicit malformed classes and randomized inputs.
 
 `line_break.State` is the generated machine state. The old branch-based State,
 its methods/fields, `ActiveState`, and the `-Dline-break-engine` build selector

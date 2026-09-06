@@ -11,6 +11,8 @@ from pathlib import Path
 import re
 import sys
 
+from line_break_categories import category_key
+
 ROOT = Path(__file__).resolve().parents[1]
 HARD = frozenset(("bk", "cr", "lf", "nl"))
 MARK = frozenset(("cm", "zwj"))
@@ -63,14 +65,14 @@ def categories(points=()):
         if 0xD800 <= cp <= 0xDFFF:
             continue
         record = data[(index[cp >> shift] << shift) | (cp & ((1 << shift) - 1))]
+        def value(name):
+            bit, mask = fields[name]
+            return (record >> bit) & mask
         key = (record, cp == 0x2010, cp == 0x25CC)
         category = cache.get(key)
         if category is None:
-            def value(name):
-                bit, mask = fields[name]
-                return (record >> bit) & mask
             raw = names[value("line_break")]
-            category = Category(
+            category = Category(*category_key(
                 raw, bool(value("east_asian_wide")),
                 raw == "qu" and bool(value("lb_qu_pi")),
                 raw == "qu" and bool(value("lb_qu_pf")),
@@ -78,9 +80,15 @@ def categories(points=()):
                 raw == "cp" and bool(value("lb_cp30")),
                 bool(value("ep_cn")), raw == "sa" and bool(value("lb_sa_mn_mc")),
                 cp == 0x2010, cp == 0x25CC,
-            )
+            ))
             cache[key] = category
-        witnesses.setdefault(category, cp)
+        embedded = value("line_break_category")
+        if category not in witnesses:
+            assert embedded == len(witnesses), (cp, category, embedded, len(witnesses))
+            witnesses[category] = cp
+        else:
+            expected = list(witnesses).index(category)
+            assert embedded == expected, (cp, category, embedded, expected)
         if cp in points:
             selected[cp] = category
     return tuple(witnesses), tuple(witnesses.values()), selected
@@ -326,19 +334,10 @@ def render():
     expected = [bytes(f(n, s) for n, s in lookahead) for f in handlers]
     assert signatures == expected, "unhandled semantic decision pattern"
     assert len(rows) <= 256
-    source = (ROOT / "properties.zig").read_text()
-    names = re.findall(r"^    (\w+),$", re.search(
-        r"pub const LineBreak = enum\(u6\) \{(.*?)\n\};", source, re.S)[1], re.M)
-    category_map = [255] * (len(names) * 8)
     for i, c in enumerate(inputs):
-        # In the pinned data, these properties are disjoint within each raw
-        # class. Prove injectivity before using this compact category map.
-        special = c.pi or c.op30 or c.cp30 or c.ep or c.sa_mark or c.hyphen or c.dotted
-        key = names.index(c.raw) * 8 + int(c.wide) + 2 * int(special) + 4 * int(c.pf)
-        assert category_map[key] == 255, (c, "category-key collision")
-        category_map[key] = i
+        assert i < 128
     entries = [target | (action << 8) for row in rows for target, action in row]
-    size = len(entries) * 2 + len(category_map)
+    size = len(entries) * 2
     assert size <= 32 * 1024, size
 
     def array(name, kind, values):
@@ -352,7 +351,6 @@ def render():
             f"pub const category_count = {len(inputs)};\n"
             f"pub const state_count = {len(rows)};\n"
             f"pub const data_bytes = {size};\n"
-            + array("category_map", "u8", category_map)
             + array("transitions", "u16", entries))
 
 

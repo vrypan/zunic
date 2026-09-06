@@ -25,6 +25,7 @@ pub fn build(b: *std.Build) void {
         "src/wrap_regression_test.zig",
         "src/scan_test.zig",
         "src/line_break.zig",
+        "src/utf8.zig",
     };
     for (roots) |root| {
         const test_mod = b.createModule(.{
