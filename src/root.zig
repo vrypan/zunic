@@ -1,41 +1,40 @@
 //! Allocation-free Unicode primitives for Zig terminal applications.
 //!
-//! Open a lens over borrowed bytes and ask it questions:
+//! Open a view over borrowed bytes and ask it questions:
 //!
 //! ```zig
 //! const view = zunic.text(bytes);
 //! const w = view.width();
-//! var it = try view.wrap(.{ .max_columns = 80 });
+//! var it = (try view.wrap(.{ .max_columns = 80 })).iterator();
 //! ```
 //!
 //! Byte spans and terminal-column policy form the package's public boundary.
-//! Nothing allocates, and every span indexes the slice the lens was opened on.
+//! Nothing allocates, and every span indexes the slice the view was opened on.
 //!
 //! `text` reads bytes as plain text. **Strip ANSI escape sequences before
 //! using it** -- it measures them as ordinary characters, so styled input
-//! reports the wrong width and can be broken mid-sequence. A `terminal` lens
+//! reports the wrong width and can be broken mid-sequence. A `terminal` view
 //! that recognises them may follow.
 pub const utf8 = @import("utf8.zig");
-const lens = @import("lens.zig");
+const text_view = @import("text.zig");
 const wrap_engine = @import("wrap.zig");
 pub const line_break = @import("line_break.zig");
 
-pub const ByteOffset = lens.ByteOffset;
-pub const GraphemeIndex = lens.GraphemeIndex;
-pub const Column = lens.Column;
-pub const Span = lens.Span;
-pub const MeasuredSpan = lens.MeasuredSpan;
-pub const Line = lens.Line;
+pub const ByteOffset = text_view.ByteOffset;
+pub const Column = text_view.Column;
+pub const Span = text_view.Span;
+pub const MeasuredSpan = text_view.MeasuredSpan;
+pub const Line = text_view.Line;
 pub const WrapOptions = wrap_engine.Options;
 pub const Overflow = wrap_engine.Overflow;
-pub const Wrapped = lens.Wrapped;
-pub const Text = lens.Text;
-pub const Terminators = lens.Terminators;
-pub const TerminatorIterator = lens.TerminatorIterator;
-pub const Graphemes = lens.Graphemes(false);
-pub const MeasuredGraphemes = lens.Graphemes(true);
+pub const Wrapped = text_view.Wrapped;
+pub const Text = text_view.Text;
+pub const Terminators = text_view.Terminators;
+pub const TerminatorIterator = text_view.TerminatorIterator;
+pub const Graphemes = text_view.Graphemes;
+pub const MeasuredGraphemes = text_view.MeasuredGraphemes;
 
-/// Open a text lens. Borrowed and zero-cost: no scanning happens until a
+/// Open a text view. Borrowed and zero-cost: no scanning happens until a
 /// question is asked.
 pub fn text(bytes: []const u8) Text {
     return .{ .bytes = bytes };

@@ -72,7 +72,7 @@ fallback remains.
 Boundary queries are pure. Consumption advances once per scalar, whether or
 not a boundary was queried. The fused scanner retains its existing classified
 token buffer and `Cluster` interface; only LB25 may decode a second following
-scalar. Existing scanner work-bound and lens tests remain unchanged.
+scalar. Existing scanner work-bound and view tests remain unchanged.
 
 UTF-8 stepping uses an explicit validity-preserving decoder. It rejects stray
 continuations, overlong sequences, surrogates and values above U+10FFFF, and
@@ -84,7 +84,7 @@ truncation length, explicit malformed classes and randomized inputs.
 its methods/fields, `ActiveState`, and the `-Dline-break-engine` build selector
 have been removed. This intentionally breaks low-level compatibility; recover
 historical implementations from Git commit `2620ac3` if needed.
-Lens signatures, laziness, independent iterators and allocation behavior are
+View signatures, laziness, independent iterators and allocation behavior are
 unchanged. There is one production engine and no retained generic test engine.
 
 The wrapper's general method is isolated from its inline ASCII dispatch.

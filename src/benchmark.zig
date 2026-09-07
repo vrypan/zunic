@@ -264,9 +264,9 @@ fn graphemeChecksum(text: []const u8) u64 {
     }
     return sum;
 }
-/// Walks the measured grapheme lens, the only public traversal that reports
+/// Walks the measured grapheme traversal, the only public path that reports
 /// per-cluster columns and renderability. Nothing else in this harness
-/// observes `Graphemes(true)`.
+/// observes `MeasuredGraphemes`.
 fn measuredChecksum(text: []const u8) u64 {
     var it = zunic.text(text).graphemes().measured().iterator();
     var sum: u64 = 0xcbf29ce484222325;

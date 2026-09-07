@@ -78,7 +78,7 @@ pub const Iterator = struct {
     // Table-driven: one read per scalar yields the boundary decision and the
     // successor state, replacing `classify`'s switch plus `breakBefore`'s
     // comparison chain and `consume`'s field updates. `next` stays `inline` so
-    // the unmeasured `graphemes()` lens can still eliminate the measure.
+    // the unmeasured `graphemes()` traversal can still eliminate the measure.
     pub inline fn next(self: *Iterator) ?Span {
         if (self.pos >= self.bytes.len) return null;
         const start = self.pos;

@@ -68,7 +68,7 @@ test "fused scanner matches composed iterators on randomized atoms" {
 }
 
 /// Decoding `grapheme.Span.columns` must equal what a standalone
-/// `measureCluster` over the same bytes reports. Before 017 `lens.Iterator`
+/// `measureCluster` over the same bytes reports. Before 017 `text.Iterator`
 /// recovered the measure by re-measuring the cluster; it now decodes the
 /// sentinel the span already carries. This pins the bijection that makes the
 /// second pass removable: `0` is "no base", `3` is "one column, not

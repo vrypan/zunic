@@ -1,34 +1,17 @@
 //! Public, question-shaped views over a borrowed UTF-8 byte slice.
 //!
-//! Offsets returned by a lens are always relative to the slice used to open
-//! it.  Lenses never allocate and opening one does no scanning.
+//! Offsets returned by the text view are always relative to the slice used to
+//! open it. The view never allocates, and opening it does no scanning.
 const grapheme_engine = @import("grapheme.zig");
 const width_engine = @import("width.zig");
 const wrap_engine = @import("wrap.zig");
-const std = @import("std");
 
 pub const ByteOffset = struct {
     value: usize,
-
-    pub fn init(value: usize) ByteOffset {
-        return .{ .value = value };
-    }
-};
-
-pub const GraphemeIndex = struct {
-    value: usize,
-
-    pub fn init(value: usize) GraphemeIndex {
-        return .{ .value = value };
-    }
 };
 
 pub const Column = struct {
     value: usize,
-
-    pub fn init(value: usize) Column {
-        return .{ .value = value };
-    }
 };
 
 pub const Span = struct {
@@ -43,49 +26,25 @@ pub const MeasuredSpan = struct {
     renderable: bool,
 };
 
-pub fn Graphemes(comptime include_measure: bool) type {
-    return struct {
-        bytes: []const u8,
+pub const Graphemes = struct {
+    bytes: []const u8,
 
-        const Self = @This();
-        pub const Item = if (include_measure) MeasuredSpan else Span;
+    pub fn iterator(self: Graphemes) Iterator(false) {
+        return .{ .inner = grapheme_engine.iterator(self.bytes) };
+    }
 
-        pub fn count(self: Self) usize {
-            var it = self.iterator();
-            var result: usize = 0;
-            while (it.next() != null) result += 1;
-            return result;
-        }
+    pub fn measured(self: Graphemes) MeasuredGraphemes {
+        return .{ .bytes = self.bytes };
+    }
+};
 
-        pub fn iterator(self: Self) Iterator(include_measure) {
-            return .{ .inner = grapheme_engine.iterator(self.bytes) };
-        }
+pub const MeasuredGraphemes = struct {
+    bytes: []const u8,
 
-        pub fn at(self: Self, index: GraphemeIndex) ?Item {
-            var it = self.iterator();
-            var i: usize = 0;
-            while (it.next()) |item| : (i += 1) if (i == index.value) return item;
-            return null;
-        }
-
-        /// Fill caller-owned storage with spans and obtain O(1) `at`.
-        /// The supplied buffer must hold every grapheme in this lens.
-        pub fn indexed(self: Self, buffer: []Item) Indexed(include_measure) {
-            std.debug.assert(buffer.len >= self.count());
-            var it = self.iterator();
-            var len: usize = 0;
-            while (it.next()) |item| {
-                buffer[len] = item;
-                len += 1;
-            }
-            return .{ .items = buffer[0..len] };
-        }
-
-        pub fn measured(self: Self) Graphemes(true) {
-            return .{ .bytes = self.bytes };
-        }
-    };
-}
+    pub fn iterator(self: MeasuredGraphemes) Iterator(true) {
+        return .{ .inner = grapheme_engine.iterator(self.bytes) };
+    }
+};
 
 pub fn Iterator(comptime include_measure: bool) type {
     return struct {
@@ -94,8 +53,8 @@ pub fn Iterator(comptime include_measure: bool) type {
         pub fn next(self: *@This()) ?if (include_measure) MeasuredSpan else Span {
             const span = self.inner.next() orelse return null;
             if (!include_measure) return .{
-                .start = .init(span.start),
-                .end = .init(span.end),
+                .start = .{ .value = span.start },
+                .end = .{ .value = span.end },
             };
             // The grapheme engine already measured this cluster while it
             // segmented it, and `grapheme.ClusterMeasure.finish` encodes the
@@ -104,25 +63,11 @@ pub fn Iterator(comptime include_measure: bool) type {
             // here is exact, and re-measuring the same bytes would decode and
             // classify every scalar of the cluster a second time.
             return .{
-                .start = .init(span.start),
-                .end = .init(span.end),
+                .start = .{ .value = span.start },
+                .end = .{ .value = span.end },
                 .columns = if (span.columns == 3) 1 else @intCast(span.columns),
                 .renderable = span.columns == 1 or span.columns == 2,
             };
-        }
-    };
-}
-
-pub fn Indexed(comptime include_measure: bool) type {
-    return struct {
-        items: []const if (include_measure) MeasuredSpan else Span,
-
-        pub fn count(self: @This()) usize {
-            return self.items.len;
-        }
-        pub fn at(self: @This(), index: GraphemeIndex) ?if (include_measure) MeasuredSpan else Span {
-            if (index.value >= self.items.len) return null;
-            return self.items[index.value];
         }
     };
 }
@@ -155,9 +100,9 @@ pub const WrappedIterator = struct {
     pub fn next(self: *WrappedIterator) ?Line {
         const line = self.inner.next() orelse return null;
         return .{
-            .start = .init(line.start),
-            .end = .init(line.end),
-            .columns = .init(line.columns),
+            .start = .{ .value = line.start },
+            .end = .{ .value = line.end },
+            .columns = .{ .value = line.columns },
         };
     }
 };
@@ -165,18 +110,18 @@ pub const WrappedIterator = struct {
 /// A borrowed view of bytes read as plain text: every byte is content, and
 /// terminal control sequences are not recognised.
 ///
-/// If the bytes may contain ANSI escape sequences, strip them first. This lens
+/// If the bytes may contain ANSI escape sequences, strip them first. This view
 /// measures `ESC`, `[`, `3`, `1`, `m` as ordinary characters, so
 /// `"\x1b[31mred\x1b[0m"` reports width 10 rather than 3 and wrapping can
 /// place a break inside the sequence, which corrupts the output. A `terminal`
-/// lens that understands escapes may be added later; until then this lens
+/// view that understands escapes may be added later; until then this view
 /// makes no attempt at it.
 pub const Text = struct {
     bytes: []const u8,
 
     /// Extended grapheme clusters. Call `.measured()` on the result for
     /// per-cluster terminal columns.
-    pub fn graphemes(self: Text) Graphemes(false) {
+    pub fn graphemes(self: Text) Graphemes {
         return .{ .bytes = self.bytes };
     }
 
@@ -199,9 +144,6 @@ pub const Text = struct {
     }
 };
 
-/// Return the display column of `offset`.  Offsets inside a grapheme map to
-/// that grapheme's start column; this intentionally makes the mapping
-/// many-to-one.
 /// The seven Unicode hard line terminators, as byte extents. `\r\n` is one
 /// terminator of length two.
 ///
@@ -214,7 +156,7 @@ pub const Text = struct {
 ///
 /// Scanning raw bytes is sound: no grapheme cluster spans a terminator except
 /// CRLF, because CR, LF and the rest are `GCB = Control`/`CR`/`LF` and GB4/GB5
-/// force a break on both sides, while GB3 keeps CRLF together and this lens
+/// force a break on both sides, while GB3 keeps CRLF together and this iterator
 /// emits it as one span. An ASCII terminator byte can never appear inside a
 /// multi-byte sequence, since UTF-8 continuation bytes are all >= 0x80.
 pub const Terminators = struct {
@@ -248,18 +190,18 @@ pub const TerminatorIterator = struct {
                 '\r' => {
                     const end = if (start + 1 < self.bytes.len and self.bytes[start + 1] == '\n') start + 2 else start + 1;
                     self.pos = end;
-                    return .{ .start = .init(start), .end = .init(end) };
+                    return .{ .start = .{ .value = start }, .end = .{ .value = end } };
                 },
                 0x0A, 0x0B, 0x0C => {
                     self.pos = start + 1;
-                    return .{ .start = .init(start), .end = .init(start + 1) };
+                    return .{ .start = .{ .value = start }, .end = .{ .value = start + 1 } };
                 },
                 // U+0085 NEL is C2 85; U+2028/U+2029 are E2 80 A8/A9. Verify
                 // the whole sequence: a truncated lead byte is not a terminator.
                 0xC2 => {
                     if (start + 1 < self.bytes.len and self.bytes[start + 1] == 0x85) {
                         self.pos = start + 2;
-                        return .{ .start = .init(start), .end = .init(start + 2) };
+                        return .{ .start = .{ .value = start }, .end = .{ .value = start + 2 } };
                     }
                     self.pos = start + 1;
                 },
@@ -268,7 +210,7 @@ pub const TerminatorIterator = struct {
                         (self.bytes[start + 2] == 0xA8 or self.bytes[start + 2] == 0xA9))
                     {
                         self.pos = start + 3;
-                        return .{ .start = .init(start), .end = .init(start + 3) };
+                        return .{ .start = .{ .value = start }, .end = .{ .value = start + 3 } };
                     }
                     self.pos = start + 1;
                 },

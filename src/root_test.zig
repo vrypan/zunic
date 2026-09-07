@@ -7,7 +7,7 @@ test "unicode component compiles as an independent root" {
     try std.testing.expectEqual(@as(usize, 2), unicode.text("🇬🇷").width());
 }
 
-test "grapheme lens retains byte spans and optional terminal measure" {
+test "grapheme traversal retains byte spans and optional terminal measure" {
     const text = "e\xcc\x81界👩‍👩‍👧‍👦\x00";
     var it = unicode.text(text).graphemes().measured().iterator();
     while (it.next()) |span| {
@@ -31,13 +31,6 @@ test "measured spans carry column and renderability" {
     const wide = it.next().?;
     try std.testing.expectEqual(@as(u2, 2), wide.columns);
     try std.testing.expect(wide.renderable);
-}
-
-test "grapheme indexing is caller-owned" {
-    var spans: [3]unicode.Span = undefined;
-    const indexed = unicode.text("a界b").graphemes().indexed(&spans);
-    try std.testing.expectEqual(@as(usize, 3), indexed.count());
-    try std.testing.expectEqual(@as(usize, 1), indexed.at(.init(1)).?.start.value);
 }
 
 test "terminators report every hard break as a byte extent" {
