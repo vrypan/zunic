@@ -4,6 +4,7 @@
 //! open it. The view never allocates, and opening it does no scanning.
 const grapheme_engine = @import("grapheme.zig");
 const width_engine = @import("width.zig");
+const word_engine = @import("word.zig");
 const wrap_engine = @import("wrap.zig");
 
 pub const ByteOffset = struct {
@@ -137,6 +138,11 @@ pub const Text = struct {
         return .{ .bytes = self.bytes };
     }
 
+    /// Default UAX #29 word boundaries, as a partition of the bytes.
+    pub fn wordBounds(self: Text) WordBounds {
+        return .{ .bytes = self.bytes };
+    }
+
     /// Greedy display lines within a finite column limit.
     pub fn wrap(self: Text, options: wrap_engine.Options) error{InvalidWidth}!Wrapped {
         if (options.max_columns == 0) return error.InvalidWidth;
@@ -218,5 +224,61 @@ pub const TerminatorIterator = struct {
             }
         }
         return null;
+    }
+};
+
+/// One segment of the UAX #29 word partition.
+pub const WordBound = struct {
+    start: ByteOffset,
+    end: ByteOffset,
+    /// True when at least one scalar in the segment is `Alphabetic` or has
+    /// general category `Nd`, `Nl` or `No`.
+    ///
+    /// This is a zunic convenience, not a UAX #29 rule, and not a claim that
+    /// the segment is a linguistic word. It cannot be read off `Word_Break`:
+    /// `U+4E00` is `WB=Other` and Alphabetic, `U+00B2` is `WB=Other` and
+    /// `GC=No`, and among combining marks `U+0345` is Alphabetic while
+    /// `U+0308` is not.
+    is_word: bool,
+};
+
+/// The default, locale-independent word boundaries of
+/// [UAX #29 revision 45](https://www.unicode.org/reports/tr29/tr29-45.html#Word_Boundaries),
+/// pinned to Unicode 16.0.0.
+///
+/// The segments partition the input: the first starts at zero, each one starts
+/// where the previous ended, and the last ends at `bytes.len`. Punctuation and
+/// whitespace are segments too, flagged `is_word = false`, and adjacent
+/// non-word segments are not merged. Empty input yields nothing.
+///
+/// These are *default* boundaries. They do not do dictionary segmentation, so
+/// they do not find words in Thai, Lao, Khmer, Myanmar, Chinese or Japanese
+/// text; that needs tailoring this package does not provide. The limitation is
+/// broader than UAX #14's SA caveat.
+///
+/// ```zig
+/// var it = zunic.text(line).wordBounds().iterator();
+/// while (it.next()) |segment| {
+///     if (segment.is_word) use(line[segment.start.value..segment.end.value]);
+/// }
+/// ```
+pub const WordBounds = struct {
+    bytes: []const u8,
+
+    pub fn iterator(self: WordBounds) WordBoundIterator {
+        return .{ .inner = word_engine.iterator(self.bytes) };
+    }
+};
+
+pub const WordBoundIterator = struct {
+    inner: word_engine.Iterator,
+
+    pub fn next(self: *WordBoundIterator) ?WordBound {
+        const span = self.inner.next() orelse return null;
+        return .{
+            .start = .{ .value = span.start },
+            .end = .{ .value = span.end },
+            .is_word = span.is_word,
+        };
     }
 };

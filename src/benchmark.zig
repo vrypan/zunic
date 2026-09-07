@@ -7,7 +7,8 @@ const corpora = @import("corpora.zig");
 // adds the `measured` operation; version 3 archives do not contain that row.
 // Version 5 adds the eight profile-generated document corpora.
 // Version 6 adds the `terminators` operation.
-const harness_version = "6";
+// Version 7 adds the `word_bounds` operation and its dedicated corpora.
+const harness_version = "7";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
 const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
@@ -18,6 +19,18 @@ const legacy_corpora = [_]Corpus{
     .{ .name = "cjk", .seed = "日本語の文章と漢字を測定します。 ", .length = 96 },
     .{ .name = "emoji", .seed = "👩‍👩‍👧‍👦 🇬🇷 👋🏿 ", .length = 96 },
     .{ .name = "malformed", .seed = "valid \xff bytes \xc0\x80 remain bounded ", .length = 96 },
+};
+
+/// Word segmentation only. These shapes stress rules the document corpora
+/// barely exercise: the WB6/WB12 punctuation bridge and its lookahead across
+/// folded runs, the Hebrew quote rules, WB=Other scripts the default rules
+/// cannot segment, and malformed bytes at contextual positions.
+const word_corpora = [_]Corpus{
+    .{ .name = "word-hebrew", .seed = "\u{05E9}\u{05DC}\u{05D5}\u{05DD} \u{05D0}\"\u{05D1} \u{05D2}'\u{05D3} \u{05E2}\u{05D5}\u{05DC}\u{05DD} ", .length = 4096 },
+    .{ .name = "word-numeric", .seed = "buy 3.14 or 1,000.50 units at $9.99, 27% off, ref 12.3.4 ", .length = 4096 },
+    .{ .name = "word-han", .seed = "\u{65E5}\u{672C}\u{8A9E}\u{306E}\u{6587}\u{7AE0}\u{3068}\u{6F22}\u{5B57}\u{3092}\u{6E2C}\u{5B9A}\u{3057}\u{307E}\u{3059}\u{3002} ", .length = 4096 },
+    .{ .name = "word-folded", .seed = "a.\u{0308}\u{0308}\u{0308}b 1,\u{0345}\u{0345}2 x\u{200D}\u{1F600} ", .length = 4096 },
+    .{ .name = "word-malformed", .seed = "ok \xff \xc0\x80 a.\xffb 1,\xff2 text ", .length = 4096 },
 };
 
 const wrap_cases = [_]WrapCase{
@@ -59,6 +72,11 @@ pub fn main(init: std.process.Init) !void {
         try printSamples(output, corpus.name, "width", text, target_bytes, widthChecksum, io);
         try printSamples(output, corpus.name, "line_break", text, target_bytes, lineBreakChecksum, io);
         try printSamples(output, corpus.name, "terminators", text, target_bytes, terminatorChecksum, io);
+        try printSamples(output, corpus.name, "word_bounds", text, target_bytes, wordChecksum, io);
+    }
+    for (word_corpora) |corpus| {
+        const text = try makeCorpus(allocator, corpus);
+        try printSamples(output, corpus.name, "word_bounds", text, target_bytes, wordChecksum, io);
     }
     for (wrap_cases) |case| try printWrapSamples(output, case, try makeCorpus(allocator, case.corpus), target_bytes, io);
     try runDocumentCorpora(output, allocator, target_bytes, io);
@@ -182,6 +200,7 @@ fn runDocumentCorpora(output: *std.Io.Writer, allocator: std.mem.Allocator, targ
         try printSamples(output, name, "width", text, target_bytes, widthChecksum, io);
         try printSamples(output, name, "line_break", text, target_bytes, lineBreakChecksum, io);
         try printSamples(output, name, "terminators", text, target_bytes, terminatorChecksum, io);
+        try printSamples(output, name, "word_bounds", text, target_bytes, wordChecksum, io);
         try printWrapSamples(output, .{
             .name = name,
             .corpus = .{ .name = name, .seed = "", .length = 0 },
@@ -296,6 +315,18 @@ fn terminatorChecksum(text: []const u8) u64 {
     while (it.next()) |t| {
         sum = mix(sum, t.start.value);
         sum = mix(sum, t.end.value);
+    }
+    return sum;
+}
+/// All three item fields, so a boundary shift and a flag error are both
+/// visible in the checksum.
+fn wordChecksum(text: []const u8) u64 {
+    var it = zunic.text(text).wordBounds().iterator();
+    var sum: u64 = 0xcbf29ce484222325;
+    while (it.next()) |segment| {
+        sum = mix(sum, segment.start.value);
+        sum = mix(sum, segment.end.value);
+        sum = mix(sum, @intFromBool(segment.is_word));
     }
     return sum;
 }

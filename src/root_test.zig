@@ -113,3 +113,33 @@ test "ASCII arrays agree with the fused record" {
         cp += 1;
     }
 }
+
+test "word bounds partition the view and name their own types" {
+    const line = "The price is $9.99 -unless you pay cash.";
+
+    // The named types are part of the surface: a caller can store the view,
+    // the iterator and one item without naming an anonymous type.
+    const bounds: unicode.WordBounds = unicode.text(line).wordBounds();
+    var it: unicode.WordBoundIterator = bounds.iterator();
+    var first: unicode.WordBound = undefined;
+
+    var words: usize = 0;
+    var segments: usize = 0;
+    var cursor: usize = 0;
+    while (it.next()) |segment| : (segments += 1) {
+        if (segments == 0) first = segment;
+        try std.testing.expectEqual(cursor, segment.start.value);
+        cursor = segment.end.value;
+        if (segment.is_word) words += 1;
+    }
+    try std.testing.expectEqual(line.len, cursor);
+    try std.testing.expectEqual(@as(usize, 18), segments);
+    try std.testing.expectEqual(@as(usize, 8), words);
+    try std.testing.expectEqualStrings("The", line[first.start.value..first.end.value]);
+    try std.testing.expect(first.is_word);
+
+    // Opening the view scans nothing, and an exhausted iterator stays null.
+    try std.testing.expectEqual(@as(?unicode.WordBound, null), it.next());
+    var empty = unicode.text("").wordBounds().iterator();
+    try std.testing.expectEqual(@as(?unicode.WordBound, null), empty.next());
+}

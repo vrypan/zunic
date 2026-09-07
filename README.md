@@ -4,13 +4,15 @@ Allocation-free Unicode primitives for Zig terminal applications.
 
 The package currently provides tolerant UTF-8 stepping, Unicode 16.0.0
 extended-grapheme segmentation, default Unicode 16.0.0 UAX #14 line-break
-boundaries, and a terminal cell-width policy. Its grapheme and line-break
-implementations pass the official Unicode 16.0.0 conformance fixtures.
+boundaries, default Unicode 16.0.0 UAX #29 word boundaries, and a terminal
+cell-width policy. Its grapheme, line-break and word implementations pass the
+official Unicode 16.0.0 conformance fixtures.
 
 Open the text view with `zunic.text(bytes)`. It borrows its bytes,
 and its methods are the questions: `.graphemes()` partitions
 user-visible text, `.width()` measures terminal columns, `.wrap(options)`
-chooses display lines, and `.terminators()` locates hard line breaks.
+chooses display lines, `.terminators()` locates hard line breaks, and
+`.wordBounds()` partitions the text into words and separators.
 The view does not allocate. Opening it performs no scan;
 work begins when a direct query such as `.width()` runs or an iterator is
 consumed.
@@ -33,8 +35,9 @@ consumed.
   generated into the source tree, so there is no build-time download,
   code generation step, or C library to link.
 - **Conformance-tested, not hand-tuned.** `zig build test` runs the
-  official Unicode 16.0.0 `GraphemeBreakTest` and `LineBreakTest`
-  fixtures, embedded in the repository, over every case they define.
+  official Unicode 16.0.0 `GraphemeBreakTest`, `LineBreakTest` and
+  `WordBreakTest` fixtures, embedded in the repository, over every case they
+  define.
 - **Tolerant.** Malformed UTF-8 never errors and never
   panics. An invalid byte is consumed as one span with defined fallback
   properties, so a terminal reading arbitrary bytes keeps making
@@ -142,10 +145,11 @@ pub const Text = struct {
     pub fn width(self: Text) usize;
     pub fn wrap(self: Text, options: WrapOptions) error{InvalidWidth}!Wrapped;
     pub fn terminators(self: Text) Terminators;
+    pub fn wordBounds(self: Text) WordBounds;
 };
 ```
 
-The view keeps the interpretation and the borrowed input together. Its four
+The view keeps the interpretation and the borrowed input together. Its five
 questions use specialized scans: asking for width does not materialize
 grapheme spans, and finding terminators does not invoke the wrapping engine.
 Only `wrap` returns an error, and only when `max_columns` is zero. Malformed
@@ -265,6 +269,79 @@ empty tail, while `"a\n\nb"` preserves the empty paragraph between the two
 terminators. `"\n"` contains one empty paragraph. Adjust the final condition
 if separator semantics are more appropriate for the application.
 
+### Word boundaries
+
+`zunic.text(bytes).wordBounds()` applies the default, locale-independent word
+boundaries of [UAX #29 revision 45](https://www.unicode.org/reports/tr29/tr29-45.html#Word_Boundaries),
+pinned to Unicode 16.0.0. The implementation passes every case of the official
+`WordBreakTest-16.0.0.txt`, embedded in the repository.
+
+```zig
+pub const WordBounds = struct {
+    bytes: []const u8,
+    pub fn iterator(self: WordBounds) WordBoundIterator;
+};
+
+pub const WordBound = struct {
+    start: ByteOffset,
+    end: ByteOffset,
+    is_word: bool,
+};
+```
+
+The segments **partition** the input. Punctuation and whitespace are segments
+too, flagged `is_word = false`, and adjacent non-word segments are not merged:
+a comma and the space after it are two items. The first segment starts at
+zero, each one starts where the previous ended, and the last ends at
+`bytes.len`. Empty input yields nothing, and nothing is emitted for the start
+or end of text.
+
+```zig
+var it = zunic.text(line).wordBounds().iterator();
+while (it.next()) |segment| {
+    if (segment.is_word) {
+        consumeWord(line[segment.start.value..segment.end.value]);
+    }
+}
+```
+
+`"The price is $9.99 -unless you pay cash."` is 18 segments, 8 of them words.
+WB11 and WB12 keep the decimal point inside `9.99`, while the period after
+`cash` breaks off because no letter follows it, and `-` is `Word_Break=Other`
+so it stands alone. Splitting on non-alphanumeric characters gets the decimal
+wrong even though it gets the trailing period right.
+
+**`is_word` is a zunic convenience, not a UAX #29 rule** and not a claim that
+the segment is a linguistic word. It is true when at least one scalar in the
+segment satisfies:
+
+```text
+Alphabetic = Yes  OR  General_Category in {Nd, Nl, No}
+```
+
+It cannot be read off `Word_Break`. `U+4E00` is `Word_Break=Other` and
+Alphabetic; `U+00B2` SUPERSCRIPT TWO is `Word_Break=Other` with `GC=No`. The
+predicate also covers some combining marks, so an isolated `U+0345` counts as
+word-like while an isolated `U+0308` does not.
+
+> **These are the *default* boundaries.** They do no dictionary lookup and no
+> locale tailoring, so they do not find words in Thai, Lao, Khmer, Myanmar,
+> Chinese or Japanese text: those need mechanisms this package does not
+> provide. The limitation is broader than UAX #14's SA caveat.
+
+Malformed input follows the package policy: each invalid byte is consumed on
+its own as `Word_Break=Other`, neither pictographic nor word-like, and the
+boundary rules then apply to it unchanged -- so a following `Extend` still
+attaches to it by WB4. `"a\xffb"` is three segments, flagged word, non-word,
+word. This behaviour is pinned by zunic's tests and is outside the Unicode
+conformance claim.
+
+Traversal is linear and the iterator holds constant memory, whatever the input
+contains. WB6, WB7b and WB12 have to look past a punctuation candidate for the
+next character WB4 does not fold away, and the run of folded characters between
+them can be arbitrarily long; each such run is crossed at most once, so a
+complete traversal decodes fewer than two scalars per input scalar.
+
 ### Unicode line-break boundaries
 
 `zunic.line_break` is the low-level default, locale-independent Unicode 16.0
@@ -351,11 +428,25 @@ package's tests. Application code should normally use
 ## Development
 
 Run `make benchmark` to measure ReleaseFast throughput for UTF-8, grapheme,
-measured-grapheme, width, line-break, terminator, and wrapping workloads. It
-reports seven samples per case; compare results on the same machine rather
-than treating them as cross-machine rankings. Use `make benchmark` with
-`BENCHMARK_ARGS=--smoke` for a quicker smoke run.
+measured-grapheme, width, line-break, terminator, word-boundary, and wrapping
+workloads. It reports seven samples per case; compare results on the same
+machine rather than treating them as cross-machine rankings. Use
+`make benchmark` with `BENCHMARK_ARGS=--smoke` for a quicker smoke run.
 
 ```sh
 zig build test
 ```
+
+The Unicode tables are generated into the source tree and committed, so
+building needs no Python. Regenerating them does:
+
+```sh
+python3 src/tools/generate-properties.py       # src/properties.zig
+python3 src/tools/generate-word-properties.py  # src/word_properties.zig
+python3 src/tools/test-properties.py           # verify, all 1,114,112 points
+python3 src/tools/test-word-properties.py      # verify, all 1,114,112 points
+```
+
+Each checker re-derives every fact from the pinned UCD files and decodes the
+emitted Zig, sharing no classification code with its generator, so a mismatch
+means the generator is wrong rather than the output.

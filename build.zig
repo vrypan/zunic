@@ -24,6 +24,7 @@ pub fn build(b: *std.Build) void {
         "src/wrap_test.zig",
         "src/wrap_regression_test.zig",
         "src/scan_test.zig",
+        "src/word_test.zig",
         "src/line_break.zig",
         "src/utf8.zig",
     };

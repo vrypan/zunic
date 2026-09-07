@@ -32,6 +32,9 @@ pub const Text = text_view.Text;
 pub const Terminators = text_view.Terminators;
 pub const TerminatorIterator = text_view.TerminatorIterator;
 pub const Graphemes = text_view.Graphemes;
+pub const WordBound = text_view.WordBound;
+pub const WordBounds = text_view.WordBounds;
+pub const WordBoundIterator = text_view.WordBoundIterator;
 pub const MeasuredGraphemes = text_view.MeasuredGraphemes;
 
 /// Open a text view. Borrowed and zero-cost: no scanning happens until a
