@@ -12,12 +12,13 @@ pub const Span = struct {
 const Property = enum { other, cr, lf, control, extend, zwj, ri, prepend, spacing_mark, l, v, t, lv, lvt, ep };
 const InCB = enum { none, consonant, extend, linker };
 pub const Classification = struct { property: Property, incb: InCB };
-const Token = struct { scalar: scalar.Token, classification: Classification };
+const Token = struct { scalar: scalar.Token, category: u8 };
 
-/// Internal UAX #29 intra-cluster transition state, separated from the byte
-/// iterator so a fused scanner can drive it from an already-decoded token
-/// stream. `init` starts a cluster at its first scalar; `breakBefore` asks
-/// whether the cluster ends before the next scalar; `consume` extends it.
+/// The reference UAX #29 transition. Since plan 019 this is no longer on the
+/// hot path: `machine` evaluates it at comptime for every reachable
+/// `(state, category)` pair and the runtime reads the resulting table. It
+/// remains the single definition of the rules, and the differential test in
+/// `scan_test.zig` checks the table against it over real byte streams.
 pub const ClusterState = struct {
     previous: Property,
     ri_count: usize,
@@ -74,58 +75,23 @@ pub const Iterator = struct {
     pos: usize = 0,
     pending: ?Token = null,
 
-    // This loop is ClusterState's transition logic hand-scheduled into
-    // locals: routing it through the struct costs 7-15% on short-scalar
-    // corpora (measured for 008). The scanner differential tests in
-    // scan_test.zig keep the two in agreement.
+    // Table-driven: one read per scalar yields the boundary decision and the
+    // successor state, replacing `classify`'s switch plus `breakBefore`'s
+    // comparison chain and `consume`'s field updates. `next` stays `inline` so
+    // the unmeasured `graphemes()` lens can still eliminate the measure.
     pub inline fn next(self: *Iterator) ?Span {
         if (self.pos >= self.bytes.len) return null;
         const start = self.pos;
         const first = self.takeToken();
         var measure = ClusterMeasure{};
         measure.add(first.scalar);
-        const first_classification = first.classification;
-        var previous = first_classification.property;
-        var ri_count: usize = if (previous == .ri) 1 else 0;
-        var ep_before_zwj = previous == .ep;
-        var zwj_after_ep = false;
-        var incb_linker_after_consonant = false;
-        var incb_seen_consonant = first_classification.incb == .consonant;
+        var state = TableState.init(first.category);
 
         while (self.pos < self.bytes.len) {
             const lookahead = self.peekToken();
-            const classification = lookahead.classification;
-            const current = classification.property;
-            const current_incb = classification.incb;
-            if (breakBefore(previous, current, ri_count, zwj_after_ep, incb_linker_after_consonant, current_incb)) break;
-
+            if (state.step(lookahead.category)) break;
             _ = self.takeToken();
             measure.add(lookahead.scalar);
-            if (current == .ri) ri_count += 1 else if (current != .extend) ri_count = 0;
-            if (current == .zwj) {
-                zwj_after_ep = ep_before_zwj;
-            } else if (current == .ep) {
-                ep_before_zwj = true;
-                zwj_after_ep = false;
-            } else if (current != .extend) {
-                ep_before_zwj = false;
-                zwj_after_ep = false;
-            }
-            switch (current_incb) {
-                .consonant => {
-                    incb_seen_consonant = true;
-                    incb_linker_after_consonant = false;
-                },
-                .linker => {
-                    if (incb_seen_consonant) incb_linker_after_consonant = true;
-                },
-                .extend => {},
-                .none => {
-                    incb_seen_consonant = false;
-                    incb_linker_after_consonant = false;
-                },
-            }
-            previous = current;
         }
         return .{ .start = start, .end = self.pos, .columns = measure.finish() };
     }
@@ -144,7 +110,7 @@ pub const Iterator = struct {
 
     fn decodeAt(self: *const Iterator, offset: usize) Token {
         const token = scalar.at(self.bytes, offset);
-        return .{ .scalar = token, .classification = classify(token) };
+        return .{ .scalar = token, .category = categoryOf(token) };
     }
 };
 
@@ -195,6 +161,218 @@ fn breakBefore(previous: Property, current: Property, ri_count: usize, zwj_after
     if (previous == .ri and current == .ri and ri_count % 2 == 1) return false;
     return true;
 }
+
+/// SPIKE (plan 019 step 1): a transition table built at comptime from the
+/// reference rules above, so it is equivalent to them by construction. If this
+/// does not measure faster, the plan is rejected and this all comes out.
+///
+/// State packs the six observable fields of the reference `ClusterState` into
+/// nine bits; `ri_count` contributes only its parity, which is all
+/// `breakBefore` reads. The category is a dense id for the distinct
+/// `(Property, InCB)` pairs reachable from a `GraphemeProperties` value, and
+/// is looked up by the seven bits `scalar.at` has already unpacked.
+pub const machine = struct {
+    const State = packed struct(u9) {
+        previous: u4,
+        ri_parity: bool,
+        ep_before_zwj: bool,
+        zwj_after_ep: bool,
+        incb_seen_consonant: bool,
+        incb_linker_after_consonant: bool,
+    };
+
+    const state_count = 512;
+
+    fn decode(id: u9) State {
+        return @bitCast(id);
+    }
+
+    fn classificationOfKey(key: u7) ?Classification {
+        const gcb_raw: u4 = @truncate(key);
+        // GraphemeClass has 14 members; 14 and 15 never occur in a record.
+        if (@as(u8, gcb_raw) >= @typeInfo(properties.GraphemeClass).@"enum".fields.len) return null;
+        const g: properties.GraphemeProperties = @bitCast(key);
+        const property: Property = switch (g.gcb) {
+            .other => if (g.extended_pictographic) .ep else .other,
+            .regional_indicator => .ri,
+            .spacingmark => .spacing_mark,
+            else => @enumFromInt(@intFromEnum(g.gcb)),
+        };
+        return .{ .property = property, .incb = @enumFromInt(@intFromEnum(g.incb)) };
+    }
+
+    /// Property keys that actually occur in Unicode 16. Enumerating all 128
+    /// encodable keys yields 60 categories; only a fraction are real.
+    const occurring = blk: {
+        @setEvalBranchQuota(2000000);
+        var seen: [128]bool = @splat(false);
+        for (properties.record_data) |raw| seen[@as(u7, @truncate(raw))] = true;
+        break :blk seen;
+    };
+
+    /// Distinct classifications over occurring keys, in first-seen order.
+    const catalogue = blk: {
+        @setEvalBranchQuota(200000);
+        var list: [128]Classification = undefined;
+        var len: usize = 0;
+        for (0..128) |k| {
+            if (!occurring[k]) continue;
+            const c = classificationOfKey(@intCast(k)) orelse continue;
+            var dup = false;
+            for (list[0..len]) |e| {
+                if (e.property == c.property and e.incb == c.incb) dup = true;
+            }
+            if (!dup) {
+                list[len] = c;
+                len += 1;
+            }
+        }
+        break :blk .{ .items = list, .len = len };
+    };
+
+    pub const category_count = catalogue.len;
+
+    /// Seven unpacked property bits -> dense category id. 128 bytes, L1 resident.
+    pub const category_of = blk: {
+        @setEvalBranchQuota(200000);
+        var table: [128]u8 = @splat(0);
+        for (0..128) |k| {
+            const c = classificationOfKey(@intCast(k)) orelse continue;
+            for (catalogue.items[0..catalogue.len], 0..) |e, i| {
+                if (e.property == c.property and e.incb == c.incb) {
+                    table[k] = @intCast(i);
+                    break;
+                }
+            }
+        }
+        break :blk table;
+    };
+
+    fn reference(id: u9) ClusterState {
+        const st = decode(id);
+        return .{
+            .previous = @enumFromInt(st.previous),
+            .ri_count = if (st.ri_parity) 1 else 0,
+            .ep_before_zwj = st.ep_before_zwj,
+            .zwj_after_ep = st.zwj_after_ep,
+            .incb_linker_after_consonant = st.incb_linker_after_consonant,
+            .incb_seen_consonant = st.incb_seen_consonant,
+        };
+    }
+
+    fn encode(cs: ClusterState) u9 {
+        const st = State{
+            .previous = @intFromEnum(cs.previous),
+            .ri_parity = cs.ri_count % 2 == 1,
+            .ep_before_zwj = cs.ep_before_zwj,
+            .zwj_after_ep = cs.zwj_after_ep,
+            .incb_seen_consonant = cs.incb_seen_consonant,
+            .incb_linker_after_consonant = cs.incb_linker_after_consonant,
+        };
+        return @bitCast(st);
+    }
+
+    const Raw = struct { brk: bool, next: u9 };
+
+    fn rawStep(id: u9, cat: usize) Raw {
+        const c = catalogue.items[cat];
+        var cs = reference(id);
+        const brk = cs.breakBeforeNext(c);
+        if (brk) cs = ClusterState.init(c) else cs.consume(c);
+        return .{ .brk = brk, .next = encode(cs) };
+    }
+
+    /// Breadth-first reachability from the states a cluster can start in.
+    /// Only 4 of the 9 encoded bits vary independently in practice, so this
+    /// cuts the table by an order of magnitude.
+    const reach = blk: {
+        @setEvalBranchQuota(20000000);
+        var dense: [state_count]i16 = @splat(-1);
+        var order: [state_count]u9 = undefined;
+        var len: usize = 0;
+        for (0..category_count) |cat| {
+            const s = encode(ClusterState.init(catalogue.items[cat]));
+            if (dense[s] < 0) {
+                dense[s] = @intCast(len);
+                order[len] = s;
+                len += 1;
+            }
+        }
+        var head: usize = 0;
+        while (head < len) : (head += 1) {
+            const cur = order[head];
+            for (0..category_count) |cat| {
+                const n = rawStep(cur, cat).next;
+                if (dense[n] < 0) {
+                    dense[n] = @intCast(len);
+                    order[len] = n;
+                    len += 1;
+                }
+            }
+        }
+        break :blk .{ .dense = dense, .order = order, .len = len };
+    };
+
+    pub const reachable_states = reach.len;
+
+    /// Entry: bit 0 is "break before this scalar", bits 1.. are the successor.
+    /// On a break the successor is `init(category)`, so one read both decides
+    /// the boundary and positions the state for the next cluster.
+    pub const transitions = blk: {
+        @setEvalBranchQuota(20000000);
+        var table: [reachable_states * category_count]u8 = @splat(0);
+        for (0..reachable_states) |d| {
+            for (0..category_count) |cat| {
+                const r = rawStep(reach.order[d], cat);
+                table[d * category_count + cat] =
+                    (@as(u8, @intCast(reach.dense[r.next])) << 1) | @intFromBool(r.brk);
+            }
+        }
+        break :blk table;
+    };
+
+    /// State a fresh cluster is in after its first scalar, as a dense id.
+    pub const initial_of = blk: {
+        @setEvalBranchQuota(200000);
+        var table: [category_count]u8 = @splat(0);
+        for (0..category_count) |cat|
+            table[cat] = @intCast(reach.dense[encode(ClusterState.init(catalogue.items[cat]))]);
+        break :blk table;
+    };
+
+    pub const data_bytes = @sizeOf(@TypeOf(transitions)) + @sizeOf(@TypeOf(category_of)) + @sizeOf(@TypeOf(initial_of));
+
+    comptime {
+        // Plan 019 budget. The table is built from the reference rules at
+        // comptime, so a rule change moves these numbers rather than silently
+        // diverging; if it trips, re-check the budget, do not widen it.
+        if (data_bytes > 16 * 1024) @compileError("grapheme machine exceeds 16 KiB");
+        if (reachable_states > 128) @compileError("successor no longer fits 7 bits");
+    }
+};
+
+/// Category for an already-decoded scalar: one bitcast of the property bits
+/// `scalar.at` unpacked, plus one 128-byte lookup.
+pub inline fn categoryOf(token: scalar.Token) u8 {
+    return machine.category_of[@as(u7, @bitCast(token.grapheme))];
+}
+
+/// Table-driven cluster state. One read per scalar yields the boundary
+/// decision and the successor.
+pub const TableState = struct {
+    id: u8,
+
+    pub inline fn init(category: u8) TableState {
+        return .{ .id = machine.initial_of[category] };
+    }
+
+    /// Returns whether the cluster ends before this scalar, and advances.
+    pub inline fn step(self: *TableState, category: u8) bool {
+        const entry = machine.transitions[@as(usize, self.id) * machine.category_count + category];
+        self.id = entry >> 1;
+        return entry & 1 == 1;
+    }
+};
 
 fn isControl(p: Property) bool {
     return p == .cr or p == .lf or p == .control;

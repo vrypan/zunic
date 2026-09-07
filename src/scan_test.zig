@@ -146,6 +146,95 @@ test "cluster spans carry the same measure a standalone measurement reports" {
     }
 }
 
+/// The table-driven cluster state must agree with the reference transition it
+/// was compiled from, over real byte streams. The table is built at comptime
+/// by evaluating `ClusterState`, so this cannot catch a wrong *rule* -- the
+/// standard fixtures in conformance_test.zig do that. What it does catch is a
+/// wrong state encoding, a wrong category mapping, or a reachability closure
+/// that dropped a state.
+fn expectTableMatchesReference(bytes: []const u8) !void {
+    var pos: usize = 0;
+    while (pos < bytes.len) {
+        const first = scalar.at(bytes, pos);
+        var reference = grapheme.ClusterState.init(grapheme.classify(first));
+        var table = grapheme.TableState.init(grapheme.categoryOf(first));
+        var scan_pos = first.end;
+        while (scan_pos < bytes.len) {
+            const token = scalar.at(bytes, scan_pos);
+            const want = reference.breakBeforeNext(grapheme.classify(token));
+            const got = table.step(grapheme.categoryOf(token));
+            try std.testing.expectEqual(want, got);
+            if (want) break;
+            reference.consume(grapheme.classify(token));
+            scan_pos = token.end;
+        }
+        pos = if (scan_pos == first.end) first.end else scan_pos;
+    }
+}
+
+test "grapheme table agrees with the reference transition" {
+    try std.testing.expect(grapheme.machine.category_count == 18);
+    try std.testing.expect(grapheme.machine.reachable_states == 25);
+    try std.testing.expect(grapheme.machine.data_bytes <= 16 * 1024);
+
+    const cases = [_][]const u8{
+        "",                                              "a",                                              "hello, world 123",
+        "Καλημέρα cafe\xcc\x81 — λέξεις και τόνοι.",
+        "日本語の文章と漢字を測定します。",
+        "👩‍👩‍👧‍👦 🇬🇷🇬🇷🇬🇷 👋🏿",
+        "क्षि हिन्दी 한국어 조합",
+        "valid \xff bytes \xc0\x80 remain bounded \xc2", "e\xcc\x81\xcc\x81\xcc\x81 \x00\x7f \n\n \r\r\n",
+    };
+    for (cases) |bytes| try expectTableMatchesReference(bytes);
+
+    // Every witness property value, in pairs and triples.
+    var witnesses: [128]u21 = undefined;
+    var seen: [128]bool = @splat(false);
+    var count: usize = 0;
+    for (0..0x110000) |v| {
+        if (v >= 0xd800 and v <= 0xdfff) continue;
+        const key: u7 = @bitCast(properties.graphemeProperties(@intCast(v)));
+        if (seen[key]) continue;
+        seen[key] = true;
+        witnesses[count] = @intCast(v);
+        count += 1;
+    }
+    var buffer: [16]u8 = undefined;
+    for (witnesses[0..count]) |x| {
+        const a: usize = try std.unicode.utf8Encode(x, &buffer);
+        for (witnesses[0..count]) |y| {
+            const b: usize = a + try std.unicode.utf8Encode(y, buffer[a..]);
+            try expectTableMatchesReference(buffer[0..b]);
+            for (witnesses[0..count]) |z| {
+                const c: usize = b + try std.unicode.utf8Encode(z, buffer[b..]);
+                try expectTableMatchesReference(buffer[0..c]);
+            }
+        }
+    }
+
+    // Long homogeneous runs and seeded random streams.
+    var long: [512]u8 = undefined;
+    for ([_]u21{ 0x1f1e6, 0x0300, 0x200d, 0x0903, 0x094d, 0x0915, 0x1100 }) |cp| {
+        var len: usize = 0;
+        while (len + 4 < long.len) len += try std.unicode.utf8Encode(cp, long[len..]);
+        try expectTableMatchesReference(long[0..len]);
+    }
+    var random = std.Random.DefaultPrng.init(0x019_9a1f);
+    for (0..500) |_| {
+        var len: usize = 0;
+        for (0..64) |_| {
+            const cp = witnesses[random.random().uintLessThan(usize, count)];
+            if (len + 4 >= long.len) break;
+            len += try std.unicode.utf8Encode(cp, long[len..]);
+        }
+        try expectTableMatchesReference(long[0..len]);
+    }
+    for (0..256) |lead| {
+        const malformed = [_]u8{ 'a', @intCast(lead), 0x80, 0x80, '\n', 0xe2, 0x81, 0xa0 };
+        for (2..malformed.len + 1) |end| try expectTableMatchesReference(malformed[0..end]);
+    }
+}
+
 fn countScalars(bytes: []const u8) usize {
     var count: usize = 0;
     var pos: usize = 0;

@@ -66,7 +66,7 @@ pub fn Scanner(comptime instrumented: bool) type {
             if (self.lb_consumed) self.lb_consumed = false else self.consumeLineBreak(first_decoded.record.line_break_category);
             const start = first.start;
             const hard = line_break.isHardClass(first.line_break);
-            var state = grapheme.ClusterState.init(grapheme.classify(first));
+            var state = grapheme.TableState.init(grapheme.categoryOf(first));
             var measure = grapheme.ClusterMeasure{};
             measure.add(first);
             var end = first.end;
@@ -75,8 +75,8 @@ pub fn Scanner(comptime instrumented: bool) type {
                 const decoded = self.peek0() orelse
                     return .{ .start = start, .end = end, .columns = measure.finish(), .hard = hard, .can_break = true };
                 const lookahead = decoded.scalarToken();
-                const classification = grapheme.classify(lookahead);
-                if (state.breakBeforeNext(classification)) {
+                const category = grapheme.categoryOf(lookahead);
+                if (state.step(category)) {
                     // The cluster ends before `lookahead`, which stays
                     // buffered as the next cluster's first scalar; its
                     // line-break consumption happens there, after the
@@ -107,7 +107,7 @@ pub fn Scanner(comptime instrumented: bool) type {
                 self.buf0 = self.buf1;
                 self.buf1 = null;
                 self.consumeLineBreak(decoded.record.line_break_category);
-                state.consume(classification);
+                // `step` already advanced the state on the non-breaking path.
                 measure.add(lookahead);
                 end = lookahead.end;
             }
