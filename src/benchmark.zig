@@ -1,10 +1,12 @@
 const std = @import("std");
 const zunic = @import("zunic");
+const corpora = @import("corpora.zig");
 
 // The public traversal and checksum coordinate types changed in 0.3.0, so
 // results from earlier harnesses are deliberately not comparable. Version 4
 // adds the `measured` operation; version 3 archives do not contain that row.
-const harness_version = "4";
+// Version 5 adds the eight profile-generated document corpora.
+const harness_version = "5";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
 const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
@@ -37,6 +39,12 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.arena.allocator();
     const args = try init.minimal.args.toSlice(allocator);
     const smoke = args.len > 1 and std.mem.eql(u8, args[1], "--smoke");
+    if (args.len > 1 and std.mem.eql(u8, args[1], "--corpus-stats")) {
+        var stats_buffer: [4096]u8 = undefined;
+        var stats_file = std.Io.File.stdout().writer(io, &stats_buffer);
+        try printCorpusStats(&stats_file.interface, allocator);
+        return stats_file.interface.flush();
+    }
     const target_bytes: usize = if (smoke) 64 * 1024 else 4 * 1024 * 1024;
     var output_buffer: [4096]u8 = undefined;
     var output_file = std.Io.File.stdout().writer(io, &output_buffer);
@@ -51,7 +59,133 @@ pub fn main(init: std.process.Init) !void {
         try printSamples(output, corpus.name, "line_break", text, target_bytes, lineBreakChecksum, io);
     }
     for (wrap_cases) |case| try printWrapSamples(output, case, try makeCorpus(allocator, case.corpus), target_bytes, io);
+    try runDocumentCorpora(output, allocator, target_bytes, io);
     try output.flush();
+}
+
+/// Expand a generated statistical profile into a deterministic document.
+///
+/// The repeated-seed corpora above are 4 KB of one short seed: a handful of
+/// property-table blocks stay resident in L1 and the branch predictor learns
+/// the cycle, so they cannot show a lost prefetch or a lookup miss. These
+/// profiles reproduce the code-point spread, word lengths and line lengths of
+/// real documents at document size, which can. See plans/017.
+///
+/// Deterministic across platforms: fixed seed, fixed algorithm. Generation
+/// happens once, before timing.
+fn Profile(comptime P: type) type {
+    return struct {
+        fn pick(random: std.Random, keys: anytype, cum: []const u32) @TypeOf(keys[0]) {
+            const roll = random.uintLessThan(u32, cum[cum.len - 1]) + 1;
+            var low: usize = 0;
+            var high: usize = cum.len - 1;
+            while (low < high) {
+                const mid = low + (high - low) / 2;
+                if (cum[mid] < roll) low = mid + 1 else high = mid;
+            }
+            return keys[low];
+        }
+
+        fn isMark(cp: u21) bool {
+            for (P.marks) |m| if (m == cp) return true;
+            return false;
+        }
+
+        fn generate(allocator: std.mem.Allocator, target_bytes: usize) ![]u8 {
+            var prng = std.Random.DefaultPrng.init(0x2075_c0_11ec7);
+            const random = prng.random();
+            var out: std.ArrayList(u8) = .empty;
+            errdefer out.deinit(allocator);
+            var encoded: [4]u8 = undefined;
+            var column: usize = 0;
+            var line_target = pick(random, &P.lines_keys, &P.lines_cum);
+            while (out.items.len < target_bytes) {
+                const word_len = pick(random, &P.words_keys, &P.words_cum);
+                var emitted: usize = 0;
+                var previous_is_break = true;
+                while (emitted < word_len) : (emitted += 1) {
+                    var cp = pick(random, &P.chars_keys, &P.chars_cum);
+                    // A combining mark never opens a cluster in real text;
+                    // resample so cluster counts stay representative.
+                    var guard: usize = 0;
+                    while (previous_is_break and isMark(cp) and guard < 8) : (guard += 1)
+                        cp = pick(random, &P.chars_keys, &P.chars_cum);
+                    if (previous_is_break and isMark(cp)) continue;
+                    const len = std.unicode.utf8Encode(cp, &encoded) catch continue;
+                    try out.appendSlice(allocator, encoded[0..len]);
+                    previous_is_break = false;
+                    column += 1;
+                    // Scripts without spaces (CJK) produce very long "words",
+                    // so the line target has to be honoured inside a word too
+                    // or line structure drifts far from the profile.
+                    if (column >= line_target) break;
+                }
+                if (column >= line_target) {
+                    try out.append(allocator, '\n');
+                    column = 0;
+                    line_target = pick(random, &P.lines_keys, &P.lines_cum);
+                } else {
+                    try out.append(allocator, ' ');
+                    column += 1;
+                }
+            }
+            return out.toOwnedSlice(allocator);
+        }
+    };
+}
+
+const document_bytes = 50 * 1024;
+
+/// Report what the generated documents actually look like, so their fidelity
+/// to the reference profiles can be checked without shipping the references.
+fn printCorpusStats(output: *std.Io.Writer, allocator: std.mem.Allocator) !void {
+    inline for (.{
+        .{ "arabic", corpora.arabic },   .{ "english", corpora.english },
+        .{ "hindi", corpora.hindi },     .{ "japanese", corpora.japanese },
+        .{ "korean", corpora.korean },   .{ "mandarin", corpora.mandarin },
+        .{ "russian", corpora.russian }, .{ "source_code", corpora.source_code },
+    }) |entry| {
+        const text = try Profile(entry[1]).generate(allocator, document_bytes);
+        var clusters: usize = 0;
+        var it = zunic.graphemes(text).iterator();
+        while (it.next() != null) clusters += 1;
+        var lines: usize = 0;
+        for (text) |b| {
+            if (b == '\n') lines += 1;
+        }
+        var scalars: usize = 0;
+        var pos: usize = 0;
+        while (pos < text.len) : (scalars += 1) pos += zunic.utf8.step(text[pos..]).len;
+        try output.print(
+            "corpus={s} bytes={d} scalars={d} clusters={d} lines={d} bytes_per_cluster={d:.2} width={d}\n",
+            .{ entry[0], text.len, scalars, clusters, lines, @as(f64, @floatFromInt(text.len)) / @as(f64, @floatFromInt(clusters)), zunic.width(text) },
+        );
+    }
+}
+
+/// Every generated document runs the same operation set as the legacy corpora,
+/// plus a wrap at 80 columns. Case names are prefixed `doc-` so they never
+/// collide with the repeated-seed cases.
+fn runDocumentCorpora(output: *std.Io.Writer, allocator: std.mem.Allocator, target_bytes: usize, io: std.Io) !void {
+    inline for (.{
+        .{ "arabic", corpora.arabic },   .{ "english", corpora.english },
+        .{ "hindi", corpora.hindi },     .{ "japanese", corpora.japanese },
+        .{ "korean", corpora.korean },   .{ "mandarin", corpora.mandarin },
+        .{ "russian", corpora.russian }, .{ "source_code", corpora.source_code },
+    }) |entry| {
+        const name = "doc-" ++ entry[0];
+        const text = try Profile(entry[1]).generate(allocator, document_bytes);
+        try printSamples(output, name, "grapheme", text, target_bytes, graphemeChecksum, io);
+        try printSamples(output, name, "measured", text, target_bytes, measuredChecksum, io);
+        try printSamples(output, name, "width", text, target_bytes, widthChecksum, io);
+        try printSamples(output, name, "line_break", text, target_bytes, lineBreakChecksum, io);
+        try printWrapSamples(output, .{
+            .name = name,
+            .corpus = .{ .name = name, .seed = "", .length = 0 },
+            .max_columns = 80,
+            .overflow = .grapheme,
+        }, text, target_bytes, io);
+    }
 }
 
 fn makeCorpus(allocator: std.mem.Allocator, corpus: Corpus) ![]u8 {
