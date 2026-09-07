@@ -6,7 +6,8 @@ const corpora = @import("corpora.zig");
 // results from earlier harnesses are deliberately not comparable. Version 4
 // adds the `measured` operation; version 3 archives do not contain that row.
 // Version 5 adds the eight profile-generated document corpora.
-const harness_version = "5";
+// Version 6 adds the `terminators` operation.
+const harness_version = "6";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
 const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
@@ -57,6 +58,7 @@ pub fn main(init: std.process.Init) !void {
         try printSamples(output, corpus.name, "measured", text, target_bytes, measuredChecksum, io);
         try printSamples(output, corpus.name, "width", text, target_bytes, widthChecksum, io);
         try printSamples(output, corpus.name, "line_break", text, target_bytes, lineBreakChecksum, io);
+        try printSamples(output, corpus.name, "terminators", text, target_bytes, terminatorChecksum, io);
     }
     for (wrap_cases) |case| try printWrapSamples(output, case, try makeCorpus(allocator, case.corpus), target_bytes, io);
     try runDocumentCorpora(output, allocator, target_bytes, io);
@@ -147,7 +149,7 @@ fn printCorpusStats(output: *std.Io.Writer, allocator: std.mem.Allocator) !void 
     }) |entry| {
         const text = try Profile(entry[1]).generate(allocator, document_bytes);
         var clusters: usize = 0;
-        var it = zunic.graphemes(text).iterator();
+        var it = zunic.text(text).graphemes().iterator();
         while (it.next() != null) clusters += 1;
         var lines: usize = 0;
         for (text) |b| {
@@ -158,7 +160,7 @@ fn printCorpusStats(output: *std.Io.Writer, allocator: std.mem.Allocator) !void 
         while (pos < text.len) : (scalars += 1) pos += zunic.utf8.step(text[pos..]).len;
         try output.print(
             "corpus={s} bytes={d} scalars={d} clusters={d} lines={d} bytes_per_cluster={d:.2} width={d}\n",
-            .{ entry[0], text.len, scalars, clusters, lines, @as(f64, @floatFromInt(text.len)) / @as(f64, @floatFromInt(clusters)), zunic.width(text) },
+            .{ entry[0], text.len, scalars, clusters, lines, @as(f64, @floatFromInt(text.len)) / @as(f64, @floatFromInt(clusters)), zunic.text(text).width() },
         );
     }
 }
@@ -179,6 +181,7 @@ fn runDocumentCorpora(output: *std.Io.Writer, allocator: std.mem.Allocator, targ
         try printSamples(output, name, "measured", text, target_bytes, measuredChecksum, io);
         try printSamples(output, name, "width", text, target_bytes, widthChecksum, io);
         try printSamples(output, name, "line_break", text, target_bytes, lineBreakChecksum, io);
+        try printSamples(output, name, "terminators", text, target_bytes, terminatorChecksum, io);
         try printWrapSamples(output, .{
             .name = name,
             .corpus = .{ .name = name, .seed = "", .length = 0 },
@@ -253,7 +256,7 @@ fn utf8Checksum(text: []const u8) u64 {
     return sum;
 }
 fn graphemeChecksum(text: []const u8) u64 {
-    var it = zunic.graphemes(text).iterator();
+    var it = zunic.text(text).graphemes().iterator();
     var sum: u64 = 0xcbf29ce484222325;
     while (it.next()) |span| {
         sum = mix(sum, span.start.value);
@@ -265,7 +268,7 @@ fn graphemeChecksum(text: []const u8) u64 {
 /// per-cluster columns and renderability. Nothing else in this harness
 /// observes `Graphemes(true)`.
 fn measuredChecksum(text: []const u8) u64 {
-    var it = zunic.graphemes(text).measured().iterator();
+    var it = zunic.text(text).graphemes().measured().iterator();
     var sum: u64 = 0xcbf29ce484222325;
     while (it.next()) |span| {
         sum = mix(sum, span.start.value);
@@ -276,7 +279,7 @@ fn measuredChecksum(text: []const u8) u64 {
     return sum;
 }
 fn widthChecksum(text: []const u8) u64 {
-    return mix(0xcbf29ce484222325, zunic.width(text));
+    return mix(0xcbf29ce484222325, zunic.text(text).width());
 }
 fn lineBreakChecksum(text: []const u8) u64 {
     var it = zunic.line_break.iterator(text);
@@ -287,9 +290,18 @@ fn lineBreakChecksum(text: []const u8) u64 {
     }
     return sum;
 }
+fn terminatorChecksum(text: []const u8) u64 {
+    var it = zunic.text(text).terminators().iterator();
+    var sum: u64 = 0xcbf29ce484222325;
+    while (it.next()) |t| {
+        sum = mix(sum, t.start.value);
+        sum = mix(sum, t.end.value);
+    }
+    return sum;
+}
 const WrapResult = struct { checksum: u64, lines: usize, emitted_bytes: usize };
 fn wrapChecksum(text: []const u8, case: WrapCase) WrapResult {
-    var wrapped = zunic.wrap(text, .{ .max_columns = case.max_columns, .overflow = case.overflow }) catch unreachable;
+    var wrapped = zunic.text(text).wrap(.{ .max_columns = case.max_columns, .overflow = case.overflow }) catch unreachable;
     var it = wrapped.iterator();
     var sum: u64 = 0xcbf29ce484222325;
     var lines: usize = 0;

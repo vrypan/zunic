@@ -25,7 +25,7 @@ fn expectProductionMatchesReference(bytes: []const u8, options: unicode.WrapOpti
     const expected = try reference.collect(std.testing.allocator, bytes, options);
     defer std.testing.allocator.free(expected);
 
-    var actual = (try unicode.wrap(bytes, options)).iterator();
+    var actual = (try unicode.text(bytes).wrap(options)).iterator();
     for (expected) |want| {
         const got = actual.next() orelse return error.TestUnexpectedResult;
         try std.testing.expectEqual(want.start, got.start.value);

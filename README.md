@@ -7,10 +7,21 @@ extended-grapheme segmentation, default Unicode 16.0.0 UAX #14 line-break
 boundaries, and a terminal cell-width policy. Its grapheme and line-break
 implementations pass the official Unicode 16.0.0 conformance fixtures.
 
-Open a lens for the question you have: `zunic.graphemes(bytes)` partitions
-user-visible text, `zunic.wrap(bytes, options)` chooses display lines, and
-`zunic.lines(bytes)` exposes hard-break-delimited lines. Lenses borrow their
-input, do not allocate, and scan only when iterated or counted.
+Open a lens for the question you have. `zunic.text(bytes)` is a view over
+borrowed bytes and its methods are the questions: `.graphemes()` partitions
+user-visible text, `.width()` measures terminal columns, `.wrap(options)`
+chooses display lines, and `.terminators()` locates hard line breaks.
+Lenses borrow their input, do not allocate, and scan only when iterated or
+counted.
+
+> **Strip ANSI escape sequences before using `zunic.text`.**
+> It reads every byte as content, so an escape sequence is measured as the
+> ordinary characters it is made of. `"\x1b[31mred\x1b[0m"` reports a width
+> of 10 rather than 3, and wrapping it to 3 columns yields
+> `"\x1b[31"`, `"mre"`, `"d\x1b[0"`, `"m"` -- breaks land inside the
+> sequence and the output is corrupt. This is a deliberate boundary: `text`
+> makes no attempt to recognise terminal control sequences. A `terminal` lens
+> that does may be added later.
 
 ## Why zunic
 
@@ -76,7 +87,7 @@ const zunic = @import("zunic");
 pub fn main() void {
     const text = "Hello, 👋 world";
 
-    var graphemes = zunic.graphemes(text).measured().iterator();
+    var graphemes = zunic.text(text).graphemes().measured().iterator();
     while (graphemes.next()) |span| {
         const cluster = text[span.start.value..span.end.value];
         std.debug.print("{s}: {} columns\n", .{
@@ -89,12 +100,12 @@ pub fn main() void {
 
 ## Wrapping terminal text
 
-`zunic.wrap` opens greedy display lines by terminal columns. It preserves
+`zunic.text(bytes).wrap(options)` opens greedy display lines by terminal columns. It preserves
 extended grapheme clusters and default UAX #14 break opportunities. Hard line
 separators are consumed rather than included in the returned span.
 
 ```zig
-var lines = (try zunic.wrap(text, .{ .max_columns = 80 })).iterator();
+var lines = (try zunic.text(text).wrap(.{ .max_columns = 80 })).iterator();
 while (lines.next()) |line| {
     const visible = text[line.start.value..line.end.value];
     std.debug.print("{s} ({d} columns)\n", .{ visible, line.columns.value });
@@ -122,8 +133,6 @@ pub fn graphemes(bytes: []const u8) Graphemes
 pub fn wrap(bytes: []const u8, options: WrapOptions) error{InvalidWidth}!Wrapped
 pub fn lines(bytes: []const u8) Wrapped
 pub fn width(bytes: []const u8) usize
-pub fn columnAt(bytes: []const u8, offset: ByteOffset) Column
-pub fn byteAt(bytes: []const u8, column: Column) ColumnHit
 ```
 
 `wrap` returns `error.InvalidWidth` when `max_columns` is zero. The other
@@ -147,7 +156,6 @@ const column = zunic.Column.init(20);
 | `Column` | `value: usize` | Zero-based terminal display column |
 | `Span` | `start: ByteOffset`, `end: ByteOffset` | Half-open borrowed byte range |
 | `MeasuredSpan` | `start`, `end`, `columns: u2`, `renderable: bool` | Grapheme range plus terminal measurement |
-| `ColumnHit` | `cluster: Span`, `column: Column` | Grapheme covering a requested column and its starting column |
 | `Line` | `start: ByteOffset`, `end: ByteOffset`, `columns: Column` | One wrapped display line |
 
 Use `bytes[span.start.value..span.end.value]` to recover the borrowed content.
@@ -157,7 +165,7 @@ drop or replace.
 
 ### Grapheme lenses
 
-`zunic.graphemes(bytes)` applies the default Unicode 16.0.0 extended-grapheme
+`zunic.text(bytes).graphemes()` applies the default Unicode 16.0.0 extended-grapheme
 rules and provides these methods:
 
 | Method | Result | Cost |
@@ -175,7 +183,7 @@ or allocating storage:
 ```zig
 const text = "a界b";
 var storage: [3]zunic.Span = undefined;
-const indexed = zunic.graphemes(text).indexed(&storage);
+const indexed = zunic.text(text).graphemes().indexed(&storage);
 
 const middle = indexed.at(.init(1)).?;
 const cluster = text[middle.start.value..middle.end.value]; // "界"
@@ -184,157 +192,47 @@ const cluster = text[middle.start.value..middle.end.value]; // "界"
 Measurement can be requested before any other lens operation:
 
 ```zig
-const measured = zunic.graphemes(text).measured();
+const measured = zunic.text(text).graphemes().measured();
 const count = measured.count();
 const first = measured.at(.init(0)); // ?zunic.MeasuredSpan
 ```
 
 ### Width and coordinate conversion
 
-`zunic.width(bytes)` returns the terminal-cell width of the complete input.
+`zunic.text(bytes).width()` returns the terminal-cell width of the complete input.
 Width is computed by grapheme cluster so emoji and regional-indicator sequences
 are not counted scalar by scalar. Control characters and malformed bytes have
 no display width under the package policy.
 
-`zunic.columnAt(bytes, offset)` maps a byte offset to a display column. An
-offset inside a multibyte or multi-scalar grapheme maps to that grapheme's
-starting column. An offset at or beyond the end maps to the total width.
+`zunic.text(bytes).terminators()` locates the hard line breaks as byte
+extents. Seven code points terminate a line -- `U+000A` LF, `U+000B` VT,
+`U+000C` FF, `U+000D` CR, `U+0085` NEL, `U+2028` and `U+2029` -- and `\r\n`
+is reported as a single terminator two bytes long.
 
-`zunic.byteAt(bytes, column)` performs the inverse query and returns the whole
-grapheme plus its actual starting column. The distinction matters when the
-requested column lands in the second cell of a wide grapheme:
-
-```zig
-const text = "a界b";
-const hit = zunic.byteAt(text, .init(2));
-
-// Column 2 is the second cell of 界, whose real start is column 1.
-std.debug.assert(hit.column.value == 1);
-std.debug.assert(hit.cluster.start.value == 1);
-```
-
-When the requested column is past the text, `cluster` is an empty span at the
-end and `column` is the total display width. Leading zero-width graphemes map
-to their earliest matching position.
-
-### Wrapping and hard-delimited lines
-
-The wrapping types are:
+Paragraph content is the gaps between them:
 
 ```zig
-pub const Overflow = enum { allow, grapheme };
-
-pub const WrapOptions = struct {
-    max_columns: usize,
-    overflow: Overflow = .grapheme,
-};
-```
-
-`zunic.wrap(bytes, options)` returns a `Wrapped` lens with:
-
-- `.iterator()`, whose `.next()` returns `?zunic.Line`;
-- `.count()`, which scans and counts all returned lines.
-
-The algorithm is greedy: it chooses the last legal Unicode line-break
-opportunity that fits within `max_columns`. With `.overflow = .grapheme`, an
-unbreakable run is split at a grapheme boundary. With `.overflow = .allow`, the
-run remains on an oversized line until a legal opportunity is found.
-
-`zunic.lines(bytes)` has the same `Wrapped` interface but no practical column
-limit. It therefore splits only at mandatory hard line separators. Hard
-separator bytes are consumed and excluded from the returned line span.
-
-Neither operation trims returned spans. Spaces and other non-separator bytes
-remain part of the borrowed line.
-
-### Unicode line-break boundaries
-
-`zunic.line_break` exposes the default, locale-independent Unicode 16.0.0 UAX
-#14 boundary iterator:
-
-```zig
-pub const Opportunity = enum {
-    prohibited,
-    allowed,
-    mandatory,
-};
-
-pub const Boundary = struct {
-    offset: usize,
-    opportunity: Opportunity,
-};
-
-pub fn iterator(bytes: []const u8) Iterator;
-```
-
-Unlike APIs that yield only usable breaks, this iterator returns every scalar
-boundary, including `.prohibited` ones. Non-empty input begins with a
-prohibited boundary at offset zero and ends with a mandatory boundary at
-`bytes.len`; empty input produces one mandatory boundary at offset zero.
-
-```zig
-var boundaries = zunic.line_break.iterator(text);
-while (boundaries.next()) |boundary| {
-    switch (boundary.opportunity) {
-        .prohibited => {},
-        .allowed => std.debug.print("may break at {d}\n", .{boundary.offset}),
-        .mandatory => std.debug.print("must break at {d}\n", .{boundary.offset}),
-    }
+var pos: usize = 0;
+var it = zunic.text(text).terminators().iterator();
+while (it.next()) |t| {
+    const paragraph = text[pos..t.start.value];
+    pos = t.end.value;
+}
+if (pos < text.len) {
+    const paragraph = text[pos..];
 }
 ```
 
-The iterator implements default UAX #14 opportunities. It does not perform
-terminal-width fitting, locale tailoring, or dictionary segmentation for
-complex South East Asian text. Use `zunic.wrap` when the desired result is a
-sequence of display lines rather than the complete boundary stream.
-
-`zunic.line_break.Iterator` is the concrete type returned by `iterator` and
-its user-facing operation is `.next()`. The module also exports `State` and
-`isHardClass` for the package's low-level scanner composition; ordinary callers
-should prefer the boundary iterator rather than depending on machine state.
-
-### Tolerant UTF-8 stepping
-
-`zunic.utf8.step` is the lowest-level public operation:
+There is no `columnAt` or `byteAt`. Both were sums over
+`graphemes().measured()`, so callers write the loop they need:
 
 ```zig
-pub const Step = struct {
-    len: usize,
-    cp: ?u21,
-};
-
-pub fn step(bytes: []const u8) Step;
-```
-
-For a valid leading scalar, `len` is its encoded byte length and `cp` contains
-the code point. For non-empty malformed input, `len` is one and `cp` is null,
-so callers always make progress. Empty input returns `.len = 0` and
-`.cp = null`.
-
-```zig
-var offset: usize = 0;
-while (offset < bytes.len) {
-    const decoded = zunic.utf8.step(bytes[offset..]);
-
-    if (decoded.cp) |cp| {
-        std.debug.print("U+{X}\n", .{cp});
-    } else {
-        std.debug.print("invalid byte at {d}\n", .{offset});
-    }
-    offset += decoded.len;
+var column: usize = 0;
+var it = zunic.text(text).graphemes().measured().iterator();
+while (it.next()) |span| : (column += span.columns) {
+    if (offset < span.end.value) break;
 }
 ```
-
-Higher-level APIs use the same recovery rule. Each invalid byte forms one
-advancing, AL-like fallback scalar for line breaking and contributes no
-terminal columns.
-
-### Diagnostic exports
-
-`zunic.build_options.wrap_fast_path` reports the resolved wrapping fast-path
-selection. `zunic.testing.instrumentedIterator` exposes the wrapping
-work-bound counters used by this package's tests; application code should use
-`zunic.wrap` instead.
 
 ## Development
 

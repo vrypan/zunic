@@ -4,12 +4,12 @@ const unicode = @import("root.zig");
 test "unicode component compiles as an independent root" {
     const step = unicode.utf8.step("x");
     try std.testing.expectEqual(@as(usize, 1), step.len);
-    try std.testing.expectEqual(@as(usize, 2), unicode.width("🇬🇷"));
+    try std.testing.expectEqual(@as(usize, 2), unicode.text("🇬🇷").width());
 }
 
 test "grapheme lens retains byte spans and optional terminal measure" {
     const text = "e\xcc\x81界👩‍👩‍👧‍👦\x00";
-    var it = unicode.graphemes(text).measured().iterator();
+    var it = unicode.text(text).graphemes().measured().iterator();
     while (it.next()) |span| {
         const measured = @import("width.zig").measureCluster(text[span.start.value..span.end.value]);
         try std.testing.expectEqual(measured.columns, span.columns);
@@ -17,55 +17,91 @@ test "grapheme lens retains byte spans and optional terminal measure" {
     }
 }
 
-test "lens coordinates preserve grapheme and column ambiguity" {
-    const text = "\xcc\x81a界b";
-    try std.testing.expectEqual(@as(usize, 4), unicode.width(text));
+test "measured spans carry column and renderability" {
+    const text = "\xcc\x81a\u{754c}b";
+    try std.testing.expectEqual(@as(usize, 4), unicode.text(text).width());
 
-    // Leading zero-width clusters share column zero; `byteAt` selects the
-    // earliest one.  The second cell of 界 is deliberately a straddle.
-    const zero = unicode.byteAt(text, .init(0));
-    try std.testing.expectEqual(@as(usize, 0), zero.cluster.start.value);
-    try std.testing.expectEqual(@as(usize, 0), zero.column.value);
-    const wide = unicode.byteAt(text, .init(2));
-    try std.testing.expectEqual(@as(usize, 3), wide.cluster.start.value);
-    try std.testing.expectEqual(@as(usize, 1), wide.column.value);
-    try std.testing.expect(wide.column.value != 2); // requested column straddles
-
-    // A byte within a cluster maps to that cluster's first column.
-    try std.testing.expectEqual(@as(usize, 1), unicode.columnAt(text, .init(4)).value);
-    const past = unicode.byteAt(text, .init(99));
-    try std.testing.expectEqual(text.len, past.cluster.start.value);
-    try std.testing.expectEqual(@as(usize, 4), past.column.value);
-}
-
-test "ColumnHit carries no policy field" {
-    comptime {
-        if (@hasField(unicode.ColumnHit, "straddled") or @hasField(unicode.ColumnHit, "straddles"))
-            @compileError("ColumnHit derives straddling from requested != column; do not store it");
-    }
+    // A leading combining mark is its own zero-column cluster; the wide
+    // scalar occupies two columns. Callers sum these to locate a column,
+    // which is why `columnAt`/`byteAt` are not part of the surface.
+    var it = unicode.text(text).graphemes().measured().iterator();
+    const first = it.next().?;
+    try std.testing.expectEqual(@as(u2, 0), first.columns);
+    _ = it.next();
+    const wide = it.next().?;
+    try std.testing.expectEqual(@as(u2, 2), wide.columns);
+    try std.testing.expect(wide.renderable);
 }
 
 test "grapheme indexing is caller-owned" {
     var spans: [3]unicode.Span = undefined;
-    const indexed = unicode.graphemes("a界b").indexed(&spans);
+    const indexed = unicode.text("a界b").graphemes().indexed(&spans);
     try std.testing.expectEqual(@as(usize, 3), indexed.count());
     try std.testing.expectEqual(@as(usize, 1), indexed.at(.init(1)).?.start.value);
 }
 
-test "lines is wrapping without a finite column limit" {
-    const text = "a\n界\r\nb";
-    var lines = unicode.lines(text).iterator();
-    var wrapped = (try unicode.wrap(text, .{ .max_columns = std.math.maxInt(usize) })).iterator();
-    while (true) {
-        const left = lines.next();
-        const right = wrapped.next();
-        try std.testing.expectEqual(left != null, right != null);
-        if (left) |line| {
-            const other = right.?;
-            try std.testing.expectEqual(line.start.value, other.start.value);
-            try std.testing.expectEqual(line.end.value, other.end.value);
-            try std.testing.expectEqual(line.columns.value, other.columns.value);
-        } else break;
+test "terminators report every hard break as a byte extent" {
+    const cases = [_]struct { input: []const u8, spans: []const [2]usize }{
+        .{ .input = "a\nb", .spans = &.{.{ 1, 2 }} },
+        .{ .input = "a\x0bb", .spans = &.{.{ 1, 2 }} },
+        .{ .input = "a\x0cb", .spans = &.{.{ 1, 2 }} },
+        .{ .input = "a\rb", .spans = &.{.{ 1, 2 }} },
+        // CRLF is one terminator of length two.
+        .{ .input = "a\r\nb", .spans = &.{.{ 1, 3 }} },
+        .{ .input = "a\u{0085}b", .spans = &.{.{ 1, 3 }} },
+        .{ .input = "a\u{2028}b", .spans = &.{.{ 1, 4 }} },
+        .{ .input = "a\u{2029}b", .spans = &.{.{ 1, 4 }} },
+        // Not terminators: NBSP, and truncated lead bytes.
+        .{ .input = "a\u{00a0}b", .spans = &.{} },
+        .{ .input = "a\xc2", .spans = &.{} },
+        .{ .input = "a\xe2\x80", .spans = &.{} },
+        .{ .input = "a\xe2\x80\xa7b", .spans = &.{} },
+        // Empty input, and terminators at both edges.
+        .{ .input = "", .spans = &.{} },
+        .{ .input = "\n", .spans = &.{.{ 0, 1 }} },
+        .{ .input = "\n\n", .spans = &.{ .{ 0, 1 }, .{ 1, 2 } } },
+        .{ .input = "a\n", .spans = &.{.{ 1, 2 }} },
+    };
+    for (cases) |case| {
+        var it = unicode.text(case.input).terminators().iterator();
+        for (case.spans) |want| {
+            const got = it.next() orelse return error.TestUnexpectedResult;
+            try std.testing.expectEqual(want[0], got.start.value);
+            try std.testing.expectEqual(want[1], got.end.value);
+        }
+        try std.testing.expect(it.next() == null);
+        try std.testing.expectEqual(case.spans.len, unicode.text(case.input).terminators().count());
+    }
+}
+
+test "paragraph content derives from terminators without special cases" {
+    // The recipe documented in plans/021: content is the gaps, and the single
+    // `pos < len` guard is the terminator-versus-separator decision.
+    const cases = [_]struct { input: []const u8, want: []const [2]usize }{
+        .{ .input = "", .want = &.{} },
+        .{ .input = "a", .want = &.{.{ 0, 1 }} },
+        .{ .input = "a\n", .want = &.{.{ 0, 1 }} },
+        .{ .input = "\n", .want = &.{.{ 0, 0 }} },
+        .{ .input = "a\n\nb", .want = &.{ .{ 0, 1 }, .{ 2, 2 }, .{ 3, 4 } } },
+        .{ .input = "a\n\n", .want = &.{ .{ 0, 1 }, .{ 2, 2 } } },
+        .{ .input = "a\r\nb", .want = &.{ .{ 0, 1 }, .{ 3, 4 } } },
+    };
+    for (cases) |case| {
+        var found: [8][2]usize = undefined;
+        var n: usize = 0;
+        var pos: usize = 0;
+        var it = unicode.text(case.input).terminators().iterator();
+        while (it.next()) |t| {
+            found[n] = .{ pos, t.start.value };
+            n += 1;
+            pos = t.end.value;
+        }
+        if (pos < case.input.len) {
+            found[n] = .{ pos, case.input.len };
+            n += 1;
+        }
+        try std.testing.expectEqual(case.want.len, n);
+        for (case.want, found[0..n]) |want, got| try std.testing.expectEqualDeep(want, got);
     }
 }
 

@@ -20,7 +20,7 @@ pub fn collect(allocator: std.mem.Allocator, bytes: []const u8, options: unicode
 
     var boundaries = unicode.line_break.iterator(bytes);
     var boundary = boundaries.next();
-    var graphemes = unicode.graphemes(bytes).measured().iterator();
+    var graphemes = unicode.text(bytes).graphemes().measured().iterator();
     while (graphemes.next()) |span| {
         while (boundary) |value| {
             if (value.offset >= span.end.value) break;
