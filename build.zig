@@ -9,8 +9,20 @@ pub fn build(b: *std.Build) void {
         .aarch64, .x86_64 => false,
         else => true,
     }) @panic("-Dwrap-fast-path=simd requires an aarch64 or x86_64 target");
+    // Working-buffer size for one normalization iterator, in bytes. Each entry
+    // is a scalar plus its combining class packed into a u32, and two entries
+    // are headroom, so 128 bytes admits a run of 30 non-starters. It is a
+    // compile-time module setting, not a runtime allocation: see plan 023.
+    const normalization_buffer_bytes = b.option(
+        usize,
+        "normalization-buffer-bytes",
+        "Working buffer for one normalization iterator; a positive multiple of 32 (default 128)",
+    ) orelse 128;
+    if (normalization_buffer_bytes == 0 or normalization_buffer_bytes % 32 != 0)
+        @panic("-Dnormalization-buffer-bytes must be a positive multiple of 32");
     const build_options = b.addOptions();
     build_options.addOption(WrapFastPath, "wrap_fast_path", wrap_fast_path);
+    build_options.addOption(usize, "normalization_buffer_bytes", normalization_buffer_bytes);
 
     const zunic = b.addModule("zunic", .{
         .root_source_file = b.path("src/root.zig"),
@@ -25,6 +37,7 @@ pub fn build(b: *std.Build) void {
         "src/wrap_regression_test.zig",
         "src/scan_test.zig",
         "src/word_test.zig",
+        "src/normalization_test.zig",
         "src/line_break.zig",
         "src/utf8.zig",
     };
@@ -40,6 +53,25 @@ pub fn build(b: *std.Build) void {
         test_step.dependOn(&run_test.step);
         if (std.mem.eql(u8, root, "src/line_break.zig")) transition_step.dependOn(&run_test.step);
     }
+
+    // Keep the >u16 counter regression in the normal gate without running
+    // the small-buffer stress fixtures with a quarter-megabyte run limit.
+    const large_normalization_options = b.addOptions();
+    large_normalization_options.addOption(WrapFastPath, "wrap_fast_path", wrap_fast_path);
+    large_normalization_options.addOption(usize, "normalization_buffer_bytes", 262176);
+    const large_normalization_mod = b.createModule(.{
+        .root_source_file = b.path("src/normalization_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    large_normalization_mod.addImport("build_options", large_normalization_options.createModule());
+    const large_normalization_test = b.addRunArtifact(b.addTest(.{
+        .root_module = large_normalization_mod,
+        .filters = &.{"large configured runs"},
+    }));
+    test_step.dependOn(&large_normalization_test.step);
+    b.step("test-normalization-large", "Test normalization counters beyond u16 capacity")
+        .dependOn(&large_normalization_test.step);
 
     const regression_mod = b.createModule(.{
         .root_source_file = b.path("src/wrap_regression_test.zig"),

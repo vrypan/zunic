@@ -19,6 +19,7 @@ pub const utf8 = @import("utf8.zig");
 const text_view = @import("text.zig");
 const wrap_engine = @import("wrap.zig");
 pub const line_break = @import("line_break.zig");
+const normalization = @import("normalization.zig");
 
 pub const ByteOffset = text_view.ByteOffset;
 pub const Column = text_view.Column;
@@ -35,6 +36,13 @@ pub const Graphemes = text_view.Graphemes;
 pub const WordBound = text_view.WordBound;
 pub const WordBounds = text_view.WordBounds;
 pub const WordBoundIterator = text_view.WordBoundIterator;
+pub const Form = normalization.Form;
+pub const Equivalence = normalization.Equivalence;
+pub const NormalizationIterator = normalization.Iterator;
+pub const normalize = normalization.normalize;
+pub const normalizedLenBound = normalization.normalizedLenBound;
+pub const NormalizationError = normalization.Error;
+pub const NormalizationWriteError = normalization.WriteError;
 pub const MeasuredGraphemes = text_view.MeasuredGraphemes;
 
 /// Open a text view. Borrowed and zero-cost: no scanning happens until a

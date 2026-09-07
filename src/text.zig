@@ -4,6 +4,7 @@
 //! open it. The view never allocates, and opening it does no scanning.
 const grapheme_engine = @import("grapheme.zig");
 const width_engine = @import("width.zig");
+const normalization = @import("normalization.zig");
 const word_engine = @import("word.zig");
 const wrap_engine = @import("wrap.zig");
 
@@ -141,6 +142,29 @@ pub const Text = struct {
     /// Default UAX #29 word boundaries, as a partition of the bytes.
     pub fn wordBounds(self: Text) WordBounds {
         return .{ .bytes = self.bytes };
+    }
+
+    /// Whether these bytes and `other` are canonically equivalent -- the same
+    /// text, however it happens to be encoded. `"caf\u{00E9}"` and
+    /// `"cafe\u{0301}"` are equal; `"\u{FB01}"` and `"fi"` are not, being
+    /// compatibility-equivalent only.
+    ///
+    /// Decided in lockstep without normalizing either side into a buffer, so
+    /// it allocates nothing and needs no form: canonical equivalence is
+    /// form-independent.
+    pub fn eql(self: Text, other: []const u8, comptime how: normalization.Equivalence) normalization.Error!bool {
+        return normalization.eql(self.bytes, other, how);
+    }
+
+    /// Whether these bytes are already in `form`.
+    ///
+    /// Short-circuits on a decisive `false`, so it is not a whole-input
+    /// validator; a `true` answer does mean the whole input was examined.
+    /// `NFC_QC` is tri-valued and a Maybe costs real work to settle, so an
+    /// input full of composable marks is slower than one that is plainly
+    /// already normalized.
+    pub fn isNormalized(self: Text, comptime form: normalization.Form) normalization.Error!bool {
+        return normalization.isNormalized(self.bytes, form);
     }
 
     /// Greedy display lines within a finite column limit.

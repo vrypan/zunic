@@ -8,7 +8,8 @@ const corpora = @import("corpora.zig");
 // Version 5 adds the eight profile-generated document corpora.
 // Version 6 adds the `terminators` operation.
 // Version 7 adds the `word_bounds` operation and its dedicated corpora.
-const harness_version = "7";
+// Version 8 adds the normalization operations and their dedicated corpora.
+const harness_version = "8";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
 const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
@@ -31,6 +32,26 @@ const word_corpora = [_]Corpus{
     .{ .name = "word-han", .seed = "\u{65E5}\u{672C}\u{8A9E}\u{306E}\u{6587}\u{7AE0}\u{3068}\u{6F22}\u{5B57}\u{3092}\u{6E2C}\u{5B9A}\u{3057}\u{307E}\u{3059}\u{3002} ", .length = 4096 },
     .{ .name = "word-folded", .seed = "a.\u{0308}\u{0308}\u{0308}b 1,\u{0345}\u{0345}2 x\u{200D}\u{1F600} ", .length = 4096 },
     .{ .name = "word-malformed", .seed = "ok \xff \xc0\x80 a.\xffb 1,\xff2 text ", .length = 4096 },
+};
+
+/// Normalization only. `nfc-composed` is already NFC and should take the
+/// cheapest path through `is_nfc`; `nfc-maybe` is full of NFC_QC=Maybe marks
+/// that the quick check cannot settle by itself, which is the whole reason
+/// `isNormalized` is not just a table lookup. `adversarial` needs a canonical
+/// reordering on every run, and `at-limit` sits exactly on the configured
+/// non-starter limit.
+const normalization_corpora = [_]Corpus{
+    .{ .name = "nfc-composed", .seed = "Caf\u{00E9} na\u{00EF}ve r\u{00E9}sum\u{00E9} \u{00C5}ngstr\u{00F6}m ", .length = 4096 },
+    .{ .name = "nfd-decomposed", .seed = "Cafe\u{0301} nai\u{0308}ve re\u{0301}sume\u{0301} A\u{030A}ngstro\u{0308}m ", .length = 4096 },
+    .{ .name = "nfc-maybe", .seed = "e\u{0301}a\u{0300}o\u{0308}u\u{0302}i\u{0303}n\u{0327}c\u{0301} ", .length = 4096 },
+    // Already NFC *and* full of NFC_QC=Maybe marks: every one of them has to
+    // be settled, and every one settles to "did not compose", so `is_nfc`
+    // answers true only after doing the work. `nfc-maybe` above is NFD, so it
+    // short-circuits to false on its first mark and measures nothing.
+    .{ .name = "nfc-maybe-true", .seed = "z\u{0300}q\u{0300}v\u{0300}w\u{0303}x\u{0300}j\u{0300} ", .length = 4096 },
+    .{ .name = "adversarial", .seed = "a\u{0301}\u{0327}\u{0316}\u{0300}\u{031D}\u{0302} ", .length = 4096 },
+    .{ .name = "hangul", .seed = "\u{1111}\u{1171}\u{11B6}\u{1100}\u{1161}\u{11A8}\u{D4DB}\u{AC01} ", .length = 4096 },
+    .{ .name = "ascii", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 4096 },
 };
 
 const wrap_cases = [_]WrapCase{
@@ -77,6 +98,15 @@ pub fn main(init: std.process.Init) !void {
     for (word_corpora) |corpus| {
         const text = try makeCorpus(allocator, corpus);
         try printSamples(output, corpus.name, "word_bounds", text, target_bytes, wordChecksum, io);
+    }
+    for (normalization_corpora) |corpus| {
+        const name = try std.fmt.allocPrint(allocator, "norm-{s}", .{corpus.name});
+        const text = try makeCorpus(allocator, corpus);
+        try printSamples(output, name, "nfc", text, target_bytes, nfcChecksum, io);
+        try printSamples(output, name, "nfd", text, target_bytes, nfdChecksum, io);
+        try printSamples(output, name, "nfc_iterate", text, target_bytes, nfcIterateChecksum, io);
+        try printSamples(output, name, "is_nfc", text, target_bytes, isNfcChecksum, io);
+        try printSamples(output, name, "eql", text, target_bytes, eqlChecksum, io);
     }
     for (wrap_cases) |case| try printWrapSamples(output, case, try makeCorpus(allocator, case.corpus), target_bytes, io);
     try runDocumentCorpora(output, allocator, target_bytes, io);
@@ -318,6 +348,54 @@ fn terminatorChecksum(text: []const u8) u64 {
     }
     return sum;
 }
+/// Normalization can legitimately fail on a corpus -- `malformed` is not
+/// UTF-8, and an over-long run is rejected by design -- so the error is folded
+/// into the checksum instead of ending the run. A peer that starts failing
+/// where it used to succeed changes the checksum and is caught.
+var normalization_buffer: [512 * 1024]u8 = undefined;
+
+fn failureCode(err: anyerror) u64 {
+    return switch (err) {
+        error.InvalidUtf8 => 1,
+        error.SequenceTooLong => 2,
+        error.NoSpace => 3,
+        else => 4,
+    };
+}
+
+fn writeChecksum(text: []const u8, comptime form: zunic.Form) u64 {
+    const written = zunic.normalize(text, form).writeTo(&normalization_buffer) catch |err|
+        return mix(0xcbf29ce484222325, failureCode(err));
+    var sum: u64 = 0xcbf29ce484222325;
+    for (written) |byte| sum = mix(sum, byte);
+    return mix(sum, written.len);
+}
+fn nfcChecksum(text: []const u8) u64 {
+    return writeChecksum(text, .nfc);
+}
+fn nfdChecksum(text: []const u8) u64 {
+    return writeChecksum(text, .nfd);
+}
+/// Scalar-at-a-time traversal, with no encoding and no destination buffer.
+fn nfcIterateChecksum(text: []const u8) u64 {
+    var it = zunic.normalize(text, .nfc);
+    var sum: u64 = 0xcbf29ce484222325;
+    while (it.next() catch |err| return mix(sum, failureCode(err))) |cp| sum = mix(sum, cp);
+    return sum;
+}
+fn isNfcChecksum(text: []const u8) u64 {
+    const answer = zunic.text(text).isNormalized(.nfc) catch |err|
+        return mix(0xcbf29ce484222325, failureCode(err));
+    return mix(0xcbf29ce484222325, @intFromBool(answer));
+}
+/// Comparing a corpus with itself: the case that has to traverse both operands
+/// to the end rather than stopping at the first difference.
+fn eqlChecksum(text: []const u8) u64 {
+    const answer = zunic.text(text).eql(text, .canonical) catch |err|
+        return mix(0xcbf29ce484222325, failureCode(err));
+    return mix(0xcbf29ce484222325, @intFromBool(answer));
+}
+
 /// All three item fields, so a boundary shift and a flag error are both
 /// visible in the checksum.
 fn wordChecksum(text: []const u8) u64 {

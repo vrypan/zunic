@@ -2,10 +2,12 @@ const std = @import("std");
 const unicode = @import("root.zig");
 const grapheme = @import("grapheme.zig");
 const word = @import("word.zig");
+const normalization = @import("normalization.zig");
 
 const fixture = @embedFile("data/GraphemeBreakTest-16.0.0.txt");
 const line_break_fixture = @embedFile("data/LineBreakTest-16.0.0.txt");
 const word_fixture = @embedFile("data/WordBreakTest-16.0.0.txt");
+const normalization_fixture = @embedFile("data/NormalizationTest-16.0.0.txt");
 
 test "Unicode 16.0.0 GraphemeBreakTest" {
     var lines = std.mem.splitScalar(u8, fixture, '\n');
@@ -250,4 +252,112 @@ test "Unicode 16.0.0 WordBreakTest" {
         cases += 1;
     }
     try std.testing.expectEqual(@as(usize, 1826), cases);
+}
+
+/// One `;`-separated column of a NormalizationTest case, encoded as UTF-8.
+const Column = struct {
+    bytes: [128]u8,
+    len: usize,
+
+    fn slice(self: *const Column) []const u8 {
+        return self.bytes[0..self.len];
+    }
+};
+
+fn parseColumn(field: []const u8) !Column {
+    var column: Column = .{ .bytes = undefined, .len = 0 };
+    var tokens = std.mem.tokenizeAny(u8, field, " \t\r");
+    while (tokens.next()) |token| {
+        const cp = std.fmt.parseInt(u21, token, 16) catch return error.TestUnexpectedResult;
+        column.len += std.unicode.utf8Encode(cp, column.bytes[column.len..]) catch return error.TestUnexpectedResult;
+    }
+    return column;
+}
+
+fn expectNormalizes(input: []const u8, comptime form: normalization.Form, expected: []const u8) !void {
+    var buffer: [512]u8 = undefined;
+    const produced = normalization.normalize(input, form).writeTo(&buffer) catch |err| {
+        std.debug.print("normalize({s}) failed: {t}\n", .{ @tagName(form), err });
+        return err;
+    };
+    try std.testing.expectEqualSlices(u8, expected, produced);
+
+    // Scalar iteration and writeTo must agree; the fixture is the only place
+    // that exercises both over twenty thousand real cases.
+    var iterated: [512]u8 = undefined;
+    var len: usize = 0;
+    var it = normalization.normalize(input, form);
+    while (try it.next()) |cp| len += try std.unicode.utf8Encode(cp, iterated[len..]);
+    try std.testing.expectEqualSlices(u8, expected, iterated[0..len]);
+
+    // Everything the fixture produces must fit the published size bound.
+    try std.testing.expect(produced.len <= try normalization.normalizedLenBound(input.len, form));
+}
+
+test "Unicode 16.0.0 NormalizationTest" {
+    var lines = std.mem.splitScalar(u8, normalization_fixture, '\n');
+    var cases: usize = 0;
+    var assertions: usize = 0;
+    // Part 1 lists every code point with a non-trivial normalization; every
+    // scalar absent from it must be unchanged by both canonical forms.
+    var in_part1 = false;
+    var part1_seen = std.StaticBitSet(0x110000).initEmpty();
+    while (lines.next()) |raw_line| {
+        const line = raw_line[0 .. std.mem.indexOfScalar(u8, raw_line, '#') orelse raw_line.len];
+        const trimmed = std.mem.trim(u8, line, " \t\r");
+        if (trimmed.len == 0) continue;
+        if (trimmed[0] == '@') {
+            in_part1 = std.mem.startsWith(u8, trimmed, "@Part1");
+            continue;
+        }
+
+        var fields = std.mem.splitScalar(u8, trimmed, ';');
+        const c1 = try parseColumn(fields.next() orelse return error.TestUnexpectedResult);
+        const c2 = try parseColumn(fields.next() orelse return error.TestUnexpectedResult);
+        const c3 = try parseColumn(fields.next() orelse return error.TestUnexpectedResult);
+        const c4 = try parseColumn(fields.next() orelse return error.TestUnexpectedResult);
+        const c5 = try parseColumn(fields.next() orelse return error.TestUnexpectedResult);
+        cases += 1;
+
+        if (in_part1) {
+            const decoded = std.unicode.utf8Decode(c1.slice()) catch return error.TestUnexpectedResult;
+            part1_seen.set(decoded);
+        }
+
+        // NFC(c1) = NFC(c2) = NFC(c3) = c2
+        for ([_]*const Column{ &c1, &c2, &c3 }) |source| {
+            try expectNormalizes(source.slice(), .nfc, c2.slice());
+            assertions += 1;
+        }
+        // NFC(c4) = NFC(c5) = c4
+        for ([_]*const Column{ &c4, &c5 }) |source| {
+            try expectNormalizes(source.slice(), .nfc, c4.slice());
+            assertions += 1;
+        }
+        // NFD(c1) = NFD(c2) = NFD(c3) = c3
+        for ([_]*const Column{ &c1, &c2, &c3 }) |source| {
+            try expectNormalizes(source.slice(), .nfd, c3.slice());
+            assertions += 1;
+        }
+        // NFD(c4) = NFD(c5) = c5
+        for ([_]*const Column{ &c4, &c5 }) |source| {
+            try expectNormalizes(source.slice(), .nfd, c5.slice());
+            assertions += 1;
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 19965), cases);
+
+    // The fixture header's own invariant: any scalar missing from Part 1 is
+    // its own NFC and NFD.
+    var encoded: [4]u8 = undefined;
+    var cp: u21 = 0;
+    while (cp < 0x110000) : (cp += 1) {
+        if (cp >= 0xD800 and cp <= 0xDFFF) continue;
+        if (part1_seen.isSet(cp)) continue;
+        const len = try std.unicode.utf8Encode(cp, &encoded);
+        try expectNormalizes(encoded[0..len], .nfc, encoded[0..len]);
+        try expectNormalizes(encoded[0..len], .nfd, encoded[0..len]);
+        assertions += 2;
+    }
+    try std.testing.expect(assertions > 2_000_000);
 }

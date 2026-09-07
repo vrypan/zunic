@@ -4,9 +4,10 @@ Allocation-free Unicode primitives for Zig terminal applications.
 
 The package currently provides tolerant UTF-8 stepping, Unicode 16.0.0
 extended-grapheme segmentation, default Unicode 16.0.0 UAX #14 line-break
-boundaries, default Unicode 16.0.0 UAX #29 word boundaries, and a terminal
-cell-width policy. Its grapheme, line-break and word implementations pass the
-official Unicode 16.0.0 conformance fixtures.
+boundaries, default Unicode 16.0.0 UAX #29 word boundaries, Unicode 16.0.0
+UAX #15 canonical normalization, and a terminal cell-width policy. Its
+grapheme, line-break, word and normalization implementations pass the official
+Unicode 16.0.0 conformance fixtures.
 
 Open the text view with `zunic.text(bytes)`. It borrows its bytes,
 and its methods are the questions: `.graphemes()` partitions
@@ -35,9 +36,9 @@ consumed.
   generated into the source tree, so there is no build-time download,
   code generation step, or C library to link.
 - **Conformance-tested, not hand-tuned.** `zig build test` runs the
-  official Unicode 16.0.0 `GraphemeBreakTest`, `LineBreakTest` and
-  `WordBreakTest` fixtures, embedded in the repository, over every case they
-  define.
+  official Unicode 16.0.0 `GraphemeBreakTest`, `LineBreakTest`,
+  `WordBreakTest` and `NormalizationTest` fixtures, embedded in the
+  repository, over every case they define.
 - **Tolerant.** Malformed UTF-8 never errors and never
   panics. An invalid byte is consumed as one span with defined fallback
   properties, so a terminal reading arbitrary bytes keeps making
@@ -146,10 +147,15 @@ pub const Text = struct {
     pub fn wrap(self: Text, options: WrapOptions) error{InvalidWidth}!Wrapped;
     pub fn terminators(self: Text) Terminators;
     pub fn wordBounds(self: Text) WordBounds;
+
+    pub fn eql(self: Text, other: []const u8, comptime how: Equivalence)
+        error{ InvalidUtf8, SequenceTooLong }!bool;
+    pub fn isNormalized(self: Text, comptime form: Form)
+        error{ InvalidUtf8, SequenceTooLong }!bool;
 };
 ```
 
-The view keeps the interpretation and the borrowed input together. Its five
+The view keeps the interpretation and the borrowed input together. Its
 questions use specialized scans: asking for width does not materialize
 grapheme spans, and finding terminators does not invoke the wrapping engine.
 Only `wrap` returns an error, and only when `max_columns` is zero. Malformed
@@ -342,6 +348,117 @@ next character WB4 does not fold away, and the run of folded characters between
 them can be arbitrarily long; each such run is crossed at most once, so a
 complete traversal decodes fewer than two scalars per input scalar.
 
+### Canonical normalization
+
+`zunic` implements **Unicode 16.0 Normalization Forms C and D** (UAX #15),
+passing every case of the official `NormalizationTest-16.0.0.txt`.
+
+**Only the canonical forms.** There is no NFKC or NFKD, and `Form` and
+`Equivalence` have no values for them, so the compiler rejects the request
+rather than answering it wrongly. This matters: `"\u{FB01}"` and `"fi"` are
+*compatibility*-equivalent but **not** canonically equivalent, and a caller who
+assumes otherwise gets silently wrong results in search and deduplication.
+
+Two questions hang off the view, and both are allocation-free:
+
+```zig
+const same = try zunic.text("caf\u{00E9}").eql("cafe\u{0301}", .canonical); // true
+const done = try zunic.text("caf\u{00E9}").isNormalized(.nfc);              // true
+```
+
+`eql` compares two NFD traversals in lockstep without materializing either
+form, and takes no `Form`: canonical equivalence is form-independent, since
+`NFD(a) == NFD(b)` exactly when `NFC(a) == NFC(b)`.
+
+`isNormalized` resolves `NFC_QC`'s tri-valued `Maybe` internally rather than
+leaking a third state into the API. A `Maybe` costs real work to settle, so
+text full of composable marks is slower than text that is plainly already
+normalized.
+
+Producing normalized bytes is a top-level iterator, because it makes new
+scalars rather than spans into the caller's input:
+
+```zig
+pub const Form = enum { nfc, nfd };
+pub const Equivalence = enum { canonical };
+
+pub fn normalize(bytes: []const u8, comptime form: Form) NormalizationIterator(form);
+pub fn normalizedLenBound(input_len: usize, comptime form: Form) error{Overflow}!usize;
+
+// On the iterator:
+pub fn next(self: *Self) error{ InvalidUtf8, SequenceTooLong }!?u21;
+pub fn writeTo(self: Self, buffer: []u8)
+    error{ NoSpace, InvalidUtf8, SequenceTooLong }![]u8;
+```
+
+```zig
+const capacity = try zunic.normalizedLenBound(input.len, .nfc);
+// caller supplies a buffer of at least `capacity` bytes
+const output = try zunic.normalize(input, .nfc).writeTo(buffer);
+```
+
+`normalizedLenBound` is checked `len * 3`, and three is achieved, not padded:
+`U+0390` decomposes from two bytes to six, a Hangul LVT syllable from three to
+nine, and NFC reaches it too: `U+1D160` decomposes into three supplementary
+musical symbols (`U+1D158 U+1D165 U+1D16E`), growing from four bytes to twelve.
+Composition exclusions prevent these symbols from recomposing. The generator
+verifies that eligible compositions do not increase UTF-8 byte length, so the
+NFD bound also bounds NFC.
+
+Sufficient capacity rules out `NoSpace` and nothing else. `writeTo` takes the
+iterator by value, so a temporary chains and a stored one is left where it was,
+resuming from its own position rather than the start of the input.
+
+#### The combining-sequence limit
+
+The working buffer is inline and fixed at compile time, so a combining sequence
+longer than it holds is **rejected with `error.SequenceTooLong`** -- never
+truncated, never silently reordered, and never quietly declared equal to
+something else. The default 128 bytes admits a run of **30 non-starters**,
+counted after full canonical decomposition:
+
+```zig
+const zunic = b.dependency("zunic", .{ .@"normalization-buffer-bytes" = @as(usize, 256) });
+```
+
+The value must be a positive multiple of 32; 32, 64, 128 and 256 bytes give
+limits of 6, 14, 30 and 62. This is zunic's resource limit, not the Stream-Safe
+Text Format of UAX #15 section 13, which counts after NFKD; valid Unicode
+permits arbitrarily long combining sequences. It does not restrict the grapheme
+iterator, which has no such limit.
+
+#### Errors
+
+Normalization is the one part of zunic that is **strict about malformed
+UTF-8**. An invalid encoding is `error.InvalidUtf8`: never a replacement
+character, never a skipped byte, so two different invalid inputs cannot compare
+equal by both decaying to `U+FFFD`. A validly encoded `U+FFFD` is ordinary
+input. Grapheme, word, width, wrapping and `utf8.step` keep their tolerant
+recovery.
+
+The four errors mean different things, and only one of them is worth retrying:
+
+| error | cause | fix |
+| --- | --- | --- |
+| `NoSpace` | destination too small | retry with `normalizedLenBound` bytes |
+| `Overflow` | `len * 3` exceeds `usize` | nothing; the input cannot be sized |
+| `SequenceTooLong` | run past the configured limit | raise `normalization-buffer-bytes`, or reject the input |
+| `InvalidUtf8` | the bytes are not UTF-8 | fix the input |
+
+On any error the destination holds a partial result, and the bytes after the
+written prefix are unchanged. An iterator that has failed stays failed and
+returns the same error forever. Normalization runs one combining run ahead of
+its output -- a starter cannot be emitted until you know whether a following
+mark reorders before it or composes into it -- so a failure can preempt the run
+still being accumulated: `"ab\xff"` reports `InvalidUtf8` having yielded only
+`a`. Everything actually returned is correct.
+
+Both queries short-circuit. A decisive `false` may leave the rest of the input
+unread, so neither is a whole-input validator; a `true` answer does mean the
+whole input was examined and accepted. Once either query encounters
+`InvalidUtf8` or `SequenceTooLong`, the error wins over any boolean it might
+otherwise have returned at that point.
+
 ### Unicode line-break boundaries
 
 `zunic.line_break` is the low-level default, locale-independent Unicode 16.0
@@ -441,10 +558,12 @@ The Unicode tables are generated into the source tree and committed, so
 building needs no Python. Regenerating them does:
 
 ```sh
-python3 src/tools/generate-properties.py       # src/properties.zig
-python3 src/tools/generate-word-properties.py  # src/word_properties.zig
-python3 src/tools/test-properties.py           # verify, all 1,114,112 points
-python3 src/tools/test-word-properties.py      # verify, all 1,114,112 points
+python3 src/tools/generate-properties.py                # src/properties.zig
+python3 src/tools/generate-word-properties.py           # src/word_properties.zig
+python3 src/tools/generate-normalization-properties.py  # src/normalization_properties.zig
+python3 src/tools/test-properties.py                    # verify, all 1,114,112 points
+python3 src/tools/test-word-properties.py               # verify, all 1,114,112 points
+python3 src/tools/test-normalization-properties.py      # verify, all 1,114,112 points
 ```
 
 Each checker re-derives every fact from the pinned UCD files and decodes the
