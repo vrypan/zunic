@@ -104,6 +104,20 @@ test "cluster spans carry the same measure a standalone measurement reports" {
         // emoji ZWJ sequence and a skin-tone modifier sequence.
         "\u{1f469}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f466}",
         "\u{1f44b}\u{1f3ff}",
+        // Controls: C0, DEL, and C1 controls that must KEEP their column --
+        // C1 shares gcb=.control with C0 but is deliberately not skipped.
+        "\x00",
+        "\x7f",
+        "\u{0080}",
+        "\u{009f}",
+        "a\u{0085}b",
+        // Format and separator characters that are gcb Control but width 0.
+        "\u{00ad}",
+        "\u{200b}",
+        "\u{2028}",
+        "\u{2029}",
+        // An unassigned code point with Extended_Pictographic.
+        "\u{1fc00}",
         // malformed bytes, alone and embedded.
         "\xff",
         "\xc0\x80",

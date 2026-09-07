@@ -14,27 +14,18 @@ pub fn codepointWidth(cp: u21) u2 {
     return scalar.codepointWidth(cp);
 }
 
+/// One definition of the policy, shared with the grapheme engine's in-pass
+/// accumulator so a standalone measurement and a span can never drift apart.
 pub fn measureCluster(bytes: []const u8) Measure {
     var tokens = scalar.iterator(bytes);
-    var columns: usize = 0;
-    var has_base = false;
-    var has_pictograph = false;
-    var has_ri = false;
-    while (tokens.next()) |token| {
-        const cp = token.codepoint orelse continue;
-        if (cp < 0x20 or cp == 0x7f) continue;
-        const w = token.cell_width;
-        if (w != 0) {
-            has_base = true;
-            columns += w;
-        }
-        if (token.grapheme.extended_pictographic) has_pictograph = true;
-        if (cp >= 0x1f1e6 and cp <= 0x1f1ff) has_ri = true;
-    }
-    if (!has_base) return .{ .columns = 0, .renderable = false };
-    if (has_pictograph or has_ri) return .{ .columns = 2, .renderable = true };
-    if (columns > 2) return .{ .columns = 1, .renderable = false };
-    return .{ .columns = @intCast(columns), .renderable = true };
+    var measure = grapheme.ClusterMeasure{};
+    while (tokens.next()) |token| measure.add(token);
+    return switch (measure.finish()) {
+        0 => .{ .columns = 0, .renderable = false },
+        1 => .{ .columns = 1, .renderable = true },
+        2 => .{ .columns = 2, .renderable = true },
+        else => .{ .columns = 1, .renderable = false },
+    };
 }
 
 /// Width after terminal filtering. Invalid bytes and control characters are

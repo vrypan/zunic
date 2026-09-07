@@ -10,6 +10,7 @@ checked in; the sources are not, and a normal build never runs this script.
 """
 import collections
 import pathlib
+import subprocess
 import sys
 import unicodedata
 
@@ -93,6 +94,9 @@ def main():
             emit_table(out, "lines", p["lines"], "u32")
             out.write("};\n\n")
         out.write("pub const names = [_][]const u8{ " + ", ".join(f'"{n}"' for n in NAMES) + " };\n")
+    # Emit canonical formatting so `zig fmt --check` passes on a fresh
+    # regeneration without a manual follow-up step.
+    subprocess.run(["zig", "fmt", str(OUT)], check=True, stdout=subprocess.DEVNULL)
     print(f"wrote {OUT}")
     for name in NAMES:
         p = profiles[name]

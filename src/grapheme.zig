@@ -154,6 +154,11 @@ pub const ClusterMeasure = struct {
     has_pictograph: bool = false,
     has_ri: bool = false,
 
+    /// Regional indicators are exactly `gcb == .regional_indicator`, checked
+    /// over all 1,114,112 code points with zero mismatches, so that range
+    /// compare is a property bit. The C0/DEL skip cannot be widened to the GCB
+    /// control class: 3804 code points share that class with width 1, C1
+    /// controls among them, and they must keep their column.
     pub fn add(self: *ClusterMeasure, token: scalar.Token) void {
         const cp = token.codepoint orelse return;
         if (cp < 0x20 or cp == 0x7f) return;
@@ -162,7 +167,7 @@ pub const ClusterMeasure = struct {
             self.columns += token.cell_width;
         }
         if (token.grapheme.extended_pictographic) self.has_pictograph = true;
-        if (cp >= 0x1f1e6 and cp <= 0x1f1ff) self.has_ri = true;
+        if (token.grapheme.gcb == .regional_indicator) self.has_ri = true;
     }
 
     pub fn finish(self: ClusterMeasure) u3 {
