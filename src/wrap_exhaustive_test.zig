@@ -1,11 +1,22 @@
 //! Opt-in exhaustive wrapping sweep: `zig build wrap-exhaustive`.
 //!
-//! Same differential check as the regression suite, over the whole ASCII
-//! fast-path alphabet: every accepted punctuation character, plus 0x0B and
-//! 0x0C (line-break class BK, which `\n` (LF) and `\r` (CR) do not
-//! represent). Kept out of `zig build test` because 20 characters make the
-//! sweep far too slow for the default suite; the depth is reduced to 4 to
-//! keep even this run tractable.
+//! Same differential check as the regression suite, driven from one
+//! representative per distinct UAX #14 class rather than from the ASCII
+//! fast-path alphabet alone. Bytes inside that alphabet exercise the fast
+//! path; bytes outside it demote the input to the general path, so the sweep
+//! spans both and keeps covering whichever bytes the alphabet admits.
+//!
+//! It is built this way because the previous version enumerated exactly the
+//! accepted alphabet and therefore could not see any byte a widening would
+//! add. Plan 020's spike widened the alphabet and this sweep, in that order,
+//! and the wider sweep immediately found two defects the narrow one passed:
+//! a hyphen after a space (UAX #14 LB20a) and a zero-column byte on an
+//! already-overflowing line. Both were in the spike, which was rejected on
+//! performance and reverted; the coverage is kept so a future attempt cannot
+//! reintroduce them silently.
+//!
+//! Kept out of `zig build test` because the sweep is far too slow for the
+//! default suite; the depth is 4 to keep even this run tractable.
 const std = @import("std");
 const unicode = @import("zunic");
 const reference = @import("wrap_reference.zig");
@@ -25,11 +36,17 @@ fn expectProductionMatchesReference(bytes: []const u8, options: unicode.WrapOpti
     try std.testing.expect(actual.next() == null);
 }
 
-test "ASCII paragraph fast path matches reference over the full alphabet" {
+test "wrapping matches the reference across UAX #14 class representatives" {
     const alphabet = [_]u8{
-        'a', 'Z', '7', ' ', '\n', '\r', 0x0B, 0x0C,
-        '.', ',', ';', ':', '\'', '"',  '#',  '&',
-        '*', '=', '@', '_',
+        // AL, NU, SP and the hard terminators.
+        'a', 'Z', '7', ' ',  '\n', '\r', 0x0B, 0x0C,
+        // IS, QU, and an AL punctuation representative.
+        '.', ',', '"', '\'', '_',
+        // Classes the fast-path alphabet does not admit today, so these
+        // combinations run the general path: BA-hyphen, OP, CP, SY, EX, PO,
+        // PR, and tab -- the one byte that measures zero columns.
+         '-',  '(',  ')',
+        '/', '!', '%', '$',  0x09,
     };
     var buffer: [4]u8 = undefined;
     for (0..5) |length| {
