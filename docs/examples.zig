@@ -1,0 +1,95 @@
+const std = @import("std");
+const zunic = @import("zunic");
+
+test "docs: measured graphemes" {
+    const bytes = "e\u{0301}界";
+    var it = zunic.text(bytes).graphemes().measured().iterator();
+    const accent = it.next().?;
+    try std.testing.expectEqualStrings("e\u{0301}", bytes[accent.start.value..accent.end.value]);
+    try std.testing.expectEqual(@as(u2, 1), accent.columns);
+    const ideograph = it.next().?;
+    try std.testing.expectEqual(@as(u2, 2), ideograph.columns);
+    try std.testing.expect(it.next() == null);
+}
+
+test "docs: width" {
+    try std.testing.expectEqual(@as(usize, 3), zunic.text("e\u{0301}界").width());
+    try std.testing.expectEqual(@as(usize, 2), zunic.text("🇬🇷").width());
+    try std.testing.expectEqual(@as(usize, 2), zunic.text("a\nb").width());
+    try std.testing.expectEqual(@as(usize, 0), zunic.text("\t\xff").width());
+}
+
+test "docs: terminator gaps" {
+    const bytes = "one\r\ntwo\u{2028}three";
+    const terms = zunic.text(bytes).terminators();
+    try std.testing.expectEqual(@as(usize, 2), terms.count());
+    var it = terms.iterator();
+    var start: usize = 0;
+    const expected = [_][]const u8{ "one", "two" };
+    var index: usize = 0;
+    while (it.next()) |term| {
+        try std.testing.expectEqualStrings(expected[index], bytes[start..term.start.value]);
+        start = term.end.value;
+        index += 1;
+    }
+    try std.testing.expectEqualStrings("three", bytes[start..]);
+}
+
+test "docs: wrapping" {
+    const bytes = "one two";
+    const wrapped = try zunic.text(bytes).wrap(.{ .max_columns = 4 });
+    try std.testing.expectEqual(@as(usize, 2), wrapped.count());
+    var it = wrapped.iterator();
+    const first = it.next().?;
+    try std.testing.expectEqualStrings("one ", bytes[first.start.value..first.end.value]);
+    try std.testing.expectEqual(@as(usize, 4), first.columns.value);
+    const second = it.next().?;
+    try std.testing.expectEqualStrings("two", bytes[second.start.value..second.end.value]);
+    try std.testing.expect(it.next() == null);
+
+    const wide = try zunic.text("abcdef").wrap(.{ .max_columns = 3, .overflow = .allow });
+    try std.testing.expectEqual(@as(usize, 1), wide.count());
+}
+
+test "docs: word-like segments" {
+    const bytes = "Hello, world!";
+    var it = zunic.text(bytes).wordBounds().iterator();
+    const expected = [_][]const u8{ "Hello", "world" };
+    var count: usize = 0;
+    while (it.next()) |segment| {
+        if (!segment.is_word) continue;
+        try std.testing.expectEqualStrings(expected[count], bytes[segment.start.value..segment.end.value]);
+        count += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 2), count);
+}
+
+test "docs: normalization output" {
+    const bytes = "cafe\u{0301}";
+    var buffer: [32]u8 = undefined;
+    const result = try zunic.normalize(bytes, .nfc).writeTo(&buffer);
+    try std.testing.expectEqualStrings("café", result);
+
+    var scalars = zunic.normalize("é", .nfd);
+    try std.testing.expectEqual(@as(u21, 'e'), (try scalars.next()).?);
+    try std.testing.expectEqual(@as(u21, 0x301), (try scalars.next()).?);
+    try std.testing.expect((try scalars.next()) == null);
+}
+
+test "docs: normalization queries" {
+    try std.testing.expect(try zunic.text("café").eql("cafe\u{0301}", .canonical));
+    try std.testing.expect(try zunic.text("café").isNormalized(.nfc));
+    try std.testing.expect(!try zunic.text("café").isNormalized(.nfd));
+    try std.testing.expect(!try zunic.text("ﬁ").eql("fi", .canonical));
+}
+
+test "docs: normalization capacity and iterator position" {
+    const capacity = try zunic.normalizedLenBound("é".len, .nfd);
+    try std.testing.expectEqual(@as(usize, 6), capacity);
+    var it = zunic.normalize("é", .nfd);
+    _ = try it.next(); // Consume 'e'.
+    var buffer: [8]u8 = undefined;
+    try std.testing.expectEqualStrings("\u{0301}", try it.writeTo(&buffer));
+    // writeTo copied the iterator; its next scalar is still the accent.
+    try std.testing.expectEqual(@as(u21, 0x301), (try it.next()).?);
+}

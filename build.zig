@@ -29,8 +29,10 @@ pub fn build(b: *std.Build) void {
     });
     zunic.addImport("build_options", build_options.createModule());
     const test_step = b.step("test", "Run zunic tests");
+    const docs_step = b.step("docs-test", "Run documentation examples");
     const transition_step = b.step("line-break-tests", "Run line-break machine protocol tests");
     const roots = [_][]const u8{
+        "docs/examples.zig",
         "src/root_test.zig",
         "src/conformance_test.zig",
         "src/wrap_test.zig",
@@ -51,6 +53,7 @@ pub fn build(b: *std.Build) void {
         test_mod.addImport("build_options", build_options.createModule());
         const run_test = b.addRunArtifact(b.addTest(.{ .root_module = test_mod }));
         test_step.dependOn(&run_test.step);
+        if (std.mem.eql(u8, root, "docs/examples.zig")) docs_step.dependOn(&run_test.step);
         if (std.mem.eql(u8, root, "src/line_break.zig")) transition_step.dependOn(&run_test.step);
     }
 

@@ -8,6 +8,7 @@
         "build.zig.zon",
         "Makefile",
         "README.md",
+        "docs",
         "src",
     },
 }
