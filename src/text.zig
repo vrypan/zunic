@@ -2,6 +2,7 @@
 //!
 //! Offsets returned by the text view are always relative to the slice used to
 //! open it. The view never allocates, and opening it does no scanning.
+const std = @import("std");
 const grapheme_engine = @import("grapheme.zig");
 const width_engine = @import("width.zig");
 const normalization = @import("normalization.zig");
@@ -120,6 +121,15 @@ pub const WrappedIterator = struct {
 /// makes no attempt at it.
 pub const Text = struct {
     bytes: []const u8,
+
+    /// Check that the complete byte slice is valid UTF-8.
+    ///
+    /// This is a direct UTF-8 scan. It does not iterate graphemes or look up
+    /// Unicode properties. Other text operations remain tolerant of malformed
+    /// input whether or not this method is called.
+    pub fn validate(self: Text) error{InvalidUtf8}!void {
+        if (!std.unicode.utf8ValidateSlice(self.bytes)) return error.InvalidUtf8;
+    }
 
     /// Extended grapheme clusters. Call `.measured()` on the result for
     /// per-cluster terminal columns.

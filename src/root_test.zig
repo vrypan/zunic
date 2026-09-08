@@ -7,6 +7,24 @@ test "unicode component compiles as an independent root" {
     try std.testing.expectEqual(@as(usize, 2), unicode.text("🇬🇷").width());
 }
 
+test "text validation checks the complete byte slice" {
+    try unicode.text("").validate();
+    try unicode.text("Hello, 世界 👩‍👩‍👧‍👦").validate();
+    try unicode.text("\u{fffd}").validate();
+
+    const invalid = [_][]const u8{
+        "\xff", // stray byte
+        "\xc0\x80", // overlong encoding
+        "\xed\xa0\x80", // surrogate
+        "\xf4\x90\x80\x80", // above U+10FFFF
+        "\xe2\x82", // truncated sequence
+        "valid prefix\xe2xvalid suffix", // broken continuation
+    };
+    for (invalid) |bytes| {
+        try std.testing.expectError(error.InvalidUtf8, unicode.text(bytes).validate());
+    }
+}
+
 test "grapheme traversal retains byte spans and optional terminal measure" {
     const text = "e\xcc\x81界👩‍👩‍👧‍👦\x00";
     var it = unicode.text(text).graphemes().measured().iterator();

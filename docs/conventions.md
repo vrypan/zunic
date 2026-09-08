@@ -4,6 +4,7 @@
 
 ```zig
 pub fn text(bytes: []const u8) Text;
+pub fn validate(self: Text) error{InvalidUtf8}!void;
 ```
 
 `zunic.text(bytes)` constructs a view without scanning, validating, copying,
@@ -41,6 +42,18 @@ Grapheme, word, width, and wrap operations tolerate malformed UTF-8, advancing
 one byte at a time on decoding errors. They retain original byte offsets and
 do not rewrite the input. A span can therefore contain malformed bytes.
 Terminators scan for exact byte sequences and are not a UTF-8 validator.
+
+Call `try text.validate()` when an operation should require valid UTF-8. It
+checks the complete slice directly, without grapheme iteration or Unicode
+property lookups:
+
+```zig
+const text = zunic.text(input);
+try text.validate();
+```
+
+Validation returns `InvalidUtf8` for malformed input and otherwise returns
+nothing. It does not change the view or the behavior of later operations.
 
 Normalization is deliberately different: it returns `InvalidUtf8` for malformed
 input and `SequenceTooLong` when its configured combining-run limit is reached.

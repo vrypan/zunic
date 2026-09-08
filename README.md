@@ -89,6 +89,7 @@ pub fn main() !void {
 Input is plain text: strip ANSI escape sequences before measuring or wrapping.
 Display operations tolerate malformed UTF-8; normalization rejects it and has a
 [configurable combining-run limit](docs/normalization/README.md#combining-run-limit).
+Call `try text.validate()` first when malformed UTF-8 should be rejected.
 Word boundaries are locale-independent and do not use dictionaries.
 
 ## Unicode standards
