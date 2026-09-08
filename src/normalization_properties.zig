@@ -893,10 +893,13 @@ pub const expansion_factor: usize = 3;
 
 const std = @import("std");
 
-/// The lowest code point with a non-zero combining class, so the common
-/// case leaves without a search. Derived, not assumed: nothing here knows
-/// that U+0300 happens to be the first combining mark.
+/// Lowest code point carrying each fact, so the common case leaves before
+/// bisecting anything. Derived, not assumed: nothing here knows that
+/// U+0300 happens to be the first combining mark, and the whole of ASCII
+/// sits below all three.
 pub const first_combining: u21 = 0x0300;
+pub const first_decomposition: u21 = 0x00C0;
+pub const first_nfc_relevant: u21 = 0x00C0;
 
 fn search(entries: []const u32, cp: u21, comptime mask: u32) ?usize {
     var low: usize = 0;
@@ -927,6 +930,7 @@ pub const Decomposition = struct {
 /// The immediate canonical decomposition of `cp`, or null if it has none.
 /// Hangul syllables are absent; the engine decomposes them arithmetically.
 pub fn decomposition(cp: u21) ?Decomposition {
+    if (cp < first_decomposition) return null;
     const found = search(&decomposition_entries, cp, 0x3FFFF) orelse return null;
     const entry = decomposition_entries[found];
     const offset = entry >> 18 & 0xFFF;
@@ -963,6 +967,7 @@ pub fn compose(first: u21, second: u21) ?u21 {
 
 /// `NFC_QC`. No is exactly `Full_Composition_Exclusion`; Maybe has its own table.
 pub fn nfcQuickCheck(cp: u21) QuickCheck {
+    if (cp < first_nfc_relevant) return .yes;
     if (search(&nfc_qc_maybe, cp, 0x1FFFFF) != null) return .maybe;
     const found = search(&decomposition_entries, cp, 0x3FFFF) orelse return .yes;
     return if (decomposition_entries[found] >> 31 & 1 == 1) .no else .yes;
@@ -972,5 +977,6 @@ pub fn nfcQuickCheck(cp: u21) QuickCheck {
 /// Hangul syllables decompose and are not in the table, so the engine tests
 /// them before calling this.
 pub fn nfdQuickCheckIsYes(cp: u21) bool {
+    if (cp < first_decomposition) return true;
     return search(&decomposition_entries, cp, 0x3FFFF) == null;
 }

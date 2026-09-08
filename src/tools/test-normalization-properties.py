@@ -87,6 +87,8 @@ def parse_zig():
         "maybe": array("nfc_qc_maybe", 16),
         "factor": int(re.search(r"pub const expansion_factor: usize = (\d+);", text).group(1)),
         "first_combining": int(re.search(r"pub const first_combining: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
+        "first_decomposition": int(re.search(r"pub const first_decomposition: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
+        "first_nfc_relevant": int(re.search(r"pub const first_nfc_relevant: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
     }
 
 
@@ -151,6 +153,15 @@ def main():
         fail("combining_entries is not sorted by code point")
     if table["first_combining"] != min(combining):
         fail(f"first_combining is 0x{table['first_combining']:X}, data says 0x{min(combining):X}")
+    # The accessors skip their bisection below these thresholds, so a threshold
+    # that is too high silently answers "nothing here" for real data.
+    lowest_decomposition = min(mapping)
+    if table["first_decomposition"] != lowest_decomposition:
+        fail(f"first_decomposition is 0x{table['first_decomposition']:X}, data says 0x{lowest_decomposition:X}")
+    lowest_maybe = min(cp for cp, value in nfc_qc.items() if value == "M")
+    if table["first_nfc_relevant"] != min(lowest_decomposition, lowest_maybe):
+        fail(f"first_nfc_relevant is 0x{table['first_nfc_relevant']:X}, data says "
+             f"0x{min(lowest_decomposition, lowest_maybe):X}")
     for cp in range(MAXCP):
         if combining.get(cp, 0) != ccc.get(cp, 0):
             fail(f"U+{cp:04X} ccc: table={combining.get(cp, 0)} expected={ccc.get(cp, 0)}")

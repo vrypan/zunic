@@ -607,3 +607,33 @@ test "the table module agrees with the engine on Hangul" {
         try std.testing.expectEqual(@as(u8, 0), properties.combiningClass(cp));
     }
 }
+
+test "the accessors' range shortcuts agree with an unguarded search" {
+    // The Python verifier decodes the emitted arrays directly, so it checks
+    // the data but never runs these functions. The shortcuts they take below
+    // `first_decomposition` and friends are therefore only covered here, and a
+    // threshold set one code point too high would answer "nothing here" for
+    // real data without any table being wrong.
+    var cp: u21 = 0;
+    while (cp < 0x110000) : (cp += 1) {
+        if (cp >= 0xD800 and cp <= 0xDFFF) continue;
+        const shortcut = cp < properties.first_decomposition;
+        if (shortcut) {
+            try std.testing.expect(properties.decomposition(cp) == null);
+            try std.testing.expect(properties.nfdQuickCheckIsYes(cp));
+        }
+        if (cp < properties.first_combining) try std.testing.expectEqual(@as(u8, 0), properties.combiningClass(cp));
+        if (cp < properties.first_nfc_relevant)
+            try std.testing.expectEqual(properties.QuickCheck.yes, properties.nfcQuickCheck(cp));
+        // And the shortcut ranges really are empty of data.
+        if (shortcut) try std.testing.expect(!containsDecomposition(cp));
+    }
+    // The thresholds are tight: the code point at each one carries the fact.
+    try std.testing.expect(containsDecomposition(properties.first_decomposition));
+    try std.testing.expect(properties.combiningClass(properties.first_combining) != 0);
+}
+
+fn containsDecomposition(cp: u21) bool {
+    for (properties.decomposition_entries) |entry| if (entry & 0x3FFFF == cp) return true;
+    return false;
+}
