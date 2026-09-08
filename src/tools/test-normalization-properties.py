@@ -80,15 +80,21 @@ def parse_zig():
         return [int(value, base) for value in re.findall(r"(0x[0-9A-Fa-f]+|\d+),", body)]
 
     return {
-        "combining": array("combining_entries", 16),
+        "ascii_bases": (int(re.search(r"pub const ascii_bases_high: u64 = (0x[0-9A-Fa-f]+);", text).group(1), 16) << 64)
+                       | int(re.search(r"pub const ascii_bases_low: u64 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
+        "class_table": array("class_table", 16),
+        "class_stage1": array("class_stage1", 10),
+        "class_stage2": array("class_stage2", 10),
+        "class_stage3": array("class_stage3", 10),
+        "class_limit": int(re.search(r"pub const class_limit: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
+        "class_above_limit": int(re.search(r"pub const class_above_limit: u8 = (\d+);", text).group(1)),
+        "class_s1": int(re.search(r"const class_s1 = (\d+);", text).group(1)),
+        "class_s2": int(re.search(r"const class_s2 = (\d+);", text).group(1)),
         "decomposition": array("decomposition_entries", 16),
         "data": array("decomposition_data", 16),
         "composition": array("composition_index", 10),
-        "maybe": array("nfc_qc_maybe", 16),
         "factor": int(re.search(r"pub const expansion_factor: usize = (\d+);", text).group(1)),
-        "first_combining": int(re.search(r"pub const first_combining: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
         "first_decomposition": int(re.search(r"pub const first_decomposition: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
-        "first_nfc_relevant": int(re.search(r"pub const first_nfc_relevant: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
         "first_composable": int(re.search(r"pub const first_composable: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
     }
 
@@ -146,26 +152,60 @@ def main():
         if len(failures) <= 20:
             print(message)
 
-    # --- combining classes, over every code point ------------------------
-    combining = {entry & 0x3FFFF: entry >> 18 & 0xFF for entry in table["combining"]}
-    if len(combining) != len(table["combining"]):
-        fail("combining_entries contains a duplicate code point")
-    if sorted(combining) != [entry & 0x3FFFF for entry in table["combining"]]:
-        fail("combining_entries is not sorted by code point")
-    if table["first_combining"] != min(combining):
-        fail(f"first_combining is 0x{table['first_combining']:X}, data says 0x{min(combining):X}")
-    # The accessors skip their bisection below these thresholds, so a threshold
-    # that is too high silently answers "nothing here" for real data.
+    # The one accessor still backed by a sorted table keeps a range guard, and
+    # a guard set too high would silently answer "nothing here" for real data.
     lowest_decomposition = min(mapping)
     if table["first_decomposition"] != lowest_decomposition:
         fail(f"first_decomposition is 0x{table['first_decomposition']:X}, data says 0x{lowest_decomposition:X}")
-    lowest_maybe = min(cp for cp, value in nfc_qc.items() if value == "M")
-    if table["first_nfc_relevant"] != min(lowest_decomposition, lowest_maybe):
-        fail(f"first_nfc_relevant is 0x{table['first_nfc_relevant']:X}, data says "
-             f"0x{min(lowest_decomposition, lowest_maybe):X}")
+
+    # --- the class trie, decoded by walking it, over every code point -----
+    s1, s2 = table["class_s1"], table["class_s2"]
+    mid_bits = s1 - s2
+
+    def trie_class(cp):
+        """Walk the trie only, so the ASCII shortcut can be checked against it."""
+        if cp >= table["class_limit"]:
+            return table["class_table"][table["class_above_limit"]]
+        mid = table["class_stage1"][cp >> s1]
+        leaf = table["class_stage2"][(mid << mid_bits) | (cp >> s2 & ((1 << mid_bits) - 1))]
+        return table["class_table"][table["class_stage3"][(leaf << s2) | (cp & ((1 << s2) - 1))]]
+
+    # The ASCII shortcut bypasses the trie, so a wrong bit there would be
+    # invisible to every other check: ASCII would simply get a wrong answer.
+    for cp in range(128):
+        packed = trie_class(cp)
+        if packed & 0xFF or packed >> 8 & 3 or packed >> 10 & 1 or packed >> 12 & 1:
+            fail(f"U+{cp:04X} breaks the ASCII uniformity the shortcut assumes")
+        if bool(table["ascii_bases"] >> cp & 1) != bool(packed >> 11 & 1):
+            fail(f"U+{cp:04X} ascii_bases disagrees with the trie")
+
+    def class_of(cp):
+        if cp < 128:
+            return (table["ascii_bases"] >> cp & 1) << 11
+        return trie_class(cp)
+
+    pairs_all = {tuple(parts): cp for cp, parts in mapping.items()
+                 if len(parts) == 2 and cp not in full}
+    # Hangul is algorithmic and in no table, but it composes, so the class
+    # flags must include it or an L jamo would look inert.
+    firsts = ({pair[0] for pair in pairs_all}
+              | set(range(L_BASE, L_BASE + L_COUNT))
+              | {S_BASE + i * T_COUNT for i in range(L_COUNT * V_COUNT)})
+    seconds = ({pair[1] for pair in pairs_all}
+               | set(range(V_BASE, V_BASE + V_COUNT))
+               | set(range(T_BASE + 1, T_BASE + T_COUNT)))
+    qc_bits = {0: "Y", 1: "N", 2: "M"}
     for cp in range(MAXCP):
-        if combining.get(cp, 0) != ccc.get(cp, 0):
-            fail(f"U+{cp:04X} ccc: table={combining.get(cp, 0)} expected={ccc.get(cp, 0)}")
+        packed = class_of(cp)
+        got = (packed & 0xFF, qc_bits[packed >> 8 & 3], bool(packed >> 10 & 1),
+               bool(packed >> 11 & 1), bool(packed >> 12 & 1))
+        want = (ccc.get(cp, 0), nfc_qc.get(cp, "Y"),
+                cp in mapping or hangul_decompose(cp) is not None,
+                cp in firsts, cp in seconds)
+        if got != want:
+            fail(f"U+{cp:04X} class: table={got} expected={want}")
+        if packed >> 13:
+            fail(f"U+{cp:04X} class has bits set outside the packed struct")
 
     # --- decompositions, over every code point ----------------------------
     decomposition = {}
@@ -239,23 +279,13 @@ def main():
             fail(f"U+{cp:04X} is an explicit exclusion yet composable")
 
     # --- quick check ------------------------------------------------------
-    maybe = set(table["maybe"])
-    if sorted(maybe) != table["maybe"]:
-        fail("nfc_qc_maybe is not sorted")
     for cp in range(MAXCP):
+        # NFC_QC = No must still coincide with Full_Composition_Exclusion, which
+        # the decomposition entry carries independently of the class.
         expected = nfc_qc.get(cp, "Y")
-        if expected == "M":
-            got = "M"
-            if cp not in maybe:
-                fail(f"U+{cp:04X} NFC_QC should be Maybe")
-                continue
-        elif cp in maybe:
-            fail(f"U+{cp:04X} NFC_QC is {expected} but is in nfc_qc_maybe")
-            continue
-        else:
-            got = "N" if (cp in decomposition and decomposition[cp][1]) else "Y"
-        if got != expected:
-            fail(f"U+{cp:04X} NFC_QC: table={got} expected={expected}")
+        from_entry = "N" if (cp in decomposition and decomposition[cp][1]) else "Y"
+        if expected != "M" and from_entry != expected:
+            fail(f"U+{cp:04X} NFC_QC: entry says {from_entry}, expected={expected}")
         # NFD_QC is No exactly for the code points that decompose, Hangul
         # included; the table omits Hangul and the engine adds it back.
         expected_nfd = nfd_qc.get(cp, "Y")
@@ -315,11 +345,13 @@ def main():
 
     if failures:
         sys.exit(f"{len(failures)} mismatches over {MAXCP} code points")
-    size = (len(table["combining"]) * 4 + len(table["decomposition"]) * 4 +
-            len(table["data"]) * 4 + len(table["composition"]) * 2 + len(table["maybe"]) * 4)
+    size = (16 + len(table["class_table"]) * 2 + len(table["class_stage1"]) +
+            len(table["class_stage2"]) + len(table["class_stage3"]) +
+            len(table["decomposition"]) * 4 + len(table["data"]) * 4 +
+            len(table["composition"]) * 2)
     print(f"ok: {MAXCP} code points verified against the pinned UCD")
-    print(f"    {len(table['combining'])} combining classes, {len(table['decomposition'])} decompositions, "
-          f"{len(table['composition'])} composition pairs, {len(table['maybe'])} NFC_QC=Maybe")
+    print(f"    {len(table['class_table'])} classes, {len(table['decomposition'])} decompositions, "
+          f"{len(table['composition'])} composition pairs")
     print(f"    expansion factor {table['factor']} (measured worst {worst:.3f}), "
           f"longest recursive decomposition {longest}")
     print(f"    fixture: {cases} cases, longest decomposed non-starter run {longest_run}")

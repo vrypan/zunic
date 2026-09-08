@@ -44,11 +44,18 @@ comptime {
     if (@sizeOf(Entry) != 4) @compileError("Entry must be four bytes");
 }
 
-/// One decomposed scalar and its combining class.
+/// One decomposed scalar with everything the run machinery asks about it.
+///
+/// `base` and `composable` are the two halves of the composition question, so
+/// a pair that cannot possibly compose is rejected on two register bits
+/// instead of a search through 961 pairs. Both include Hangul, which composes
+/// arithmetically and appears in no table.
 const Entry = packed struct(u32) {
     scalar: u21,
     ccc: u8,
-    _padding: u3 = 0,
+    base: bool,
+    composable: bool,
+    _padding: u1 = 0,
 };
 
 // UAX #15 section 16. These are the only mappings zunic computes rather than
@@ -69,6 +76,18 @@ const s_count = l_count * n_count;
 /// `test-normalization-properties.py`, so the recursion below cannot overrun
 /// a caller's four-entry array.
 fn decomposeInto(out: []Entry, cp: u21) u8 {
+    // One class lookup answers the common case outright. Before this, every
+    // character bisected the decomposition table to be told it has none.
+    const class = properties.classOf(cp);
+    if (!class.decomposes) {
+        out[0] = .{
+            .scalar = cp,
+            .ccc = class.ccc,
+            .base = class.composition_base,
+            .composable = class.composable,
+        };
+        return 1;
+    }
     if (cp >= s_base and cp < s_base + s_count) {
         const index = cp - s_base;
         out[0] = entryOf(@intCast(l_base + index / n_count));
@@ -77,17 +96,20 @@ fn decomposeInto(out: []Entry, cp: u21) u8 {
         out[2] = entryOf(@intCast(t_base + index % t_count));
         return 3;
     }
-    const mapping = properties.decomposition(cp) orelse {
-        out[0] = entryOf(cp);
-        return 1;
-    };
+    const mapping = properties.decomposition(cp).?;
     var len: u8 = 0;
     for (mapping.scalars) |scalar| len += decomposeInto(out[len..], @intCast(scalar));
     return len;
 }
 
 fn entryOf(cp: u21) Entry {
-    return .{ .scalar = cp, .ccc = properties.combiningClass(cp) };
+    const class = properties.classOf(cp);
+    return .{
+        .scalar = cp,
+        .ccc = class.ccc,
+        .base = class.composition_base,
+        .composable = class.composable,
+    };
 }
 
 /// The primary composite of two scalars, Hangul included.
@@ -137,7 +159,9 @@ fn composeRun(run: []Entry) RunLength {
     var i: usize = 1;
     while (i < run.len) : (i += 1) {
         const current = run[i];
-        if (last_ccc < @as(i16, current.ccc)) {
+        // Two register bits before any search: a pair composes only when the
+        // first can absorb and the second can be absorbed.
+        if (run[0].base and current.composable and last_ccc < @as(i16, current.ccc)) {
             if (composePair(run[0].scalar, current.scalar)) |composed| {
                 run[0].scalar = composed;
                 continue;
@@ -275,7 +299,7 @@ pub fn Iterator(comptime form: Form) type {
                 // further pairs in Unicode 16 have a starter as their second
                 // element, so a bare starter run stays open if it composes.
                 self.finishRun();
-                if (form == .nfc and self.len == 1) {
+                if (form == .nfc and self.len == 1 and self.buffer[0].base and entry.composable) {
                     if (composePair(self.buffer[0].scalar, entry.scalar)) |composed| {
                         self.buffer[0].scalar = composed;
                         self.nonstarters = 0;
@@ -387,23 +411,25 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
     // The last starter as written -- what a composition would attach to --
     // and where it begins, for the general fallback below.
     var starter: ?u21 = null;
+    var starter_base = false;
     var region: usize = 0;
 
     while (pos < bytes.len) {
         const decoded = utf8.step(bytes[pos..]);
         const cp = decoded.cp orelse return error.InvalidUtf8;
-        const ccc = properties.combiningClass(cp);
+        // One class lookup answers every question below.
+        const class = properties.classOf(cp);
+        const ccc = class.ccc;
 
         // Marks out of canonical order are normalized in neither form, even
         // when each of them quick-checks as Yes on its own.
         if (ccc != 0 and written_previous_ccc > ccc) return false;
 
         switch (form) {
-            .nfd => {
-                if (cp >= s_base and cp < s_base + s_count) return false;
-                if (!properties.nfdQuickCheckIsYes(cp)) return false;
-            },
-            .nfc => switch (properties.nfcQuickCheck(cp)) {
+            // `decomposes` already covers Hangul, which decomposes
+            // arithmetically and is in no table.
+            .nfd => if (class.decomposes) return false,
+            .nfc => switch (class.quick_check) {
                 .no => return false,
                 .yes => {},
                 // Maybe means "composes with the character before it, for some
@@ -427,7 +453,8 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
                     // and a starter is blocked by anything at all, every
                     // non-starter's class being greater than zero.
                     const blocked = decomposed_since_starter > 0 and decomposed_trailing >= ccc;
-                    if (!blocked and composePair(starter.?, cp) != null) return false;
+                    if (!blocked and starter_base and class.composable and
+                        composePair(starter.?, cp) != null) return false;
                 } else {
                     if (!try settled(bytes[region..], pos - region + decoded.len)) return false;
                 },
@@ -435,24 +462,40 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
         }
 
         // Fold the decomposed form in. The run limit and the decomposed
-        // context above are both properties of the decomposed text.
-        var scratch: [4]Entry = undefined;
-        const len = decomposeInto(&scratch, cp);
-        for (scratch[0..len]) |entry| {
-            if (entry.ccc == 0) {
+        // context above are both properties of the decomposed text -- but for
+        // a character that does not decompose, it *is* the decomposed text, so
+        // the common path needs no second lookup and no scratch buffer.
+        if (!class.decomposes) {
+            if (ccc == 0) {
                 nonstarters = 0;
                 decomposed_trailing = 0;
                 decomposed_since_starter = 0;
-                continue;
+            } else {
+                if (nonstarters == max_nonstarters) return error.SequenceTooLong;
+                nonstarters += 1;
+                decomposed_trailing = ccc;
+                decomposed_since_starter += 1;
             }
-            if (nonstarters == max_nonstarters) return error.SequenceTooLong;
-            nonstarters += 1;
-            decomposed_trailing = entry.ccc;
-            decomposed_since_starter += 1;
+        } else {
+            var scratch: [4]Entry = undefined;
+            const len = decomposeInto(&scratch, cp);
+            for (scratch[0..len]) |entry| {
+                if (entry.ccc == 0) {
+                    nonstarters = 0;
+                    decomposed_trailing = 0;
+                    decomposed_since_starter = 0;
+                    continue;
+                }
+                if (nonstarters == max_nonstarters) return error.SequenceTooLong;
+                nonstarters += 1;
+                decomposed_trailing = entry.ccc;
+                decomposed_since_starter += 1;
+            }
         }
 
         if (ccc == 0) {
             starter = cp;
+            starter_base = class.composition_base;
             region = pos;
         }
         written_previous_ccc = ccc;

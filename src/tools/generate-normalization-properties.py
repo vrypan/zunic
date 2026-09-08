@@ -140,6 +140,62 @@ def derive_expansion_factor(decomposition, pairs):
     return worst_nfd, nfd_witness, worst_nfc, nfc_witness, 3
 
 
+CLASS_LIMIT = 0x30000
+CLASS_S1 = 9
+CLASS_S2 = 5
+
+
+def build_classes(ccc, decomposition, full, nfc_qc):
+    """One class per code point for every question that is not a mapping.
+
+    The mappings themselves stay in their own tables: a class cannot encode
+    2,081 decomposition sequences or 961 composition pairs. What it can do is
+    say whether to consult them at all, which for 98.7% of code points is "no".
+    """
+    pairs = [decomposition[cp] for cp in decomposition
+             if len(decomposition[cp]) == 2 and cp not in full]
+    # Hangul belongs in both sets even though it is in no table: L takes a V
+    # and LV takes a T, computed arithmetically. Leaving it out would make an
+    # L jamo look inert when it can still compose.
+    firsts = ({pair[0] for pair in pairs}
+              | set(range(L_BASE, L_BASE + L_COUNT))
+              | {S_BASE + i * T_COUNT for i in range(L_COUNT * V_COUNT)})
+    seconds = ({pair[1] for pair in pairs}
+               | set(range(V_BASE, V_BASE + V_COUNT))
+               | set(range(T_BASE + 1, T_BASE + T_COUNT)))
+
+    def key(cp):
+        return (
+            ccc.get(cp, 0),
+            nfc_qc.get(cp, "Y"),
+            cp in decomposition or S_BASE <= cp < S_BASE + S_COUNT,
+            cp in firsts,
+            cp in seconds,
+        )
+
+    classes, ids = {}, [0] * MAXCP
+    for cp in range(MAXCP):
+        ids[cp] = classes.setdefault(key(cp), len(classes))
+    assert len(classes) < 256, "class id must fit a byte"
+    above = {ids[cp] for cp in range(CLASS_LIMIT, MAXCP)}
+    assert len(above) == 1, "the range above the trie must be a single class"
+
+    leaf_size = 1 << CLASS_S2
+    leaves, mids, stage1 = {}, {}, []
+    for base in range(0, CLASS_LIMIT, 1 << CLASS_S1):
+        row = tuple(
+            leaves.setdefault(tuple(ids[at:at + leaf_size]), len(leaves))
+            for at in range(base, base + (1 << CLASS_S1), leaf_size)
+        )
+        stage1.append(mids.setdefault(row, len(mids)))
+    assert len(mids) < 256 and len(leaves) < 256, "trie indices must fit a byte"
+
+    order = sorted(classes, key=classes.get)
+    stage2 = [leaf for row in sorted(mids, key=mids.get) for leaf in row]
+    stage3 = [cid for leaf in sorted(leaves, key=leaves.get) for cid in leaf]
+    return order, stage1, stage2, stage3, above.pop()
+
+
 def build(ccc, decomposition, full, nfc_qc):
     combining = sorted(ccc.items())
     assert all(cp < 1 << 18 for cp, _ in combining), "combining source needs more than 18 bits"
@@ -174,7 +230,7 @@ def build(ccc, decomposition, full, nfc_qc):
     return combining, sources, flat, offsets, composition, maybe, pairs
 
 
-def emit(out, combining, sources, decomposition, flat, offsets, full, composition, maybe, factor):
+def emit(out, combining, sources, decomposition, flat, offsets, full, composition, maybe, factor, classes):
     out.write("//! Generated from pinned Unicode 16.0.0 UCD files. Do not edit.\n")
     out.write("//! Run src/tools/generate-normalization-properties.py to regenerate.\n")
     out.write("//!\n")
@@ -187,15 +243,65 @@ def emit(out, combining, sources, decomposition, flat, offsets, full, compositio
     out.write("//! properties.zig uses: at this density the trie's index alone costs more\n")
     out.write("//! than this entire layout. Hangul is algorithmic and appears in no table.\n\n")
 
-    out.write("pub const QuickCheck = enum { yes, no, maybe };\n\n")
-    assert combining[0][0] >= 0x80, "the ASCII shortcut in the engine assumes no combining marks below U+0080"
-
-    out.write("/// Sorted by code point. Bits: `cp:u18 | ccc:u8 | unused:u6`.\n")
-    out.write(f"pub const combining_entries = [_]u32{{\n")
-    for i in range(0, len(combining), 8):
-        row = " ".join(f"0x{(cp | value << 18):08X}," for cp, value in combining[i:i + 8])
-        out.write("    " + row + "\n")
+    out.write("pub const QuickCheck = enum(u2) { yes, no, maybe };\n\n")
+    order, stage1, stage2, stage3, above = classes
+    out.write("/// Every per-character fact that is not a mapping, in one value.\n")
+    out.write("///\n")
+    out.write("/// `composition_base` and `composable` are the two halves of the\n")
+    out.write("/// composition question: a pair can only compose when the first is a\n")
+    out.write("/// base and the second is composable. Most of Unicode is neither, which\n")
+    out.write("/// is what keeps the composition table out of the common path.\n")
+    out.write("pub const Class = packed struct(u16) {\n")
+    out.write("    ccc: u8,\n")
+    out.write("    quick_check: QuickCheck,\n")
+    out.write("    decomposes: bool,\n")
+    out.write("    composition_base: bool,\n")
+    out.write("    composable: bool,\n")
+    out.write("    _padding: u3 = 0,\n")
     out.write("};\n\n")
+    packed = []
+    for ccc_value, qc_value, decomposes, is_first, is_second in order:
+        packed.append(ccc_value
+                      | {"Y": 0, "N": 1, "M": 2}[qc_value] << 8
+                      | int(decomposes) << 10
+                      | int(is_first) << 11
+                      | int(is_second) << 12)
+    out.write(f"pub const class_table = [_]u16{{\n")
+    for i in range(0, len(packed), 12):
+        out.write("    " + " ".join(f"0x{v:04X}," for v in packed[i:i + 12]) + "\n")
+    out.write("};\n\n")
+    out.write(f"pub const class_limit: u21 = 0x{CLASS_LIMIT:X};\n")
+    out.write("/// Every code point at or above `class_limit` shares one class.\n")
+    out.write(f"pub const class_above_limit: u8 = {above};\n")
+    out.write(f"const class_s1 = {CLASS_S1};\n")
+    out.write(f"const class_s2 = {CLASS_S2};\n\n")
+    # ASCII is uniform in every field but one, so it needs no memory at all:
+    # a register test beats even a single L1 load. Assert the uniformity rather
+    # than assume it -- a future Unicode release could break it.
+    ascii = [order[stage3[(stage2[(stage1[cp >> CLASS_S1] << (CLASS_S1 - CLASS_S2))
+                                  | (cp >> CLASS_S2 & ((1 << (CLASS_S1 - CLASS_S2)) - 1))] << CLASS_S2)
+                          | (cp & ((1 << CLASS_S2) - 1))]] for cp in range(128)]
+    assert all(k[0] == 0 and k[1] == "Y" and not k[2] and not k[4] for k in ascii), \
+        "ASCII is no longer uniform outside the composition-base bit"
+    mask = sum(1 << cp for cp, k in enumerate(ascii) if k[3])
+    out.write("/// ASCII resolved with no memory access at all.\n")
+    out.write("///\n")
+    out.write("/// Every ASCII character has combining class zero, quick-checks Yes,\n")
+    out.write("/// decomposes into itself and can never be absorbed. Only \"can this\n")
+    out.write("/// absorb a following mark\" varies, over 53 characters, so it fits an\n")
+    out.write("/// immediate. The generator asserts that uniformity against the data.\n")
+    out.write("///\n")
+    out.write("/// This matters: the trie costs three dependent loads, a clear win\n")
+    out.write("/// against bisecting a sorted table but a loss against the range compare\n")
+    out.write("/// ASCII used to exit on -- measured at +17% NFC and +26% NFD on English.\n")
+    out.write(f"pub const ascii_bases_low: u64 = 0x{mask & (1 << 64) - 1:016X};\n")
+    out.write(f"pub const ascii_bases_high: u64 = 0x{mask >> 64:016X};\n\n")
+    for name, values, per_row in (("class_stage1", stage1, 24), ("class_stage2", stage2, 24), ("class_stage3", stage3, 24)):
+        out.write(f"pub const {name} = [_]u8{{\n")
+        for i in range(0, len(values), per_row):
+            out.write("    " + " ".join(f"{v}," for v in values[i:i + per_row]) + "\n")
+        out.write("};\n\n")
+    assert combining[0][0] >= 0x80, "the ASCII shortcut in the engine assumes no combining marks below U+0080"
 
     out.write("/// Sorted by code point. Bits:\n")
     out.write("/// `cp:u18 | offset:u12 | is_pair:u1 | composition_excluded:u1`.\n")
@@ -230,13 +336,6 @@ def emit(out, combining, sources, decomposition, flat, offsets, full, compositio
         out.write("    " + " ".join(f"{v}," for v in composition[i:i + 16]) + "\n")
     out.write("};\n\n")
 
-    out.write("/// Sorted code points whose `NFC_QC` is Maybe. `NFC_QC = No` is exactly\n")
-    out.write("/// `Full_Composition_Exclusion`, which the decomposition entry carries.\n")
-    out.write(f"pub const nfc_qc_maybe = [_]u32{{\n")
-    for i in range(0, len(maybe), 12):
-        out.write("    " + " ".join(f"0x{v:06X}," for v in maybe[i:i + 12]) + "\n")
-    out.write("};\n\n")
-
     worst_nfd, nfd_witness, worst_nfc, nfc_witness, emitted = factor
     out.write("/// Worst-case UTF-8 growth of either canonical form, in output bytes per\n")
     out.write("/// input byte, derived from the pinned data during generation.\n")
@@ -249,13 +348,9 @@ def emit(out, combining, sources, decomposition, flat, offsets, full, compositio
     out.write(f"pub const expansion_factor: usize = {emitted};\n\n")
 
     out.write('const std = @import("std");\n\n')
-    out.write("/// Lowest code point carrying each fact, so the common case leaves before\n")
-    out.write("/// bisecting anything. Derived, not assumed: nothing here knows that\n")
-    out.write("/// U+0300 happens to be the first combining mark, and the whole of ASCII\n")
-    out.write("/// sits below all three.\n")
-    out.write(f"pub const first_combining: u21 = 0x{combining[0][0]:04X};\n")
+    out.write("/// Lowest code point carrying each fact, kept as a cheap guard on the two\n")
+    out.write("/// functions still backed by a sorted table. Derived, not assumed.\n")
     out.write(f"pub const first_decomposition: u21 = 0x{sources[0]:04X};\n")
-    out.write(f"pub const first_nfc_relevant: u21 = 0x{min(sources[0], maybe[0]):04X};\n")
     out.write("/// Lowest code point that is ever the *second* half of a primary\n")
     out.write("/// composite. Nothing below it can compose with anything, which takes\n")
     out.write("/// every pair of ASCII characters out of the composition search.\n")
@@ -273,12 +368,29 @@ def emit(out, combining, sources, decomposition, flat, offsets, full, compositio
     return null;
 }
 
-/// Canonical_Combining_Class. Zero for everything not in the table, which is
-/// every starter and every unassigned code point.
+/// Three dependent loads, then one into a table small enough to stay hot.
+/// This replaces bisecting a sorted array for every character, which cost
+/// about ten unpredictable probes even to answer "nothing here".
+pub fn classOf(cp: u21) Class {
+    if (cp < 128) return .{
+        .ccc = 0,
+        .quick_check = .yes,
+        .decomposes = false,
+        // Two 64-bit halves rather than one u128: a variable 128-bit shift is
+        // several instructions on aarch64, and NFD never reads this bit.
+        .composition_base = (if (cp < 64) ascii_bases_low >> @intCast(cp) else ascii_bases_high >> @intCast(cp - 64)) & 1 == 1,
+        .composable = false,
+    };
+    if (cp >= class_limit) return @bitCast(class_table[class_above_limit]);
+    const mid = class_stage1[cp >> class_s1];
+    const leaf = class_stage2[(@as(usize, mid) << (class_s1 - class_s2)) | (cp >> class_s2 & ((1 << (class_s1 - class_s2)) - 1))];
+    const id = class_stage3[(@as(usize, leaf) << class_s2) | (cp & ((1 << class_s2) - 1))];
+    return @bitCast(class_table[id]);
+}
+
+/// Canonical_Combining_Class.
 pub fn combiningClass(cp: u21) u8 {
-    if (cp < first_combining) return 0;
-    const found = search(&combining_entries, cp, 0x3FFFF) orelse return 0;
-    return @intCast(combining_entries[found] >> 18 & 0xFF);
+    return classOf(cp).ccc;
 }
 
 pub const Decomposition = struct {
@@ -327,20 +439,16 @@ pub fn compose(first: u21, second: u21) ?u21 {
     return null;
 }
 
-/// `NFC_QC`. No is exactly `Full_Composition_Exclusion`; Maybe has its own table.
+/// `NFC_QC`.
 pub fn nfcQuickCheck(cp: u21) QuickCheck {
-    if (cp < first_nfc_relevant) return .yes;
-    if (search(&nfc_qc_maybe, cp, 0x1FFFFF) != null) return .maybe;
-    const found = search(&decomposition_entries, cp, 0x3FFFF) orelse return .yes;
-    return if (decomposition_entries[found] >> 31 & 1 == 1) .no else .yes;
+    return classOf(cp).quick_check;
 }
 
 /// `NFD_QC`, which is two-valued. False means the code point decomposes.
 /// Hangul syllables decompose and are not in the table, so the engine tests
 /// them before calling this.
 pub fn nfdQuickCheckIsYes(cp: u21) bool {
-    if (cp < first_decomposition) return true;
-    return search(&decomposition_entries, cp, 0x3FFFF) == null;
+    return !classOf(cp).decomposes;
 }
 """)
 
@@ -358,10 +466,11 @@ def main():
     full, nfc_qc, _ = read_derived()
     combining, sources, flat, offsets, composition, maybe, pairs = build(ccc, decomposition, full, nfc_qc)
     factor = derive_expansion_factor(decomposition, pairs)
+    classes = build_classes(ccc, decomposition, full, nfc_qc)
     with tempfile.TemporaryDirectory() as tmp:
         generated = Path(tmp) / "normalization_properties.zig"
         with generated.open("w", encoding="utf-8") as out:
-            emit(out, combining, sources, decomposition, flat, offsets, full, composition, maybe, factor)
+            emit(out, combining, sources, decomposition, flat, offsets, full, composition, maybe, factor, classes)
         subprocess.run([zig, "fmt", str(generated)], check=True, stdout=subprocess.DEVNULL)
         if args.check:
             if not OUT.exists() or generated.read_bytes() != OUT.read_bytes():
@@ -369,12 +478,16 @@ def main():
         else:
             shutil.copyfile(generated, args.output)
 
+    order, stage1, stage2, stage3, _ = classes
     sizes = {
-        "combining_entries": len(combining) * 4,
+        "ascii_bases": 16,
+        "class_table": len(order) * 2,
+        "class_stage1": len(stage1),
+        "class_stage2": len(stage2),
+        "class_stage3": len(stage3),
         "decomposition_entries": len(sources) * 4,
         "decomposition_data": len(flat) * 4,
         "composition_index": len(composition) * 2,
-        "nfc_qc_maybe": len(maybe) * 4,
     }
     for name, size in sizes.items():
         print(f"{name:24} {size:6} B")

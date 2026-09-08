@@ -608,35 +608,40 @@ test "the table module agrees with the engine on Hangul" {
     }
 }
 
-test "the accessors' range shortcuts agree with an unguarded search" {
-    // The Python verifier decodes the emitted arrays directly, so it checks
-    // the data but never runs these functions. The shortcuts they take below
-    // `first_decomposition` and friends are therefore only covered here, and a
-    // threshold set one code point too high would answer "nothing here" for
-    // real data without any table being wrong.
+test "the class trie agrees with the sorted tables it replaced" {
+    // The Python verifier decodes the emitted arrays and never runs these
+    // functions, so the trie's own indexing is only covered here. Walk every
+    // code point and check the class against the tables that still carry the
+    // mappings, plus the two range guards that survive.
     var cp: u21 = 0;
     while (cp < 0x110000) : (cp += 1) {
         if (cp >= 0xD800 and cp <= 0xDFFF) continue;
-        const shortcut = cp < properties.first_decomposition;
-        if (shortcut) {
-            try std.testing.expect(properties.decomposition(cp) == null);
-            try std.testing.expect(properties.nfdQuickCheckIsYes(cp));
-        }
-        if (cp < properties.first_combining) try std.testing.expectEqual(@as(u8, 0), properties.combiningClass(cp));
-        if (cp < properties.first_nfc_relevant)
-            try std.testing.expectEqual(properties.QuickCheck.yes, properties.nfcQuickCheck(cp));
-        // Nothing below `first_composable` is ever the second half of a
-        // composite, whatever it is paired with.
-        if (cp < properties.first_composable) {
-            for ([_]u21{ 'a', 'A', 0x0041, 0x00C0, 0x1100, 0x05D0 }) |base|
+        const class = properties.classOf(cp);
+
+        // `decomposes` must agree with the decomposition table, Hangul aside:
+        // Hangul is algorithmic and deliberately absent from the table.
+        const hangul = cp >= 0xAC00 and cp < 0xAC00 + 11172;
+        const in_table = properties.decomposition(cp) != null;
+        try std.testing.expectEqual(class.decomposes, in_table or hangul);
+        try std.testing.expectEqual(!class.decomposes, properties.nfdQuickCheckIsYes(cp));
+        try std.testing.expectEqual(class.ccc, properties.combiningClass(cp));
+        try std.testing.expectEqual(class.quick_check, properties.nfcQuickCheck(cp));
+
+        // Nothing that is not a base can absorb, and nothing that is not
+        // composable can be absorbed -- for any partner at all.
+        if (!class.composable) {
+            for ([_]u21{ 'a', 'A', 0x00C0, 0x05D0, 0x0915, 0x4E00 }) |base|
                 try std.testing.expect(properties.compose(base, cp) == null);
         }
-        // And the shortcut ranges really are empty of data.
-        if (shortcut) try std.testing.expect(!containsDecomposition(cp));
+        if (!class.composition_base) {
+            for ([_]u21{ 0x0300, 0x0301, 0x0323, 0x0327, 0x093C }) |mark|
+                try std.testing.expect(properties.compose(cp, mark) == null);
+        }
     }
-    // The thresholds are tight: the code point at each one carries the fact.
-    try std.testing.expect(containsDecomposition(properties.first_decomposition));
-    try std.testing.expect(properties.combiningClass(properties.first_combining) != 0);
+    // A class id must fit the byte the trie stores, and the table must be
+    // small enough to stay resident.
+    try std.testing.expect(properties.class_table.len < 256);
+    try std.testing.expectEqual(@as(usize, 2), @sizeOf(properties.Class));
 }
 
 fn containsDecomposition(cp: u21) bool {
