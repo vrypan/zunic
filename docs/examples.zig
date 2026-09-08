@@ -66,9 +66,11 @@ test "docs: word-like segments" {
 
 test "docs: normalization output" {
     const bytes = "cafe\u{0301}";
-    var buffer: [32]u8 = undefined;
+    const capacity = comptime try zunic.normalizedLenBound(bytes.len, .nfc);
+    var buffer: [capacity]u8 = undefined;
     const result = try zunic.normalize(bytes, .nfc).writeTo(&buffer);
     try std.testing.expectEqualStrings("café", result);
+    try std.testing.expectEqual(@as(usize, 4), zunic.text(result).width());
 
     var scalars = zunic.normalize("é", .nfd);
     try std.testing.expectEqual(@as(u21, 'e'), (try scalars.next()).?);
@@ -84,11 +86,11 @@ test "docs: normalization queries" {
 }
 
 test "docs: normalization capacity and iterator position" {
-    const capacity = try zunic.normalizedLenBound("é".len, .nfd);
+    const capacity = comptime try zunic.normalizedLenBound("é".len, .nfd);
     try std.testing.expectEqual(@as(usize, 6), capacity);
     var it = zunic.normalize("é", .nfd);
     _ = try it.next(); // Consume 'e'.
-    var buffer: [8]u8 = undefined;
+    var buffer: [capacity]u8 = undefined;
     try std.testing.expectEqualStrings("\u{0301}", try it.writeTo(&buffer));
     // writeTo copied the iterator; its next scalar is still the accent.
     try std.testing.expectEqual(@as(u21, 0x301), (try it.next()).?);
