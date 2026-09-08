@@ -373,32 +373,30 @@ pub fn eql(a: []const u8, b: []const u8, comptime how: Equivalence) Error!bool {
 /// gives way to `InvalidUtf8` or `SequenceTooLong` once encountered.
 pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
     var pos: usize = 0;
-    var last_ccc: u8 = 0;
     var nonstarters: usize = 0;
-    // Start of the region a Maybe would have to be settled over: the last
-    // position at which output could not depend on anything earlier.
+    // Combining class of the previous character *as written*, which is what
+    // the UAX #15 quick check compares.
+    var written_previous_ccc: u8 = 0;
+    // The same, over the *decomposed* text, plus how many decomposed
+    // non-starters have followed the last decomposed starter. A precomposed
+    // character contributes marks here that are invisible in the input:
+    // `U+00E9` is one written starter but decomposes to `e` and a class-230
+    // mark.
+    var decomposed_trailing: u8 = 0;
+    var decomposed_since_starter: usize = 0;
+    // The last starter as written -- what a composition would attach to --
+    // and where it begins, for the general fallback below.
+    var starter: ?u21 = null;
     var region: usize = 0;
+
     while (pos < bytes.len) {
         const decoded = utf8.step(bytes[pos..]);
         const cp = decoded.cp orelse return error.InvalidUtf8;
-
         const ccc = properties.combiningClass(cp);
-        // Count the decomposed text even for starters: a precomposed starter
-        // can contribute trailing non-starters to the following run.
-        var scratch: [4]Entry = undefined;
-        const len = decomposeInto(&scratch, cp);
-        for (scratch[0..len]) |entry| {
-            if (entry.ccc == 0) {
-                nonstarters = 0;
-            } else {
-                if (nonstarters == max_nonstarters) return error.SequenceTooLong;
-                nonstarters += 1;
-            }
-        }
-        // Marks out of canonical order are not normalized in either form, even
-        // when every one of them individually quick-checks as Yes.
-        if (last_ccc > ccc and ccc != 0) return false;
-        last_ccc = ccc;
+
+        // Marks out of canonical order are normalized in neither form, even
+        // when each of them quick-checks as Yes on its own.
+        if (ccc != 0 and written_previous_ccc > ccc) return false;
 
         switch (form) {
             .nfd => {
@@ -408,21 +406,64 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
             .nfc => switch (properties.nfcQuickCheck(cp)) {
                 .no => return false,
                 .yes => {},
-                // Maybe means "composes with something before it, sometimes".
-                // Settle it over the region this scalar can reach back into,
-                // which starts at the last starter that could still compose.
-                .maybe => if (!try settled(bytes[region..], pos - region + decoded.len)) return false,
+                // Maybe means "composes with the character before it, for some
+                // characters", and settling it is the expensive part of this
+                // query.
+                //
+                // It cannot be settled locally in general. Decomposing can
+                // reorder marks *inside* the run, which may enable a different
+                // composition (`U+00E9 U+0323` is not NFC) or may recompose
+                // right back to the input (`U+1E69 U+0323` is). Telling those
+                // apart needs the real algorithm.
+                //
+                // But when nothing in the run outranks this character, no
+                // reordering can happen, and the only question left is whether
+                // it composes with the starter -- one lookup. That covers
+                // ordinary accented text; the rest falls back.
+                .maybe => if (starter != null and decomposed_trailing <= ccc) {
+                    // UAX #15 blocking: `cp` is blocked from the starter when
+                    // something between them has a class at least as large.
+                    // The run is in canonical order, so only the last matters;
+                    // and a starter is blocked by anything at all, every
+                    // non-starter's class being greater than zero.
+                    const blocked = decomposed_since_starter > 0 and decomposed_trailing >= ccc;
+                    if (!blocked and composePair(starter.?, cp) != null) return false;
+                } else {
+                    if (!try settled(bytes[region..], pos - region + decoded.len)) return false;
+                },
             },
         }
-        if (ccc == 0) region = pos;
+
+        // Fold the decomposed form in. The run limit and the decomposed
+        // context above are both properties of the decomposed text.
+        var scratch: [4]Entry = undefined;
+        const len = decomposeInto(&scratch, cp);
+        for (scratch[0..len]) |entry| {
+            if (entry.ccc == 0) {
+                nonstarters = 0;
+                decomposed_trailing = 0;
+                decomposed_since_starter = 0;
+                continue;
+            }
+            if (nonstarters == max_nonstarters) return error.SequenceTooLong;
+            nonstarters += 1;
+            decomposed_trailing = entry.ccc;
+            decomposed_since_starter += 1;
+        }
+
+        if (ccc == 0) {
+            starter = cp;
+            region = pos;
+        }
+        written_previous_ccc = ccc;
         pos += decoded.len;
     }
     return true;
 }
 
 /// Whether normalizing `region` to NFC leaves its first `prefix_len` bytes
-/// unchanged. Used only to settle a `Maybe`, over a region that starts at a
-/// starter and is bounded by the configured run limit.
+/// unchanged. The general way to settle a Maybe, used when the fast path above
+/// cannot rule out a reordering inside the run.
 fn settled(region: []const u8, prefix_len: usize) Error!bool {
     var iterator = normalize(region[0..prefix_len], .nfc);
     var pos: usize = 0;

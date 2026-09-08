@@ -643,3 +643,31 @@ fn containsDecomposition(cp: u21) bool {
     for (properties.decomposition_entries) |entry| if (entry & 0x3FFFF == cp) return true;
     return false;
 }
+
+test "a Maybe that needs the general check, and one that does not" {
+    // Both of these put a class-220 mark after a starter whose own
+    // decomposition ends in class 230, so decomposing reorders inside the run
+    // and the fast path in `isNormalized` must decline to answer. They then
+    // disagree, which is why no purely local rule can settle a Maybe.
+    //
+    // U+00E9 is e + U+0301. Adding U+0323 sorts it in front of the acute, and
+    // e + U+0323 has a composite (U+1EB9), so the text normalizes to something
+    // else and is not NFC.
+    try std.testing.expect(!try normalization.isNormalized("\u{00E9}\u{0323}", .nfc));
+    try expectNfc("\u{00E9}\u{0323}", "\u{1EB9}\u{0301}");
+
+    // U+1E69 is s + U+0323 + U+0307. Adding a second U+0323 also reorders,
+    // but recomposition puts every character back, so the input *is* NFC.
+    try std.testing.expect(try normalization.isNormalized("\u{1E69}\u{0323}", .nfc));
+    try expectNfc("\u{1E69}\u{0323}", "\u{1E69}\u{0323}");
+
+    // The fast path proper: a starter with no hidden marks, so no reordering
+    // is possible and one composition lookup settles it.
+    try std.testing.expect(try normalization.isNormalized("z\u{0300}", .nfc)); // no z-grave
+    try std.testing.expect(!try normalization.isNormalized("a\u{0300}", .nfc)); // a-grave is U+00E0
+    // Blocked, so the acute cannot reach the starter even though a+acute exists.
+    try std.testing.expect(try normalization.isNormalized("a\u{0305}\u{0301}", .nfc));
+    // Hangul reaches across a starter boundary.
+    try std.testing.expect(!try normalization.isNormalized("\u{1100}\u{1161}", .nfc));
+    try std.testing.expect(try normalization.isNormalized("\u{AC00}", .nfc));
+}
