@@ -255,7 +255,13 @@ def emit(out, combining, sources, decomposition, flat, offsets, full, compositio
     out.write("/// sits below all three.\n")
     out.write(f"pub const first_combining: u21 = 0x{combining[0][0]:04X};\n")
     out.write(f"pub const first_decomposition: u21 = 0x{sources[0]:04X};\n")
-    out.write(f"pub const first_nfc_relevant: u21 = 0x{min(sources[0], maybe[0]):04X};\n\n")
+    out.write(f"pub const first_nfc_relevant: u21 = 0x{min(sources[0], maybe[0]):04X};\n")
+    out.write("/// Lowest code point that is ever the *second* half of a primary\n")
+    out.write("/// composite. Nothing below it can compose with anything, which takes\n")
+    out.write("/// every pair of ASCII characters out of the composition search.\n")
+    lowest_second = min(decomposition[cp][1] for cp in sources
+                        if len(decomposition[cp]) == 2 and cp not in full)
+    out.write(f"pub const first_composable: u21 = 0x{lowest_second:04X};\n\n")
     out.write("""fn search(entries: []const u32, cp: u21, comptime mask: u32) ?usize {
     var low: usize = 0;
     var high: usize = entries.len;
@@ -299,6 +305,7 @@ pub fn decomposition(cp: u21) ?Decomposition {
 /// The primary composite of `first` and `second`, if the pair has one that is
 /// not excluded from composition. Hangul is handled by the engine.
 pub fn compose(first: u21, second: u21) ?u21 {
+    if (second < first_composable) return null;
     var low: usize = 0;
     var high: usize = composition_index.len;
     while (low < high) {

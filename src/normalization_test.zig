@@ -625,6 +625,12 @@ test "the accessors' range shortcuts agree with an unguarded search" {
         if (cp < properties.first_combining) try std.testing.expectEqual(@as(u8, 0), properties.combiningClass(cp));
         if (cp < properties.first_nfc_relevant)
             try std.testing.expectEqual(properties.QuickCheck.yes, properties.nfcQuickCheck(cp));
+        // Nothing below `first_composable` is ever the second half of a
+        // composite, whatever it is paired with.
+        if (cp < properties.first_composable) {
+            for ([_]u21{ 'a', 'A', 0x0041, 0x00C0, 0x1100, 0x05D0 }) |base|
+                try std.testing.expect(properties.compose(base, cp) == null);
+        }
         // And the shortcut ranges really are empty of data.
         if (shortcut) try std.testing.expect(!containsDecomposition(cp));
     }

@@ -89,6 +89,7 @@ def parse_zig():
         "first_combining": int(re.search(r"pub const first_combining: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
         "first_decomposition": int(re.search(r"pub const first_decomposition: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
         "first_nfc_relevant": int(re.search(r"pub const first_nfc_relevant: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
+        "first_composable": int(re.search(r"pub const first_composable: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
     }
 
 
@@ -226,6 +227,10 @@ def main():
     for cp in got_pairs.values():
         if cp in full:
             fail(f"U+{cp:04X} is excluded yet reachable by composition")
+    lowest_second = min(pair[1] for pair in expected_pairs)
+    if table["first_composable"] != lowest_second:
+        fail(f"first_composable is 0x{table['first_composable']:X}, data says 0x{lowest_second:X}")
+
     explicit = read_exclusions_file()
     if not explicit <= full:
         fail("CompositionExclusions.txt lists a character not in Full_Composition_Exclusion")

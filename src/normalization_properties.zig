@@ -900,6 +900,10 @@ const std = @import("std");
 pub const first_combining: u21 = 0x0300;
 pub const first_decomposition: u21 = 0x00C0;
 pub const first_nfc_relevant: u21 = 0x00C0;
+/// Lowest code point that is ever the *second* half of a primary
+/// composite. Nothing below it can compose with anything, which takes
+/// every pair of ASCII characters out of the composition search.
+pub const first_composable: u21 = 0x0300;
 
 fn search(entries: []const u32, cp: u21, comptime mask: u32) ?usize {
     var low: usize = 0;
@@ -944,6 +948,7 @@ pub fn decomposition(cp: u21) ?Decomposition {
 /// The primary composite of `first` and `second`, if the pair has one that is
 /// not excluded from composition. Hangul is handled by the engine.
 pub fn compose(first: u21, second: u21) ?u21 {
+    if (second < first_composable) return null;
     var low: usize = 0;
     var high: usize = composition_index.len;
     while (low < high) {
