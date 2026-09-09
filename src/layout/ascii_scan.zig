@@ -215,3 +215,36 @@ pub fn asciiLine(bytes: []const u8, start: usize) ?AsciiLine {
     }
     return .{ .end = bytes.len, .columns = columns, .terminator_len = 0 };
 }
+
+pub const AsciiRun = struct {
+    /// First byte not part of the run: either `>= 0x80`, or the slice end.
+    end: usize,
+    /// Terminal columns for `[start, end)`. Exact, not a bound: every ASCII
+    /// byte is its own cluster, printable ones are one column and controls
+    /// are zero.
+    columns: usize,
+};
+
+/// Measure the ASCII run at `start`, stopping at the first byte `>= 0x80`.
+///
+/// DEL is included here, unlike `asciiLine`: it is zero-width and its own
+/// cluster, so a width count can carry it. Only a byte that could belong to a
+/// multi-scalar cluster has to stop the run.
+pub fn asciiRun(bytes: []const u8, start: usize) AsciiRun {
+    var pos = start;
+    var columns: usize = 0;
+    if (selectedBackend() != .off and simdSupported()) {
+        const V = @Vector(simd_width, u8);
+        const Mask = std.meta.Int(.unsigned, simd_width);
+        while (pos + simd_width <= bytes.len) : (pos += simd_width) {
+            const chunk: V = bytes[pos..][0..simd_width].*;
+            if (@reduce(.Or, chunk >= @as(V, @splat(0x80)))) break;
+            const printable = (chunk >= @as(V, @splat(0x20))) & (chunk != @as(V, @splat(0x7F)));
+            columns += @popCount(@as(Mask, @bitCast(printable)));
+        }
+    }
+    while (pos < bytes.len and bytes[pos] < 0x80) : (pos += 1) {
+        if (bytes[pos] >= 0x20 and bytes[pos] != 0x7F) columns += 1;
+    }
+    return .{ .end = pos, .columns = columns };
+}

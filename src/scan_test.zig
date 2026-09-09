@@ -583,3 +583,27 @@ test "asciiLine column count matches the width engine" {
         try std.testing.expectEqual(width.textWidth(bytes[0..line.end]), line.columns);
     }
 }
+
+test "textWidth agrees with the grapheme iterator on randomized mixed scripts" {
+    // The ASCII fast path hands mixed regions back to the engine at a retreat
+    // point, and getting that boundary wrong is invisible on tidy input. These
+    // inputs interleave ASCII with combining marks, spacing marks, ZWJ,
+    // Prepend, emoji, regional indicators and wide characters, so a cluster
+    // straddles the handover constantly.
+    var prng = std.Random.DefaultPrng.init(0x4B21D);
+    const random = prng.random();
+    var buf: [700]u8 = undefined;
+    const awkward = [_]u21{ 0x0301, 0x0903, 0x200D, 0x0600, 0x1F600, 0x1F1E6, 0x4E00, 0x00E9, 0x0915, 0x094D };
+    for (0..40_000) |_| {
+        var len: usize = 0;
+        while (len < buf.len - 8) {
+            const cp: u21 = switch (random.uintLessThan(u8, 10)) {
+                0, 1 => awkward[random.uintLessThan(usize, awkward.len)],
+                2 => random.uintLessThan(u21, 0x20),
+                else => 0x20 + random.uintLessThan(u21, 0x5F),
+            };
+            len += std.unicode.utf8Encode(cp, buf[len..]) catch break;
+        }
+        try std.testing.expectEqual(referenceTextWidth(buf[0..len]), width.textWidth(buf[0..len]));
+    }
+}
