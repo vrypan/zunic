@@ -4,7 +4,14 @@
 
 ## Current implementation
 
-[terminal.zig](../../src/terminal.zig) holds the view and a small escape scanner.
+[terminal.zig](../../src/terminal/terminal.zig) holds the view and token iterator
+in the internal `terminal` module. [escape.zig](../../src/terminal/escape.zig)
+recognizes commands and [strip.zig](../../src/terminal/strip.zig) removes them.
+The latter two files do not import Unicode engines or tables; stripping tests
+compile independently of those modules. Shared span types live in
+[types.zig](../../src/types.zig), so terminal code does not import the text view.
+The public entry point remains `zunic.terminal(bytes)`.
+
 It reads a complete borrowed slice, so it does not need to preserve a partially
 received escape between input chunks. There is no streaming-input API yet.
 

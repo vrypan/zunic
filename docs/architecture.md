@@ -9,9 +9,10 @@ byte positions and column counts instead of allocating substrings. Views cost
 only a slice and options; iterators hold their own progress. Callers choose
 whether to keep results, render them, or stop early.
 
-Normalization is the exception to returning positions: its output may reorder,
-expand, or combine input characters. It returns scalar values or writes UTF-8
-into a caller's buffer instead.
+Normalization may reorder, expand, or combine input characters. It returns
+scalar values or writes UTF-8 into a caller's buffer instead of returning
+positions. Terminal stripping also writes to caller-owned storage, removing
+recognized escapes while copying the remaining bytes unchanged.
 
 ## Keep the boundaries enforced, not just tidy
 
@@ -23,21 +24,29 @@ something a reviewer has to notice.
 | Module | Holds | May import |
 | --- | --- | --- |
 | `tables` | generated Unicode data | nothing |
+| `types` | shared byte positions, spans, and display measurements | nothing |
 | `encoding` | UTF-8 stepping, scalar plus its record | `tables` |
 | `segmentation` | grapheme clusters, word bounds | `tables`, `encoding` |
 | `linebreak` | UAX #14 opportunities and its machine | `tables`, `encoding` |
 | `normalization` | NFC and NFD | `tables`, `encoding` |
 | `layout` | width, scanning, wrapping | `tables`, `encoding`, `segmentation`, `linebreak` |
+| `terminal` | terminal view, tokens, escape recognition, stripping | `types`, `encoding`, `segmentation` |
 | `zunic` | `root.zig` and the text view | all of the above |
 
 Only `zunic` is public. The internal modules are created rather than named
 in the build graph, so a dependent cannot reach past the facade to one of
 them.
 
-The graph is acyclic and points away from `tables`. Two consequences worth
+The graph is acyclic, with `tables` and `types` as independent foundations. Two consequences worth
 knowing: `linebreak`'s state machine is private to that module, and an
 engine cannot quietly start depending on `layout`, which is the module that
 fuses the others.
+
+The text and terminal views share `Span` and `ByteOffset` from `src/types.zig`;
+neither view defines a separate copy of those public types. Terminal code does
+not depend on the text view. Its `escape.zig` and `strip.zig` files contain only
+byte operations. The stripping tests compile as a separate root without Unicode
+module imports, while token iteration uses encoding and segmentation.
 
 The normalization and layout modules also receive generated build options.
 `-Dnormalization-buffer-bytes` is compiled into `normalization`, so a target

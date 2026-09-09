@@ -17,15 +17,16 @@
 //! escape-aware tokens and byte-only stripping; use `text` on stripped output.
 pub const utf8 = @import("encoding").utf8;
 const text_view = @import("text.zig");
-const terminal_view = @import("terminal.zig");
+const terminal_view = @import("terminal");
+const types = @import("types");
 const wrap_engine = @import("layout").wrap;
 pub const line_break = @import("linebreak");
 const normalization = @import("normalization");
 
-pub const ByteOffset = text_view.ByteOffset;
-pub const Column = text_view.Column;
-pub const Span = text_view.Span;
-pub const MeasuredSpan = text_view.MeasuredSpan;
+pub const ByteOffset = types.ByteOffset;
+pub const Column = types.Column;
+pub const Span = types.Span;
+pub const MeasuredSpan = types.MeasuredSpan;
 pub const Line = text_view.Line;
 pub const WrapOptions = wrap_engine.Options;
 pub const Overflow = wrap_engine.Overflow;

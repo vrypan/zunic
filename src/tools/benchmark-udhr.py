@@ -92,10 +92,17 @@ def build_and_run(source_root: Path, operation: str, corpora: list[Path], work: 
     )
 
     command = ["zig", "build-exe", "-OReleaseFast", "-femit-bin=probe", "--dep", "zunic", "-Mroot=probe.zig"]
-    for name, _, _ in MODULES:
+    # Older snapshots predate the terminal/types module split.
+    modules = list(MODULES)
+    if (source_root / "src/types.zig").exists():
+        modules += [
+            ("types", "src/types.zig", []),
+            ("terminal", "src/terminal/terminal.zig", ["types", "encoding", "segmentation"]),
+        ]
+    for name, _, _ in modules:
         command += ["--dep", name]
     command += ["--dep", "build_options", f"-Mzunic={source_root}/src/root.zig", "-Mbuild_options=opts.zig"]
-    for name, rel, deps in MODULES:
+    for name, rel, deps in modules:
         for dep in deps:
             command += ["--dep", dep]
         command.append(f"-M{name}={source_root}/{rel}")

@@ -9,25 +9,11 @@ const normalization = @import("normalization");
 const word_engine = @import("segmentation").word;
 const wrap_engine = @import("layout").wrap;
 
-pub const ByteOffset = struct {
-    value: usize,
-};
-
-pub const Column = struct {
-    value: usize,
-};
-
-pub const Span = struct {
-    start: ByteOffset,
-    end: ByteOffset,
-};
-
-pub const MeasuredSpan = struct {
-    start: ByteOffset,
-    end: ByteOffset,
-    columns: u2,
-    renderable: bool,
-};
+const types = @import("types");
+pub const ByteOffset = types.ByteOffset;
+pub const Column = types.Column;
+pub const Span = types.Span;
+pub const MeasuredSpan = types.MeasuredSpan;
 
 pub const Graphemes = struct {
     bytes: []const u8,

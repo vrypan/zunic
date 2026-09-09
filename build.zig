@@ -27,8 +27,7 @@ pub fn build(b: *std.Build) void {
     // The internal module graph. A module reaches only what it is granted an
     // import for here, so an undeclared dependency is a compile error rather
     // than something a reviewer has to catch. It is acyclic by construction:
-    // `tables` holds generated data and depends on nothing, and every arrow
-    // points away from it.
+    // `tables` and `types` are independent foundations with no module imports.
     //
     // `tables` stays one module on purpose. Its `Record` fuses grapheme,
     // width and line-break facts into a single `u32` so a scanner resolves a
@@ -40,12 +39,14 @@ pub fn build(b: *std.Build) void {
     // package's public surface, and a dependent must not be able to reach
     // past it to an internal module by name.
     const Modules = struct {
+        types: *std.Build.Module,
         tables: *std.Build.Module,
         encoding: *std.Build.Module,
         segmentation: *std.Build.Module,
         linebreak: *std.Build.Module,
         normalization: *std.Build.Module,
         layout: *std.Build.Module,
+        terminal: *std.Build.Module,
 
         /// Grant every internal module to `module`. Tests reach past the
         /// public API into the module they exercise, so they get the same
@@ -62,6 +63,7 @@ pub fn build(b: *std.Build) void {
     // the default.
     const buildModules = struct {
         fn call(owner: *std.Build, options: *std.Build.Module) Modules {
+            const types = owner.createModule(.{ .root_source_file = owner.path("src/types.zig") });
             const tables = owner.createModule(.{ .root_source_file = owner.path("src/tables/tables.zig") });
 
             const encoding = owner.createModule(.{ .root_source_file = owner.path("src/encoding/encoding.zig") });
@@ -87,13 +89,20 @@ pub fn build(b: *std.Build) void {
             layout.addImport("linebreak", linebreak);
             layout.addImport("build_options", options);
 
+            const terminal = owner.createModule(.{ .root_source_file = owner.path("src/terminal/terminal.zig") });
+            terminal.addImport("types", types);
+            terminal.addImport("encoding", encoding);
+            terminal.addImport("segmentation", segmentation);
+
             return .{
+                .types = types,
                 .tables = tables,
                 .encoding = encoding,
                 .segmentation = segmentation,
                 .linebreak = linebreak,
                 .normalization = normalization,
                 .layout = layout,
+                .terminal = terminal,
             };
         }
     }.call;
@@ -143,6 +152,8 @@ pub fn build(b: *std.Build) void {
         .{ .path = "src/conformance_test.zig", .group = "conformance", .grants = &.{ .api, .segmentation, .normalization } },
         .{ .path = "src/root_test.zig", .group = "api", .grants = &.{ .api, .tables, .layout } },
         .{ .path = "src/terminal_test.zig", .group = "terminal", .grants = &.{.api} },
+        // The stripping root deliberately has no Unicode-engine imports.
+        .{ .path = "src/terminal/strip_test.zig", .group = "terminal", .grants = &.{.none} },
         .{ .path = "docs/examples.zig", .group = "api", .grants = &.{.api} },
     };
 

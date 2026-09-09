@@ -2,6 +2,11 @@
 
 [Terminal API](README.md) · [Implementation](implementation.md)
 
+The internal module split was checked on 2026-09-09 against the final bulk-copy
+repeat below. Run `private/benchmarks/20260909T204213Z-terminal-module-45df76`
+preserves all 22 checksums, with every median within 2.7% of that run. The archive
+includes comparison output, the source diff, and copies of the new module files.
+
 The native suite includes `terminal_tokens` and `strip_ansi` rows. Run all
 operations with `make bench`, or just the terminal cases with:
 
