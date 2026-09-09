@@ -53,7 +53,14 @@ normalizes and compares the relevant prefix using the real algorithm. It does
 not treat `Maybe` as `Yes`. This saves work on common already-normalized input
 while retaining the full check where it is needed.
 
+`isNormalizedQuick()` exposes the three-valued check without settling Maybe.
+It checks written combining order and per-character quick-check properties,
+using constant state. It scans the complete slice, reports malformed UTF-8
+even after finding No, and does not enforce the normalization buffer limit.
+It does not invoke the normalization iterator or change `isNormalized()`.
+
 ## Bound output space separately
+
 
 The UTF-8 capacity bound is generated from pinned data. Both forms currently
 need at most three times the input byte count; NFC can grow too because some

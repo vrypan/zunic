@@ -32,7 +32,7 @@ numeric punctuation exception directly.
 
 Characters such as `-`, `/`, parentheses, `$`, `%`, and `+` are excluded from
 that broader shortcut because their line-break rules need more context. Any
-unsupported byte selects the general scanner. The shortcut is checked against
+unsupported byte selects the mixed path described below. The shortcut is checked against
 the full rules in [exhaustive tests](../../src/wrap_exhaustive_test.zig).
 
 The detector can use 16-byte vector checks on supported CPUs. This first scan
@@ -42,6 +42,22 @@ tail after a saved break; the no-rewind design above describes the general path.
 
 The general path is kept in a separate `noinline` function so changes to its
 size do not prevent the compiler from optimizing the small ASCII path.
+
+## Emit an ASCII line directly when it fits
+
+The mixed path checks for a complete ASCII line at a clean line start. If its
+measured width fits, it can return the line without computing internal break
+opportunities. This accepts punctuation and tabs excluded from the paragraph
+shortcut above. C0 controls have zero width; DEL and non-ASCII bytes select
+the general scanner. CRLF is consumed as one terminator, and returned slices
+exclude hard terminators as on the general path.
+
+This check is used only when no candidate break, carried columns, or pending
+line must be preserved. After returning a complete line, the scanner is marked
+stale. If a later line needs the general path, the scanner restarts at that
+hard-break boundary, where earlier line-break context no longer applies.
+An overlong line falls back to the full rules. With `wrap-fast-path=off`,
+the whole-line check still runs scalarly; only its vector scan is disabled.
 
 ## Compile the line-break rules into a table
 

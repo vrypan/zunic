@@ -27,7 +27,7 @@ something a reviewer has to notice.
 | `segmentation` | grapheme clusters, word bounds | `tables`, `encoding` |
 | `linebreak` | UAX #14 opportunities and its machine | `tables`, `encoding` |
 | `normalization` | NFC and NFD | `tables`, `encoding` |
-| `layout` | width, scanning, wrapping | all of the above |
+| `layout` | width, scanning, wrapping | `tables`, `encoding`, `segmentation`, `linebreak` |
 | `zunic` | `root.zig` and the text view | all of the above |
 
 Only `zunic` is public. The internal modules are created rather than named
@@ -39,6 +39,7 @@ knowing: `linebreak`'s state machine is private to that module, and an
 engine cannot quietly start depending on `layout`, which is the module that
 fuses the others.
 
+The normalization and layout modules also receive generated build options.
 `-Dnormalization-buffer-bytes` is compiled into `normalization`, so a target
 that needs a different setting gets its own instance of the whole graph
 rather than sharing one.

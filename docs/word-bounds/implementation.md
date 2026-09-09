@@ -31,7 +31,7 @@ less than twice as many scalar decodes as there are input scalars.
 
 ## Compute the flag while scanning
 
-[word_properties.zig](../../src/word_properties.zig) supplies the word class,
+[word_properties.zig](../../src/tables/word_properties.zig) supplies the word class,
 pictographic bit, and word-like bit together. The iterator accumulates the
 word-like bit as it consumes each segment. It does not scan the returned slice
 again to compute `is_word`.

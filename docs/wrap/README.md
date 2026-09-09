@@ -51,6 +51,10 @@ lines; it does not consume an existing iterator or cache a count. `next()`
 returns `null` at exhaustion. `WrappedIterator` is the returned type from
 `text.zig`, not a named export on `zunic`; let Zig infer it.
 
+Use `Text.wrap()` to construct the view. If a `Wrapped` is constructed by hand
+with a zero width, its iterator clamps the width to one; `Text.wrap()` itself
+continues to reject zero with `InvalidWidth`.
+
 ## Overflow and hard breaks
 
 | Option | When no legal break fits |
