@@ -16,6 +16,7 @@
 //! independent of wrapping width and line count. The bound is enforced by
 //! instrumented-scanner counters in tests; instrumentation is a comptime
 //! option and compiles to nothing in production builds.
+const std = @import("std");
 const scalar = @import("encoding").scalar;
 const grapheme = @import("segmentation").grapheme;
 const line_break = @import("linebreak");
@@ -156,7 +157,13 @@ pub fn Scanner(comptime instrumented: bool) type {
             return self.buf0;
         }
 
+        /// The scalar after `peek0`'s. Only meaningful once `buf0` holds the
+        /// first one: called on an empty buffer it would decode the *first*
+        /// scalar into `buf1`, and `take` would then hand them back out of
+        /// order. The single caller peeks in order; the assert keeps a second
+        /// one honest.
         fn peek1(self: *Self) ?scalar.ClassifiedToken {
+            std.debug.assert(self.buf0 != null);
             if (self.buf1 == null) {
                 if (self.decode_pos >= self.bytes.len) return null;
                 self.buf1 = self.decode();

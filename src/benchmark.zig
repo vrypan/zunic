@@ -1,3 +1,13 @@
+//! Native throughput benchmarks over pinned corpora.
+//!
+//! Each case reports per-sample timings plus a checksum, so a run proves what
+//! it measured still produces the same bytes. `src/tools/benchmark-history.py`
+//! archives a run and compares two of them; see `private/` for the Rust peer
+//! comparisons, which answer a different question.
+//!
+//! Row names and checksums are a compatibility surface: adding a case is
+//! fine, renaming or redefining one silently invalidates every stored
+//! archive. Bump `harness_version` when the set changes.
 const std = @import("std");
 const zunic = @import("zunic");
 const corpora = @import("corpora.zig");

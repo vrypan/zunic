@@ -204,6 +204,16 @@ pub fn lateDecision(sig: WordBreak, sig_prev: WordBreak, ri_odd: bool, cur: Word
 
 /// Apply a decision, asking for the next unfolded character only if a rule
 /// wants one.
+///
+/// `following` is `anytype` so the tabled and reference iterators can each
+/// pass their own lookahead without a shared vtable. The contract it must
+/// satisfy is one method:
+///
+///     fn significant(self) ?WordBreak
+///
+/// returning the next character that the folding rules do not ignore, or
+/// null at end of text. Getting that wrong surfaces as an error inside this
+/// function rather than at the call, so it is written down here.
 inline fn resolve(late: Late, following: anytype) bool {
     if (late.lookahead != .none) {
         if (following.significant()) |next| {
@@ -297,6 +307,7 @@ pub const machine = struct {
 
 /// The rules, composed. `tabled` selects the compiled decision table over
 /// direct evaluation; both read the same `lateDecision`.
+/// `following` carries the same one-method contract `resolve` documents.
 pub fn breakBefore(comptime tabled: bool, state: State, cur: Token, following: anytype) bool {
     if (earlyDecision(state.raw_prev, cur)) |decided| return decided;
     const late = if (tabled)
