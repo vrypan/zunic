@@ -1,5 +1,5 @@
 const std = @import("std");
-const unicode = @import("root.zig");
+const unicode = @import("zunic");
 const grapheme = @import("segmentation").grapheme;
 const word = @import("segmentation").word;
 const normalization = @import("normalization");

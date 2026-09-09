@@ -110,44 +110,72 @@ pub fn build(b: *std.Build) void {
     zunic.addImport("build_options", options_module);
     internal.addTo(zunic);
 
-    const test_step = b.step("test", "Run zunic tests");
+    const test_step = b.step("test", "Run every test");
     const docs_step = b.step("docs-test", "Run documentation examples");
     const transition_step = b.step("line-break-tests", "Run line-break machine protocol tests");
-    const roots = [_][]const u8{
-        "docs/examples.zig",
-        "src/root_test.zig",
-        "src/conformance_test.zig",
-        "src/wrap_test.zig",
-        "src/wrap_regression_test.zig",
-        "src/scan_test.zig",
-        "src/word_test.zig",
-        "src/normalization_test.zig",
-        "src/linebreak/linebreak.zig",
-        "src/encoding/utf8.zig",
+
+    // Which modules a test root may reach, and which per-module step runs it.
+    //
+    // The grants are deliberately narrow rather than "all of them". A test is
+    // the first place a boundary erodes, and a root that can see every module
+    // can quietly grow a dependency the library itself is not allowed. It also
+    // keeps the compile cache honest: editing `normalization` should not
+    // rebuild the word tests.
+    //
+    // Note what `zunic` costs. It re-exports every module, so any root that
+    // needs the public API depends on all of them whatever this table says;
+    // only the roots that test an engine directly are genuinely narrow.
+    const Grant = enum { none, api, tables, encoding, segmentation, linebreak, normalization, layout };
+    const TestRoot = struct {
+        path: []const u8,
+        /// Step suffix: `zig build test-<group>` runs just this group.
+        group: []const u8,
+        grants: []const Grant,
     };
-    for (roots) |root| {
+    const test_roots = [_]TestRoot{
+        .{ .path = "src/encoding/utf8.zig", .group = "encoding", .grants = &.{.none} },
+        .{ .path = "src/linebreak/linebreak.zig", .group = "linebreak", .grants = &.{ .tables, .encoding } },
+        .{ .path = "src/word_test.zig", .group = "segmentation", .grants = &.{ .tables, .segmentation } },
+        .{ .path = "src/scan_test.zig", .group = "layout", .grants = &.{ .tables, .encoding, .segmentation, .linebreak, .layout } },
+        .{ .path = "src/wrap_test.zig", .group = "layout", .grants = &.{.api} },
+        .{ .path = "src/wrap_regression_test.zig", .group = "layout", .grants = &.{.api} },
+        .{ .path = "src/normalization_test.zig", .group = "normalization", .grants = &.{ .api, .tables, .encoding, .normalization } },
+        .{ .path = "src/conformance_test.zig", .group = "conformance", .grants = &.{ .api, .segmentation, .normalization } },
+        .{ .path = "src/root_test.zig", .group = "api", .grants = &.{ .api, .tables, .layout } },
+        .{ .path = "docs/examples.zig", .group = "api", .grants = &.{.api} },
+    };
+
+    var group_steps = std.StringHashMap(*std.Build.Step).init(b.allocator);
+    for (test_roots) |root| {
         const test_mod = b.createModule(.{
-            .root_source_file = b.path(root),
+            .root_source_file = b.path(root.path),
             .target = target,
             .optimize = optimize,
         });
-        // The two module roots below are tested in place, so they must see
-        // exactly the imports their module is granted -- not `zunic`, which
-        // would be a cycle back through the facade.
-        const in_place = std.mem.eql(u8, root, "src/linebreak/linebreak.zig") or
-            std.mem.eql(u8, root, "src/encoding/utf8.zig");
-        if (!in_place) {
-            test_mod.addImport("zunic", zunic);
-            internal.addTo(test_mod);
-        } else {
-            test_mod.addImport("tables", internal.tables);
-            test_mod.addImport("encoding", internal.encoding);
-        }
+        for (root.grants) |grant| switch (grant) {
+            .none => {},
+            .api => test_mod.addImport("zunic", zunic),
+            .tables => test_mod.addImport("tables", internal.tables),
+            .encoding => test_mod.addImport("encoding", internal.encoding),
+            .segmentation => test_mod.addImport("segmentation", internal.segmentation),
+            .linebreak => test_mod.addImport("linebreak", internal.linebreak),
+            .normalization => test_mod.addImport("normalization", internal.normalization),
+            .layout => test_mod.addImport("layout", internal.layout),
+        };
         test_mod.addImport("build_options", options_module);
         const run_test = b.addRunArtifact(b.addTest(.{ .root_module = test_mod }));
         test_step.dependOn(&run_test.step);
-        if (std.mem.eql(u8, root, "docs/examples.zig")) docs_step.dependOn(&run_test.step);
-        if (std.mem.eql(u8, root, "src/linebreak/linebreak.zig")) transition_step.dependOn(&run_test.step);
+
+        const group = group_steps.get(root.group) orelse blk: {
+            const name = b.fmt("test-{s}", .{root.group});
+            const step = b.step(name, b.fmt("Run the {s} tests only", .{root.group}));
+            group_steps.put(root.group, step) catch @panic("OOM");
+            break :blk step;
+        };
+        group.dependOn(&run_test.step);
+
+        if (std.mem.eql(u8, root.path, "docs/examples.zig")) docs_step.dependOn(&run_test.step);
+        if (std.mem.eql(u8, root.path, "src/linebreak/linebreak.zig")) transition_step.dependOn(&run_test.step);
     }
 
     // Keep the >u16 counter regression in the normal gate without running
@@ -173,6 +201,7 @@ pub fn build(b: *std.Build) void {
         .filters = &.{"large configured runs"},
     }));
     test_step.dependOn(&large_normalization_test.step);
+    if (group_steps.get("normalization")) |step| step.dependOn(&large_normalization_test.step);
     b.step("test-normalization-large", "Test normalization counters beyond u16 capacity")
         .dependOn(&large_normalization_test.step);
 

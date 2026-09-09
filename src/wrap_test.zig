@@ -1,5 +1,5 @@
 const std = @import("std");
-const unicode = @import("root.zig");
+const unicode = @import("zunic");
 
 fn expectLines(bytes: []const u8, options: unicode.WrapOptions, expected: []const []const u8, expected_columns: []const usize) !void {
     var it = (try unicode.text(bytes).wrap(options)).iterator();

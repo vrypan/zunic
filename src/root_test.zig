@@ -1,5 +1,5 @@
 const std = @import("std");
-const unicode = @import("root.zig");
+const unicode = @import("zunic");
 
 test "unicode component compiles as an independent root" {
     const step = unicode.utf8.step("x");

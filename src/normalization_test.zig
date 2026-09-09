@@ -2,7 +2,7 @@
 //! configured sequence limit, malformed input, output-capacity behaviour,
 //! iterator copy semantics, and the two queries.
 const std = @import("std");
-const zunic = @import("root.zig");
+const zunic = @import("zunic");
 const normalization = @import("normalization");
 const properties = @import("tables").normalization;
 
