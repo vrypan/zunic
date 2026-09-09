@@ -2,3 +2,4 @@ private/
 .zig-cache/
 zig-out/
 __pycache__
+src/data/udhr/
