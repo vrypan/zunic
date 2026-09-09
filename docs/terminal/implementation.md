@@ -41,7 +41,7 @@ linear in the input size and storage does not grow with sequence length.
 The plain-text engine is unchanged. This draft has correctness tests, including
 the Unicode grapheme fixture with escapes inserted at each scalar boundary
 in turn, accepting legal positions and rejecting positions inside graphemes;
-terminal-specific performance has not yet been benchmarked.
+performance cases and saved baseline results are described in [benchmarks](benchmarks.md).
 
 ## Byte-only stripping
 

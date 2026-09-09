@@ -22,7 +22,8 @@ const corpora = @import("corpora.zig");
 // Version 9 adds `nfc_quick` and `nfd_quick` beside the existing
 // normalization rows. Old names and checksums are untouched, so a
 // version-8 archive still compares row for row against the shared cases.
-const harness_version = "9";
+// Version 10 adds terminal tokens and byte-only ANSI stripping.
+const harness_version = "10";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
 const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
@@ -67,6 +68,87 @@ const normalization_corpora = [_]Corpus{
     .{ .name = "ascii", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 4096 },
 };
 
+// Whole seeds keep intended UTF-8 and escape boundaries intact. Each shape
+// exercises both APIs; malformed bytes and unsupported commands are deliberate.
+const terminal_corpora = [_]Corpus{
+    .{ .name = "term-plain-ascii", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 4096 },
+    .{ .name = "term-sparse-sgr", .seed = "An ordinary log message with a single \x1b[31mwarning\x1b[0m among otherwise plain words. ", .length = 4096 },
+    .{ .name = "term-dense-sgr", .seed = "\x1b[1;31ma\x1b[0m\x1b[38:2::1:2:3mb\x1b[0m", .length = 4096 },
+    .{ .name = "term-unicode", .seed = "\x1b[32mCafe\u{0301} 日本語 👩‍👩‍👧‍👦 🇬🇷\x1b[0m ", .length = 4096 },
+    .{ .name = "term-osc", .seed = "\x1b]8;;https://example.com/page\x07link\x1b]8;;\x07 ", .length = 4096 },
+    .{ .name = "term-commands-only", .seed = "\x1b[31m\x1b[0m\x1b[2K\x1b]0;title\x07", .length = 4096 },
+    .{ .name = "term-malformed", .seed = "\xff\xc0\xaf \x1b[31mtext\x1b[0m \x1b]broken\n", .length = 4096 },
+    .{ .name = "term-plain-ascii-64k", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 65536 },
+};
+
+fn runTerminalCorpora(output: *std.Io.Writer, allocator: std.mem.Allocator, target_bytes: usize, io: std.Io) !void {
+    for (terminal_corpora) |corpus| {
+        var whole = corpus;
+        whole.length = @max(1, corpus.length / corpus.seed.len) * corpus.seed.len;
+        const bytes = try makeCorpus(allocator, whole);
+        try printSamples(output, corpus.name, "terminal_tokens", bytes, target_bytes, terminalTokenChecksum, io);
+        try printSamples(output, corpus.name, "strip_ansi", bytes, target_bytes, stripAnsiChecksum, io);
+    }
+    // Long OSC payloads expose rescanning cost, independent of content width.
+    const osc = try allocator.alloc(u8, 65536);
+    @memset(osc, 'x');
+    @memcpy(osc[0..4], "\x1b]0;");
+    osc[osc.len - 1] = 0x07;
+    try printSamples(output, "term-long-osc", "terminal_tokens", osc, target_bytes, terminalTokenChecksum, io);
+    try printSamples(output, "term-long-osc", "strip_ansi", osc, target_bytes, stripAnsiChecksum, io);
+    // Unterminated OSC must fall back to content without quadratic work.
+    osc[osc.len - 1] = 'x';
+    try printSamples(output, "term-unterminated-osc", "terminal_tokens", osc, target_bytes, terminalTokenChecksum, io);
+    try printSamples(output, "term-unterminated-osc", "strip_ansi", osc, target_bytes, stripAnsiChecksum, io);
+    // Error is at the end, so input-byte throughput still describes a full scan.
+    const split = try allocator.alloc(u8, 4096);
+    @memset(split, 'a');
+    const tail = "e\x1b[31m\u{0301}";
+    @memcpy(split[split.len - tail.len ..], tail);
+    try printSamples(output, "term-split-grapheme", "terminal_tokens", split, target_bytes, terminalTokenErrorChecksum, io);
+    try printSamples(output, "term-split-grapheme", "strip_ansi", split, target_bytes, stripAnsiChecksum, io);
+}
+
+var terminal_buffer: [65536]u8 = undefined;
+
+fn stripAnsiChecksum(bytes: []const u8) u64 {
+    const written = zunic.terminal(bytes).stripAnsi(&terminal_buffer) catch @panic("terminal benchmark buffer too small");
+    var sum: u64 = 0xcbf29ce484222325;
+    for (written) |byte| sum = mix(sum, byte);
+    return mix(sum, written.len);
+}
+
+fn tokenChecksum(bytes: []const u8, comptime expect_error: bool) u64 {
+    var it = zunic.terminal(bytes).tokens().iterator();
+    var sum: u64 = 0xcbf29ce484222325;
+    while (it.next() catch {
+        if (!expect_error) @panic("unexpected terminal benchmark error");
+        return mix(sum, 0xeeee);
+    }) |token| {
+        const span = switch (token) {
+            .grapheme => |span| blk: {
+                sum = mix(sum, 1);
+                break :blk span;
+            },
+            .escape => |escape| blk: {
+                sum = mix(sum, if (escape.kind == .sgr) 2 else 3);
+                break :blk escape.span;
+            },
+        };
+        sum = mix(sum, span.start.value);
+        sum = mix(sum, span.end.value);
+    }
+    if (expect_error) @panic("terminal benchmark failed to reject split grapheme");
+    return sum;
+}
+
+fn terminalTokenChecksum(bytes: []const u8) u64 {
+    return tokenChecksum(bytes, false);
+}
+fn terminalTokenErrorChecksum(bytes: []const u8) u64 {
+    return tokenChecksum(bytes, true);
+}
+
 const wrap_cases = [_]WrapCase{
     .{ .name = "ascii-words-4k-grapheme-full", .corpus = .{ .name = "ascii-words", .seed = "alpha beta gamma delta epsilon zeta eta theta ", .length = 4096 }, .max_columns = 40, .overflow = .grapheme },
     .{ .name = "ascii-words-4k-allow-full", .corpus = .{ .name = "ascii-words", .seed = "alpha beta gamma delta epsilon zeta eta theta ", .length = 4096 }, .max_columns = 40, .overflow = .allow },
@@ -86,7 +168,12 @@ pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const allocator = init.arena.allocator();
     const args = try init.minimal.args.toSlice(allocator);
-    const smoke = args.len > 1 and std.mem.eql(u8, args[1], "--smoke");
+    var smoke = false;
+    var terminal_only = false;
+    for (args[1..]) |arg| {
+        if (std.mem.eql(u8, arg, "--smoke")) smoke = true;
+        if (std.mem.eql(u8, arg, "--terminal")) terminal_only = true;
+    }
     if (args.len > 1 and std.mem.eql(u8, args[1], "--corpus-stats")) {
         var stats_buffer: [4096]u8 = undefined;
         var stats_file = std.Io.File.stdout().writer(io, &stats_buffer);
@@ -97,7 +184,9 @@ pub fn main(init: std.process.Init) !void {
     var output_buffer: [4096]u8 = undefined;
     var output_file = std.Io.File.stdout().writer(io, &output_buffer);
     const output = &output_file.interface;
-    try output.print("zunic-benchmark harness_version={s} target_bytes={d} samples={d} smoke={any} wrap_fast_path={s} line_break_engine=machine\n", .{ harness_version, target_bytes, sample_count, smoke, @tagName(zunic.build_options.wrap_fast_path) });
+    try output.print("zunic-benchmark harness_version={s} target_bytes={d} samples={d} smoke={any} wrap_fast_path={s} line_break_engine=machine scope={s}\n", .{ harness_version, target_bytes, sample_count, smoke, @tagName(zunic.build_options.wrap_fast_path), if (terminal_only) "terminal" else "all" });
+    try runTerminalCorpora(output, allocator, target_bytes, io);
+    if (terminal_only) return output.flush();
     for (legacy_corpora) |corpus| {
         const text = try makeCorpus(allocator, corpus);
         try printSamples(output, corpus.name, "utf8", text, target_bytes, utf8Checksum, io);

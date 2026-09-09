@@ -1,6 +1,6 @@
 # Terminal view — first draft
 
-[Documentation index](../README.md) · [Implementation and next steps](implementation.md)
+[Documentation index](../README.md) · [Implementation and next steps](implementation.md) · [Benchmarks](benchmarks.md)
 
 `zunic.terminal(bytes)` opens a borrowed view of UTF-8 containing terminal
 escape sequences. It provides token iteration and byte-only escape removal.
