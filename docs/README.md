@@ -36,7 +36,8 @@ pub fn isNormalized(self: Text, comptime form: Form) NormalizationError!bool;
 pub fn isNormalizedQuick(self: Text, comptime form: Form) error{InvalidUtf8}!QuickCheck;
 
 // Terminal methods (first draft)
-pub fn graphemes(self: Terminal) TerminalGraphemes;
+pub fn tokens(self: Terminal) TerminalTokens;
+pub fn stripAnsi(self: Terminal, buffer: []u8) error{NoSpace}![]u8;
 ```
 
 `text()` borrows the bytes without scanning or allocating. `validate()` checks
@@ -46,11 +47,14 @@ always scans the whole input and can return `.maybe`; `isNormalized()` resolves
 the answer to a boolean and may stop early. See [conventions](conventions.md)
 and [normalization](normalization/README.md) for the error and buffer contracts.
 
-`terminal()` also borrows without scanning. Its initial grapheme iterator skips
-complete supported CSI/OSC escapes while keeping original byte offsets. It
-returns `EscapeInsideGrapheme` if an escape splits a grapheme; successful spans
-exclude recognized escapes. Formatting state, width,
-stripping, and wrapping are pending; see the [terminal draft](terminal/README.md).
+`terminal()` also borrows without scanning. `tokens()` returns grapheme and
+escape tokens in source order with original byte offsets. `stripAnsi(buffer)`
+removes recognized escapes without allocating or decoding UTF-8; use `text()`
+on its output for Unicode operations. `EscapeInsideGrapheme` is returned when later
+content joins a grapheme across an escape, so the grapheme prefix and intervening
+commands may already have been emitted. `stripAnsi()` has no such check and
+returns only `NoSpace` errors. Formatting state and styled wrapping are deferred;
+see the [terminal draft](terminal/README.md).
 
 ### Views and iterators
 
@@ -61,7 +65,7 @@ are not exported by `zunic`. `Self` below means the corresponding iterator.
 | View | Methods | Iterator result |
 | --- | --- | --- |
 | `Graphemes` | `.iterator()`, `.measured() → MeasuredGraphemes` | `next(self: *Self) ?Span` |
-| `TerminalGraphemes` | `.iterator()` | `next(self: *Self) error{EscapeInsideGrapheme}!?Span` |
+| `TerminalTokens` | `.iterator()` | `next(self: *Self) error{EscapeInsideGrapheme}!?TerminalToken` |
 | `MeasuredGraphemes` | `.iterator()` | `next(self: *Self) ?MeasuredSpan` |
 | `Wrapped` | `.iterator()`, `.count() → usize` | `next(self: *Self) ?Line` |
 | `Terminators` | `.iterator() → TerminatorIterator`, `.count() → usize` | `next(self: *Self) ?Span` |
@@ -83,6 +87,14 @@ the separate combining-run limit.
 ### Options and results
 
 ```zig
+pub const Escape = struct {
+    span: Span,
+    kind: enum { sgr, other },
+};
+pub const TerminalToken = union(enum) {
+    grapheme: Span,
+    escape: Escape,
+};
 pub const Overflow = enum { allow, grapheme };
 pub const WrapOptions = struct {
     max_columns: usize,
@@ -118,7 +130,7 @@ NFKC/NFKD and stream-safe normalization are not available in the current API.
 | Hard line terminators | [terminators](terminators/README.md) | [Why byte scanning is sufficient](terminators/implementation.md) |
 | Default word boundaries | [wordBounds](word-bounds/README.md) | [Decision tables and selective lookahead](word-bounds/implementation.md) |
 | NFC/NFD and canonical equality | [normalization](normalization/README.md) | [Bounded runs and quick checks](normalization/implementation.md) |
-| Terminal graphemes (draft) | [terminal](terminal/README.md) | [Escape scanning and next steps](terminal/implementation.md) |
+| Terminal tokens and escape removal (draft) | [terminal](terminal/README.md) | [Escape scanning and next steps](terminal/implementation.md) |
 
 [Architecture](architecture.md) explains the shared property data, build options,
 and verification strategy. Implementation pages describe the current source;

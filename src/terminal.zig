@@ -7,89 +7,127 @@ const grapheme = @import("segmentation").grapheme;
 pub const Terminal = struct {
     bytes: []const u8,
 
-    /// Extended graphemes with complete supported escapes between clusters.
-    /// The iterator rejects escapes inside a cluster with EscapeInsideGrapheme.
-    /// This does not emulate cursor movement or track active formatting.
-    pub fn graphemes(self: Terminal) Graphemes {
+    /// Content and recognized escape commands in their original order.
+    pub fn tokens(self: Terminal) Tokens {
         return .{ .bytes = self.bytes };
+    }
+
+    /// Remove recognized CSI/OSC sequences into caller-owned storage.
+    /// Copies all other bytes unchanged, without decoding or validating UTF-8.
+    /// Returns the written prefix, with no NUL terminator. On NoSpace, the
+    /// output prefix remains written and may end inside a UTF-8 sequence.
+    /// Use separate storage, or a buffer starting at the same address as input.
+    pub fn stripAnsi(self: Terminal, buffer: []u8) error{NoSpace}![]u8 {
+        var read: usize = 0;
+        var written: usize = 0;
+        while (read < self.bytes.len) {
+            if (escapeEnd(self.bytes, read)) |end| {
+                read = end;
+                continue;
+            }
+            if (written == buffer.len) return error.NoSpace;
+            buffer[written] = self.bytes[read];
+            written += 1;
+            read += 1;
+        }
+        return buffer[0..written];
     }
 };
 
-pub const Graphemes = struct {
+pub const Escape = struct {
+    span: text.Span,
+    kind: enum { sgr, other },
+};
+
+pub const Token = union(enum) {
+    grapheme: text.Span,
+    escape: Escape,
+};
+
+pub const Tokens = struct {
     bytes: []const u8,
 
-    pub fn iterator(self: Graphemes) Iterator {
+    pub fn iterator(self: Tokens) TokenIterator {
         return .{ .bytes = self.bytes };
     }
 };
 
-pub const Iterator = struct {
+pub const TokenIterator = struct {
     bytes: []const u8,
     pos: usize = 0,
     run_start: usize = 0,
     inner: grapheme.Iterator = .{ .bytes = "" },
+    before_escape: ?grapheme.TableState = null,
     failed: bool = false,
 
-    /// Returns contiguous content spans, excluding recognized escapes.
-    /// An escape inside a grapheme is an error, reported before that grapheme
-    /// is returned. Subsequent calls repeat the error.
-    pub fn next(self: *Iterator) error{EscapeInsideGrapheme}!?text.Span {
+    /// Returns tokens without checking content beyond an escape. If later
+    /// content joins the preceding grapheme, latches EscapeInsideGrapheme.
+    /// Already returned content and commands are not retracted.
+    pub fn next(self: *TokenIterator) error{EscapeInsideGrapheme}!?Token {
         if (self.failed) return error.EscapeInsideGrapheme;
-        if (self.inner.pos == self.inner.bytes.len and !self.openRun()) return null;
-        const span = self.inner.next().?;
-        if (span.end == self.inner.bytes.len) {
-            const after = self.skipEscapes(self.pos);
-            if (after < self.bytes.len) {
-                // Only the final grapheme before escapes needs an extra check.
-                // Replay its state rather than changing the plain-text engine
-                // or adding escape handling to its hot loop.
-                const first = scalar.at(self.inner.bytes, span.start);
-                var state = grapheme.TableState.init(grapheme.categoryOf(first));
-                var offset = first.end;
-                while (offset < span.end) {
-                    const token = scalar.at(self.inner.bytes, offset);
-                    _ = state.step(grapheme.categoryOf(token));
-                    offset = token.end;
-                }
-                if (!state.step(grapheme.categoryOf(scalar.at(self.bytes, after)))) {
+        if (self.inner.pos == self.inner.bytes.len) {
+            if (self.pos == self.bytes.len) return null;
+            if (escapeEnd(self.bytes, self.pos)) |end| {
+                const start = self.pos;
+                self.pos = end;
+                return .{ .escape = .{
+                    .span = .{ .start = .{ .value = start }, .end = .{ .value = end } },
+                    .kind = if (isSgr(self.bytes[start..end])) .sgr else .other,
+                } };
+            }
+            if (self.before_escape) |saved| {
+                var state = saved;
+                if (!state.step(grapheme.categoryOf(scalar.at(self.bytes, self.pos)))) {
                     self.failed = true;
                     return error.EscapeInsideGrapheme;
                 }
+                self.before_escape = null;
             }
-            self.pos = after;
+            self.openRun();
         }
-        return .{
+        const span = self.inner.next().?;
+        if (span.end == self.inner.bytes.len and self.pos < self.bytes.len) {
+            // Save only the final grapheme's state. No content beyond the
+            // escape is read until a later next() call reaches it.
+            const first = scalar.at(self.inner.bytes, span.start);
+            var state = grapheme.TableState.init(grapheme.categoryOf(first));
+            var offset = first.end;
+            while (offset < span.end) {
+                const token = scalar.at(self.inner.bytes, offset);
+                _ = state.step(grapheme.categoryOf(token));
+                offset = token.end;
+            }
+            self.before_escape = state;
+        }
+        return .{ .grapheme = .{
             .start = .{ .value = self.run_start + span.start },
             .end = .{ .value = self.run_start + span.end },
-        };
+        } };
     }
 
-    fn skipEscapes(self: *const Iterator, from: usize) usize {
-        var pos = from;
-        while (pos < self.bytes.len) {
-            pos = escapeEnd(self.bytes, pos) orelse break;
-        }
-        return pos;
-    }
-
-    fn openRun(self: *Iterator) bool {
-        self.run_start = self.skipEscapes(self.pos);
-        self.pos = self.run_start;
-        if (self.pos == self.bytes.len) return false;
+    fn openRun(self: *TokenIterator) void {
+        self.run_start = self.pos;
         var search = self.pos;
         while (std.mem.indexOfScalarPos(u8, self.bytes, search, 0x1b)) |candidate| {
             if (escapeEnd(self.bytes, candidate) != null) {
                 self.pos = candidate;
                 self.inner = grapheme.iterator(self.bytes[self.run_start..self.pos]);
-                return true;
+                return;
             }
             search = candidate + 1;
         }
         self.pos = self.bytes.len;
         self.inner = grapheme.iterator(self.bytes[self.run_start..]);
-        return true;
     }
 };
+
+fn isSgr(bytes: []const u8) bool {
+    if (bytes[1] != '[' or bytes[bytes.len - 1] != 'm') return false;
+    for (bytes[2 .. bytes.len - 1]) |byte| {
+        if (!(byte >= '0' and byte <= '9') and byte != ';' and byte != ':') return false;
+    }
+    return true;
+}
 
 // Recognize only complete 7-bit CSI and OSC sequences. Unsupported or broken
 // sequences fall back to ordinary text. An unexpected ESC aborts recognition,

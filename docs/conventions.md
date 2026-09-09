@@ -38,11 +38,13 @@ text. Width is a fixed terminal-cell policy, not font shaping or terminal
 capability detection. CR and LF have zero width; `width()` sums the text's
 columns rather than returning the widest physical line.
 
-The separate [terminal view](terminal/README.md) currently provides grapheme
-iteration that ignores supported CSI/OSC sequences. Its spans still index the
-original bytes and exclude recognized escapes. An escape inside a grapheme
-returns `EscapeInsideGrapheme` before that grapheme is emitted.
-Terminal width and wrapping are not implemented yet.
+The separate [terminal view](terminal/README.md) provides `tokens()` for content
+and escape commands in source order, and `stripAnsi(buffer)` for byte-only
+removal of recognized escapes. Stripping neither allocates nor validates UTF-8;
+use `text()` on its output for Unicode operations. During token iteration, if
+later content joins across an escape, `EscapeInsideGrapheme` is returned then;
+a grapheme prefix and intervening commands may already have been emitted.
+There is no rollback. Stripping does not perform that boundary check.
 
 Grapheme, word, width, and wrap operations tolerate malformed UTF-8, advancing
 one byte at a time on decoding errors. They retain original byte offsets and

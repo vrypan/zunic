@@ -1,20 +1,40 @@
 const std = @import("std");
 const zunic = @import("zunic");
 
-test "docs: terminal graphemes skip surrounding escapes" {
-    const bytes = "\x1b[31mcafe\u{0301}\x1b[0m";
-    var it = zunic.terminal(bytes).graphemes().iterator();
-    for ([_][]const u8{ "c", "a", "f", "e\u{0301}" }) |expected| {
-        const span = (try it.next()).?;
-        try std.testing.expectEqualStrings(expected, bytes[span.start.value..span.end.value]);
-    }
-    try std.testing.expect((try it.next()) == null);
+test "docs: terminal tokens return escapes before a later error" {
+    const bytes = "e\x1b[31m\u{0301}";
+    var it = zunic.terminal(bytes).tokens().iterator();
+    _ = (try it.next()).?.grapheme; // e
+    _ = (try it.next()).?.escape; // SGR
+    try std.testing.expectError(error.EscapeInsideGrapheme, it.next());
 }
 
-test "docs: terminal grapheme rejects an internal escape" {
-    const bytes = "e\x1b[31m\u{0301}";
-    var it = zunic.terminal(bytes).graphemes().iterator();
-    try std.testing.expectError(error.EscapeInsideGrapheme, it.next());
+test "docs: terminal token traversal" {
+    const bytes = "\x1b[31mhi\x1b[0m";
+    var it = zunic.terminal(bytes).tokens().iterator();
+    var content: usize = 0;
+    var commands: usize = 0;
+    while (try it.next()) |token| switch (token) {
+        .grapheme => |span| content += span.end.value - span.start.value,
+        .escape => |esc| {
+            try std.testing.expectEqual(.sgr, esc.kind);
+            commands += 1;
+        },
+    };
+    try std.testing.expectEqual(@as(usize, 2), content);
+    try std.testing.expectEqual(@as(usize, 2), commands);
+}
+
+test "docs: strip ANSI then use the text view" {
+    const input = "\x1b[31mcafe\x1b[0m\u{0301}";
+    var buffer: [input.len]u8 = undefined;
+    const plain = try zunic.terminal(input).stripAnsi(&buffer);
+    try std.testing.expectEqualStrings("cafe\u{0301}", plain);
+    try std.testing.expectEqual(@as(usize, 4), zunic.text(plain).width());
+    var it = zunic.text(plain).graphemes().iterator();
+    var count: usize = 0;
+    while (it.next() != null) count += 1;
+    try std.testing.expectEqual(@as(usize, 4), count);
 }
 
 test "docs: measured graphemes" {

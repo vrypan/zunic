@@ -129,8 +129,8 @@ pub const WrappedIterator = struct {
 /// measures `ESC`, `[`, `3`, `1`, `m` as ordinary characters, so
 /// `"\x1b[31mred\x1b[0m"` reports width 10 rather than 3 and wrapping can
 /// place a break inside the sequence, which corrupts the output. The initial
-/// `terminal` view supports escape-aware grapheme iteration only; this text
-/// view makes no attempt at interpreting escapes.
+/// `terminal` view provides tokens and stripAnsi() for escape handling; this
+/// text view makes no attempt at interpreting escapes.
 pub const Text = struct {
     bytes: []const u8,
 

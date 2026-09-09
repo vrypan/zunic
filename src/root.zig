@@ -14,7 +14,7 @@
 //! `text` reads bytes as plain text. **Strip ANSI escape sequences before
 //! using it** -- it measures them as ordinary characters, so styled input
 //! reports the wrong width and can be broken mid-sequence. `terminal` offers
-//! an initial escape-aware grapheme iterator; width and wrapping are pending.
+//! escape-aware tokens and byte-only stripping; use `text` on stripped output.
 pub const utf8 = @import("encoding").utf8;
 const text_view = @import("text.zig");
 const terminal_view = @import("terminal.zig");
@@ -32,7 +32,9 @@ pub const Overflow = wrap_engine.Overflow;
 pub const Wrapped = text_view.Wrapped;
 pub const Text = text_view.Text;
 pub const Terminal = terminal_view.Terminal;
-pub const TerminalGraphemes = terminal_view.Graphemes;
+pub const TerminalTokens = terminal_view.Tokens;
+pub const TerminalToken = terminal_view.Token;
+pub const Escape = terminal_view.Escape;
 pub const Terminators = text_view.Terminators;
 pub const TerminatorIterator = text_view.TerminatorIterator;
 pub const Graphemes = text_view.Graphemes;
@@ -62,7 +64,7 @@ pub fn text(bytes: []const u8) Text {
 }
 
 /// Open a borrowed terminal view without scanning or allocating.
-/// The initial API provides grapheme iteration with CSI/OSC recognition.
+/// Provides token iteration and byte-only stripping with CSI/OSC recognition.
 pub fn terminal(bytes: []const u8) Terminal {
     return .{ .bytes = bytes };
 }
