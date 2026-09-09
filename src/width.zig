@@ -10,21 +10,17 @@ pub const Measure = struct {
     renderable: bool,
 };
 
-pub fn codepointWidth(cp: u21) u2 {
-    return scalar.codepointWidth(cp);
-}
-
 /// One definition of the policy, shared with the grapheme engine's in-pass
 /// accumulator so a standalone measurement and a span can never drift apart.
 pub fn measureCluster(bytes: []const u8) Measure {
     var tokens = scalar.iterator(bytes);
     var measure = grapheme.ClusterMeasure{};
     while (tokens.next()) |token| measure.add(token);
-    return switch (measure.finish()) {
-        0 => .{ .columns = 0, .renderable = false },
-        1 => .{ .columns = 1, .renderable = true },
-        2 => .{ .columns = 2, .renderable = true },
-        else => .{ .columns = 1, .renderable = false },
+    // Both fields come from the one encoding, so neither restates it here.
+    const columns = measure.finish();
+    return .{
+        .columns = @intCast(grapheme.displayColumns(columns)),
+        .renderable = grapheme.isRenderable(columns),
     };
 }
 
@@ -45,7 +41,7 @@ noinline fn generalTextWidth(bytes: []const u8) usize {
     var it = grapheme.iterator(bytes);
     var total: usize = 0;
     while (it.next()) |span| {
-        total += if (span.columns == 3) 1 else span.columns;
+        total += grapheme.displayColumns(span.columns);
     }
     return total;
 }

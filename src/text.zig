@@ -60,16 +60,14 @@ pub fn Iterator(comptime include_measure: bool) type {
                 .end = .{ .value = span.end },
             };
             // The grapheme engine already measured this cluster while it
-            // segmented it, and `grapheme.ClusterMeasure.finish` encodes the
-            // whole measure: `3` is "one column, not renderable", `0` is "no
-            // base", and `1`/`2` are renderable column counts. Decoding that
-            // here is exact, and re-measuring the same bytes would decode and
-            // classify every scalar of the cluster a second time.
+            // segmented it, so both fields are decoded from that measure
+            // rather than recomputed: re-measuring the same bytes would
+            // decode and classify every scalar of the cluster a second time.
             return .{
                 .start = .{ .value = span.start },
                 .end = .{ .value = span.end },
-                .columns = if (span.columns == 3) 1 else @intCast(span.columns),
-                .renderable = span.columns == 1 or span.columns == 2,
+                .columns = @intCast(grapheme_engine.displayColumns(span.columns)),
+                .renderable = grapheme_engine.isRenderable(span.columns),
             };
         }
     };
@@ -92,8 +90,22 @@ pub const Wrapped = struct {
         return result;
     }
 
+    /// `Text.wrap` is the supported way to obtain a `Wrapped`, and it rejects
+    /// a zero column limit, so the engine's only error cannot arise through
+    /// that route.
+    ///
+    /// This struct has public fields, though, so one can also be built by
+    /// hand with `max_columns = 0`. `catch unreachable` would make that
+    /// undefined behaviour in a build with safety off, which is a poor answer
+    /// for a value the caller is allowed to construct: narrow it to the
+    /// smallest legal width instead, so the worst case is an unhelpful
+    /// wrapping rather than a corrupt one.
     pub fn iterator(self: Wrapped) WrappedIterator {
-        return .{ .inner = wrap_engine.iterator(self.bytes, self.options) catch unreachable };
+        const options: wrap_engine.Options = .{
+            .max_columns = @max(1, self.options.max_columns),
+            .overflow = self.options.overflow,
+        };
+        return .{ .inner = wrap_engine.iterator(self.bytes, options) catch unreachable };
     }
 };
 

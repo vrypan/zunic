@@ -8,6 +8,7 @@
 //! `max_columns` and of how many lines are consumed.
 const scan = @import("scan.zig");
 const ascii_scan = @import("ascii_scan.zig");
+const grapheme = @import("grapheme.zig");
 
 pub const Overflow = enum { allow, grapheme };
 pub const Options = struct {
@@ -64,7 +65,7 @@ fn IteratorImpl(comptime instrumented: bool) type {
                     return line;
                 }
 
-                const cluster_columns: usize = if (cluster.columns == 3) 1 else cluster.columns;
+                const cluster_columns = grapheme.displayColumns(cluster.columns);
                 const next_columns = self.columns + cluster_columns;
                 const can_break = cluster.can_break;
 
@@ -242,16 +243,17 @@ fn noBreakBefore(bytes: []const u8, pos: usize) bool {
 }
 
 pub fn iterator(bytes: []const u8, options: Options) error{InvalidWidth}!Iterator {
-    if (options.max_columns == 0) return error.InvalidWidth;
-    return .{
-        .bytes = bytes,
-        .options = options,
-        .scanner = .{ .bytes = bytes },
-    };
+    return open(false, bytes, options);
 }
 
 /// Test-only: `iterator` with decoded-scalar and buffer counters enabled.
 pub fn instrumentedIterator(bytes: []const u8, options: Options) error{InvalidWidth}!InstrumentedIterator {
+    return open(true, bytes, options);
+}
+
+/// The two constructors differ only in which instantiation they return, so the
+/// width check lives here rather than being written out twice and drifting.
+inline fn open(comptime instrumented: bool, bytes: []const u8, options: Options) error{InvalidWidth}!IteratorImpl(instrumented) {
     if (options.max_columns == 0) return error.InvalidWidth;
     return .{
         .bytes = bytes,

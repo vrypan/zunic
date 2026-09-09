@@ -5,9 +5,34 @@ const properties = @import("properties.zig");
 pub const Span = struct {
     start: usize,
     end: usize,
-    /// Terminal width for this cluster; `3` is the replacement sentinel.
+    /// Terminal width for this cluster, as `ClusterMeasure.finish` encodes it:
+    /// `0` no base, `1`/`2` renderable column counts, `3` the replacement
+    /// sentinel. Decode it with `displayColumns` rather than by hand.
     columns: u3 = 0,
 };
+
+/// The column count a `Span.columns` (or `scan.Cluster.columns`) value
+/// occupies on screen: the sentinel renders as one replacement column, and
+/// every other value already is its own width.
+///
+/// This is the only place that knows what `3` means. Consumers that open-code
+/// the comparison drift from `ClusterMeasure.finish` the moment the encoding
+/// changes, which is why measurement, wrapping and the text view all route
+/// through here.
+pub inline fn displayColumns(columns: u3) usize {
+    return if (columns == replacement_sentinel) 1 else columns;
+}
+
+/// Whether a `Span.columns` value describes something the terminal can show.
+/// Only the two real column counts qualify: `0` has no base to draw, and the
+/// sentinel stands in for a cluster too wide to render as itself.
+pub inline fn isRenderable(columns: u3) bool {
+    return columns == 1 or columns == 2;
+}
+
+/// `finish` reports "wider than two columns" as this value, which the width
+/// policy renders as a single replacement column.
+pub const replacement_sentinel: u3 = 3;
 
 const Property = enum { other, cr, lf, control, extend, zwj, ri, prepend, spacing_mark, l, v, t, lv, lvt, ep };
 const InCB = enum { none, consonant, extend, linker };
@@ -139,7 +164,7 @@ pub const ClusterMeasure = struct {
     pub fn finish(self: ClusterMeasure) u3 {
         if (!self.has_base) return 0;
         if (self.has_pictograph or self.has_ri) return 2;
-        if (self.columns > 2) return 3;
+        if (self.columns > 2) return replacement_sentinel;
         return @intCast(self.columns);
     }
 };
@@ -389,8 +414,4 @@ pub fn classify(token: scalar.Token) Classification {
         .property = property,
         .incb = @enumFromInt(@intFromEnum(token.grapheme.incb)),
     };
-}
-
-pub fn isExtendedPictographic(cp: u21) bool {
-    return properties.graphemeProperties(cp).extended_pictographic;
 }
