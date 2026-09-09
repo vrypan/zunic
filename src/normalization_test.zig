@@ -676,3 +676,112 @@ test "a Maybe that needs the general check, and one that does not" {
     try std.testing.expect(!try normalization.isNormalized("\u{1100}\u{1161}", .nfc));
     try std.testing.expect(try normalization.isNormalized("\u{AC00}", .nfc));
 }
+
+// ------------------------------------------------------------ quick check
+
+const QuickCheck = normalization.QuickCheck;
+
+fn quick(input: []const u8, comptime form: Form) !QuickCheck {
+    return normalization.isNormalizedQuick(input, form);
+}
+
+test "quick check: definite answers" {
+    try std.testing.expectEqual(QuickCheck.yes, try quick("", .nfc));
+    try std.testing.expectEqual(QuickCheck.yes, try quick("", .nfd));
+    try std.testing.expectEqual(QuickCheck.yes, try quick("hello", .nfc));
+    try std.testing.expectEqual(QuickCheck.yes, try quick("hello", .nfd));
+
+    // A composed accent decomposes, so NFD is a definite no.
+    try std.testing.expectEqual(QuickCheck.no, try quick("caf\u{00E9}", .nfd));
+    // Hangul decomposes algorithmically and is in no table.
+    try std.testing.expectEqual(QuickCheck.no, try quick("\u{AC00}", .nfd));
+    try std.testing.expectEqual(QuickCheck.yes, try quick("\u{1100}\u{1161}", .nfd));
+
+    // NFC_QC = No is a definite no for NFC.
+    try std.testing.expectEqual(QuickCheck.no, try quick("\u{0344}", .nfc));
+    // Marks out of canonical order: no, in either form.
+    try std.testing.expectEqual(QuickCheck.no, try quick("q\u{0301}\u{0327}", .nfc));
+    try std.testing.expectEqual(QuickCheck.no, try quick("q\u{0301}\u{0327}", .nfd));
+    try std.testing.expectEqual(QuickCheck.yes, try quick("q\u{0327}\u{0301}", .nfd));
+}
+
+test "quick check: NFD is never maybe" {
+    var buffer: [4096]u8 = undefined;
+    for ([_][]const u8{ "", "a", "caf\u{00E9}", "cafe\u{0301}", "\u{AC00}", "\u{1100}\u{1161}", "z\u{0300}", "\u{1E69}\u{0323}", "\u{0301}\u{0327}" }) |input|
+        try std.testing.expect(try quick(input, .nfd) != .maybe);
+    try std.testing.expect(try quick(sameClassMarks(&buffer, "a", limit + 40), .nfd) != .maybe);
+}
+
+test "quick check: maybe, settling both ways" {
+    // U+0301 is NFC_QC=Maybe. "q" is not a composition base at all, so
+    // q+acute stays decomposed and is NFC; a+acute composes to U+00E1 and is
+    // not. The quick check says maybe to both, which is the point of the
+    // third value. ("z" would be wrong here: z+acute is U+017A.)
+    try std.testing.expectEqual(QuickCheck.maybe, try quick("q\u{0301}", .nfc));
+    try std.testing.expectEqual(QuickCheck.maybe, try quick("a\u{0301}", .nfc));
+    try std.testing.expect(try normalization.isNormalized("q\u{0301}", .nfc));
+    try std.testing.expect(!try normalization.isNormalized("a\u{0301}", .nfc));
+
+    // A later definite no overrides an earlier maybe.
+    try std.testing.expectEqual(QuickCheck.no, try quick("q\u{0301} \u{0344}", .nfc));
+    try std.testing.expectEqual(QuickCheck.no, try quick("q\u{0301} a\u{0301}\u{0327}", .nfc));
+}
+
+test "quick check: the whole slice is scanned" {
+    // Malformed bytes after a decisive no are still reported, unlike
+    // isNormalized, which may stop early.
+    try std.testing.expectError(error.InvalidUtf8, quick("\xff", .nfc));
+    try std.testing.expectError(error.InvalidUtf8, quick("\u{0344}\xff", .nfc));
+    try std.testing.expectError(error.InvalidUtf8, quick("caf\u{00E9}\xff", .nfd));
+    try std.testing.expectError(error.InvalidUtf8, quick("q\u{0301}\u{0327}\xff", .nfd));
+    // ...whereas the authoritative query is allowed to stop at the no.
+    try std.testing.expect(!try normalization.isNormalized("\u{212A}\xff", .nfd));
+}
+
+test "quick check ignores the configured run limit" {
+    // A run longer than the buffer is perfectly normalized, and the bounded
+    // normalizer still refuses it. Quick check answers the Unicode question.
+    var buffer: [8192]u8 = undefined;
+    const long = sameClassMarks(&buffer, "a", limit + 1);
+    try std.testing.expectEqual(QuickCheck.yes, try quick(long, .nfd));
+    var output: [16384]u8 = undefined;
+    try std.testing.expectError(error.SequenceTooLong, normalization.normalize(long, .nfd).writeTo(&output));
+    try std.testing.expectError(error.SequenceTooLong, normalization.isNormalized(long, .nfd));
+}
+
+/// A definite quick check must agree with the authoritative query. Extracted
+/// so the inline loop over forms holds no control flow that would have to
+/// escape the runtime loop around it.
+fn checkQuickAgainstDefinitive(bytes: []const u8, comptime form: Form) !void {
+    const answer = normalization.isNormalized(bytes, form) catch |err| {
+        // Over the run limit. Quick check does not enforce it, so it may
+        // still answer definitely and there is nothing to cross-check.
+        try std.testing.expectEqual(error.SequenceTooLong, err);
+        return;
+    };
+    switch (try quick(bytes, form)) {
+        .yes => try std.testing.expect(answer),
+        .no => try std.testing.expect(!answer),
+        .maybe => {},
+    }
+}
+
+test "a definite quick check never contradicts the authoritative query" {
+    var prng = std.Random.DefaultPrng.init(0x026_9c_a11a);
+    const random = prng.random();
+    const alphabet = [_]u21{ 'a', 'z', 0x0300, 0x0301, 0x0327, 0x00E9, 0x1E69, 0x0323, 0x0307, 0xAC00, 0x1100, 0x1161, 0x11A8, 0x212A, 0x0344, 0x0F73 };
+    var input: [128]u8 = undefined;
+    for (0..20_000) |_| {
+        var len: usize = 0;
+        for (0..random.uintLessThan(usize, 8)) |_|
+            len += std.unicode.utf8Encode(alphabet[random.uintLessThan(usize, alphabet.len)], input[len..]) catch unreachable;
+        try checkQuickAgainstDefinitive(input[0..len], .nfc);
+        try checkQuickAgainstDefinitive(input[0..len], .nfd);
+    }
+}
+
+test "quick check reaches the text view" {
+    try std.testing.expectEqual(QuickCheck.yes, try zunic.text("caf\u{00E9}").isNormalizedQuick(.nfc));
+    try std.testing.expectEqual(QuickCheck.no, try zunic.text("caf\u{00E9}").isNormalizedQuick(.nfd));
+    try std.testing.expectEqual(QuickCheck.maybe, try zunic.text("q\u{0301}").isNormalizedQuick(.nfc));
+}

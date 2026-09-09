@@ -161,3 +161,37 @@ test "word bounds partition the view and name their own types" {
     var empty = unicode.text("").wordBounds().iterator();
     try std.testing.expectEqual(@as(?unicode.WordBound, null), empty.next());
 }
+
+test "the pinned Unicode data version is published" {
+    try std.testing.expectEqual(@as(u64, 16), unicode.unicode_version.major);
+    try std.testing.expectEqual(@as(u64, 0), unicode.unicode_version.minor);
+    try std.testing.expectEqual(@as(u64, 0), unicode.unicode_version.patch);
+    // This is the data version, not the package version; the three verifiers
+    // under src/tools assert it against the vendored UCD filenames.
+    try std.testing.expect(unicode.unicode_version.pre == null);
+}
+
+test "Text.normalize is the free function, reached from the view" {
+    var buffer: [64]u8 = undefined;
+    // Composed input, decomposed output, and the reverse.
+    try std.testing.expectEqualSlices(u8, "cafe\u{0301}", try unicode.text("caf\u{00E9}").normalize(.nfd).writeTo(&buffer));
+    try std.testing.expectEqualSlices(u8, "caf\u{00E9}", try unicode.text("cafe\u{0301}").normalize(.nfc).writeTo(&buffer));
+
+    // Same iterator type and same scalars as the free function.
+    const from_view: unicode.NormalizationIterator(.nfd) = unicode.text("\u{1E69}").normalize(.nfd);
+    var view_it = from_view;
+    var free_it = unicode.normalize("\u{1E69}", .nfd);
+    while (true) {
+        const a = try view_it.next();
+        const b = try free_it.next();
+        try std.testing.expectEqual(b, a);
+        if (a == null) break;
+    }
+}
+
+test "exactly two normalization forms" {
+    // NFKC and NFKD are deferred; asking for one must not compile, and the
+    // count is asserted so adding a form is a deliberate act.
+    try std.testing.expectEqual(@as(usize, 2), @typeInfo(unicode.Form).@"enum".fields.len);
+    try std.testing.expectEqual(@as(usize, 1), @typeInfo(unicode.Equivalence).@"enum".fields.len);
+}

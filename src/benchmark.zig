@@ -9,7 +9,10 @@ const corpora = @import("corpora.zig");
 // Version 6 adds the `terminators` operation.
 // Version 7 adds the `word_bounds` operation and its dedicated corpora.
 // Version 8 adds the normalization operations and their dedicated corpora.
-const harness_version = "8";
+// Version 9 adds `nfc_quick` and `nfd_quick` beside the existing
+// normalization rows. Old names and checksums are untouched, so a
+// version-8 archive still compares row for row against the shared cases.
+const harness_version = "9";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
 const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
@@ -106,6 +109,8 @@ pub fn main(init: std.process.Init) !void {
         try printSamples(output, name, "nfd", text, target_bytes, nfdChecksum, io);
         try printSamples(output, name, "nfc_iterate", text, target_bytes, nfcIterateChecksum, io);
         try printSamples(output, name, "is_nfc", text, target_bytes, isNfcChecksum, io);
+        try printSamples(output, name, "nfc_quick", text, target_bytes, nfcQuickChecksum, io);
+        try printSamples(output, name, "nfd_quick", text, target_bytes, nfdQuickChecksum, io);
         try printSamples(output, name, "eql", text, target_bytes, eqlChecksum, io);
     }
     for (wrap_cases) |case| try printWrapSamples(output, case, try makeCorpus(allocator, case.corpus), target_bytes, io);
@@ -382,6 +387,18 @@ fn nfcIterateChecksum(text: []const u8) u64 {
     var sum: u64 = 0xcbf29ce484222325;
     while (it.next() catch |err| return mix(sum, failureCode(err))) |cp| sum = mix(sum, cp);
     return sum;
+}
+/// The three-valued quick check, which settles nothing.
+fn quickChecksum(text: []const u8, comptime form: zunic.Form) u64 {
+    const answer = zunic.text(text).isNormalizedQuick(form) catch |err|
+        return mix(0xcbf29ce484222325, failureCode(err));
+    return mix(0xcbf29ce484222325, @intFromEnum(answer));
+}
+fn nfcQuickChecksum(text: []const u8) u64 {
+    return quickChecksum(text, .nfc);
+}
+fn nfdQuickChecksum(text: []const u8) u64 {
+    return quickChecksum(text, .nfd);
 }
 fn isNfcChecksum(text: []const u8) u64 {
     const answer = zunic.text(text).isNormalized(.nfc) catch |err|

@@ -154,6 +154,15 @@ pub const Text = struct {
         return .{ .bytes = self.bytes };
     }
 
+    /// The scalars of this text in `form`, as a lazy iterator.
+    ///
+    /// Convenience for `zunic.normalize(bytes, form)`; the two are the same
+    /// iterator. Normalization produces new scalars rather than spans into the
+    /// input, so the free function remains the primary spelling.
+    pub fn normalize(self: Text, comptime form: normalization.Form) normalization.Iterator(form) {
+        return normalization.normalize(self.bytes, form);
+    }
+
     /// Whether these bytes and `other` are canonically equivalent -- the same
     /// text, however it happens to be encoded. `"caf\u{00E9}"` and
     /// `"cafe\u{0301}"` are equal; `"\u{FB01}"` and `"fi"` are not, being
@@ -175,6 +184,20 @@ pub const Text = struct {
     /// already normalized.
     pub fn isNormalized(self: Text, comptime form: normalization.Form) normalization.Error!bool {
         return normalization.isNormalized(self.bytes, form);
+    }
+
+    /// The UAX #15 quick check: `yes`, `no`, or `maybe`.
+    ///
+    /// Cheaper than `isNormalized`, and weaker in two ways worth knowing.
+    /// `maybe` is a real answer, not a failure -- it means the question needs
+    /// context this scan does not gather. And it does not enforce zunic's
+    /// configured combining-run limit, so `yes` does not promise that
+    /// `normalize` will accept the input.
+    ///
+    /// Unlike `isNormalized` it always reads the whole slice, so malformed
+    /// UTF-8 after a decisive `no` is still reported.
+    pub fn isNormalizedQuick(self: Text, comptime form: normalization.Form) error{InvalidUtf8}!normalization.QuickCheck {
+        return normalization.isNormalizedQuick(self.bytes, form);
     }
 
     /// Greedy display lines within a finite column limit.

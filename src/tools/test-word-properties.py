@@ -21,6 +21,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from check_unicode_version import check as check_unicode_version
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 SOURCE = ROOT / "word_properties.zig"
@@ -112,6 +114,9 @@ def check_regeneration():
 
 
 def main():
+    check_unicode_version("WordBreakProperty-16.0.0.txt", "DerivedCoreProperties-16.0.0.txt",
+              "UnicodeData-16.0.0.txt", "emoji-data-16.0.0.txt")
+
     check_missing_default()
     check_regeneration()
 

@@ -16,6 +16,8 @@ import re
 import sys
 from pathlib import Path
 
+from check_unicode_version import check as check_unicode_version
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 SOURCE = ROOT / "properties.zig"
@@ -112,6 +114,9 @@ def zig_name(value):
 
 
 def main():
+    check_unicode_version("UnicodeData-16.0.0.txt", "LineBreak-16.0.0.txt", "GraphemeBreakProperty-16.0.0.txt",
+              "EastAsianWidth-16.0.0.txt", "emoji-data-16.0.0.txt", "DerivedCoreProperties-16.0.0.txt")
+
     gcb = read_property("GraphemeBreakProperty-16.0.0.txt", "Other")
     incb = read_property("DerivedCoreProperties-16.0.0.txt", "None",
                          {"InCB; Consonant", "InCB; Extend", "InCB; Linker"})

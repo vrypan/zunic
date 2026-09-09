@@ -17,6 +17,8 @@ The methods use Unicode 16.0.0 canonical normalization as described in
 - `eql(..., .canonical)` compares canonical equivalence through NFD.
 - `normalizedLenBound()` is a Zunic capacity helper derived from the pinned data, not a separate UAX operation.
 
+- `isNormalizedQuick()` is the UAX #15 quick check itself, three-valued.
+
 The configurable run limit is a Zunic restriction. It does not implement
 UAX #15's Stream-Safe Text Format, which uses a different counting rule and
 inserts separators. Zunic returns `SequenceTooLong` instead.
@@ -29,6 +31,9 @@ pub const Equivalence = enum { canonical };
 pub const NormalizationError = error{ InvalidUtf8, SequenceTooLong };
 pub const NormalizationWriteError = NormalizationError || error{NoSpace};
 
+pub const QuickCheck = enum { yes, no, maybe };
+pub const unicode_version: std.SemanticVersion; // the pinned data version
+
 pub fn normalize(bytes: []const u8, comptime form: Form) NormalizationIterator(form);
 pub fn NormalizationIterator(comptime form: Form) type;
 pub fn normalizedLenBound(input_len: usize, comptime form: Form) error{Overflow}!usize;
@@ -38,14 +43,21 @@ pub fn next(self: *Self) NormalizationError!?u21;
 pub fn writeTo(self: Self, buffer: []u8) NormalizationWriteError![]u8;
 
 // Text methods
+pub fn normalize(self: Text, comptime form: Form) NormalizationIterator(form);
 pub fn eql(self: Text, other: []const u8, comptime how: Equivalence) NormalizationError!bool;
 pub fn isNormalized(self: Text, comptime form: Form) NormalizationError!bool;
+pub fn isNormalizedQuick(self: Text, comptime form: Form) error{InvalidUtf8}!QuickCheck;
 ```
 
 These signatures use the exported names from `zunic`. `form` and `how` must
-be known at compile time. Unlike graphemes and words, normalization starts
-with the free function `zunic.normalize(bytes, .nfc)`; there is no
-`Text.normalize()` method.
+be known at compile time. `Text.normalize()` and the free function
+`zunic.normalize(bytes, .nfc)` are the same iterator; the free function
+remains the primary spelling, because normalization produces new scalars
+rather than spans into the input.
+
+`unicode_version` is the version of the pinned Unicode data. It is not Zunic's
+package version and is unrelated to the Zig version in use. Each table
+generator's verifier asserts it against the vendored UCD filenames.
 
 ## Iterate or write UTF-8
 
@@ -116,6 +128,28 @@ Both queries can stop at a decisive `false` and leave later bytes unexamined.
 They are not whole-input validators. Errors encountered before a decision are
 returned. A successful `true` means both complete inputs were accepted for
 equality, or the complete input for `isNormalized`.
+
+`isNormalizedQuick(form)` is the UAX #15 quick check itself, and returns
+`yes`, `no` or `maybe`:
+
+```zig
+try std.testing.expectEqual(zunic.QuickCheck.yes, try zunic.text("café").isNormalizedQuick(.nfc));
+try std.testing.expectEqual(zunic.QuickCheck.no, try zunic.text("café").isNormalizedQuick(.nfd));
+try std.testing.expectEqual(zunic.QuickCheck.maybe, try zunic.text("q\u{0301}").isNormalizedQuick(.nfc));
+```
+
+`maybe` is an answer, not a failure: it means the question depends on context
+the check does not gather. `isNormalized()` settles it and returns a boolean,
+at a cost. NFD is never `maybe`.
+
+Three differences from `isNormalized()` are worth knowing:
+
+- It always reads the whole slice, so malformed UTF-8 after a decisive `no` is
+  still reported. `isNormalized()` may stop earlier and miss it.
+- It does **not** enforce Zunic's configured run limit. A `yes` therefore does
+  not promise that `normalize()` will accept the input: a run longer than the
+  limit can be perfectly normalized and still `SequenceTooLong`.
+- Its only error is `InvalidUtf8`.
 
 ## Errors and partial results
 

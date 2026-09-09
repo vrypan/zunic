@@ -21,6 +21,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from check_unicode_version import check as check_unicode_version
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 SOURCE = ROOT / "normalization_properties.zig"
@@ -137,6 +139,9 @@ def hangul_decompose(cp):
 
 
 def main():
+    check_unicode_version("UnicodeData-16.0.0.txt", "DerivedNormalizationProps-16.0.0.txt",
+              "CompositionExclusions-16.0.0.txt", "NormalizationTest-16.0.0.txt")
+
     check_regeneration()
     check_stale_source_is_preserved()
     ccc, mapping = read_unicode_data()

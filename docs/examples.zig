@@ -95,3 +95,31 @@ test "docs: normalization capacity and iterator position" {
     // writeTo copied the iterator; its next scalar is still the accent.
     try std.testing.expectEqual(@as(u21, 0x301), (try it.next()).?);
 }
+
+test "docs: the pinned Unicode data version" {
+    // The version of the Unicode data every table is generated from. Not the
+    // package version, and unrelated to the Zig version in use.
+    try std.testing.expectEqual(@as(u64, 16), zunic.unicode_version.major);
+    try std.testing.expectEqual(@as(u64, 0), zunic.unicode_version.minor);
+    try std.testing.expectEqual(@as(u64, 0), zunic.unicode_version.patch);
+}
+
+test "docs: normalize from the text view" {
+    var buffer: [64]u8 = undefined;
+    // The convenience method and the free function are the same iterator.
+    try std.testing.expectEqualStrings("caf\u{00E9}", try zunic.text("cafe\u{0301}").normalize(.nfc).writeTo(&buffer));
+    try std.testing.expectEqualStrings("cafe\u{0301}", try zunic.normalize("caf\u{00E9}", .nfd).writeTo(&buffer));
+}
+
+test "docs: quick check, including maybe" {
+    // Yes and no are definite.
+    try std.testing.expectEqual(zunic.QuickCheck.yes, try zunic.text("caf\u{00E9}").isNormalizedQuick(.nfc));
+    try std.testing.expectEqual(zunic.QuickCheck.no, try zunic.text("caf\u{00E9}").isNormalizedQuick(.nfd));
+
+    // Maybe means the answer needs context this check does not gather. Both
+    // of these are maybe; only the authoritative query separates them.
+    try std.testing.expectEqual(zunic.QuickCheck.maybe, try zunic.text("q\u{0301}").isNormalizedQuick(.nfc));
+    try std.testing.expectEqual(zunic.QuickCheck.maybe, try zunic.text("a\u{0301}").isNormalizedQuick(.nfc));
+    try std.testing.expect(try zunic.text("q\u{0301}").isNormalized(.nfc));
+    try std.testing.expect(!try zunic.text("a\u{0301}").isNormalized(.nfc));
+}

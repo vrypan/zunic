@@ -41,8 +41,17 @@ pub const Equivalence = normalization.Equivalence;
 pub const NormalizationIterator = normalization.Iterator;
 pub const normalize = normalization.normalize;
 pub const normalizedLenBound = normalization.normalizedLenBound;
+pub const QuickCheck = normalization.QuickCheck;
 pub const NormalizationError = normalization.Error;
 pub const NormalizationWriteError = normalization.WriteError;
+
+/// The Unicode release every table in this package is generated from.
+///
+/// This is the pinned *data* version. It is not zunic's package version and
+/// has nothing to do with the Zig version in use. The generators' verifiers
+/// assert it against the vendored UCD filenames, so an upgrade cannot leave
+/// it stale.
+pub const unicode_version: std.SemanticVersion = .{ .major = 16, .minor = 0, .patch = 0 };
 pub const MeasuredGraphemes = text_view.MeasuredGraphemes;
 
 /// Open a text view. Borrowed and zero-cost: no scanning happens until a

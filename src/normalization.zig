@@ -24,6 +24,9 @@ const properties = @import("normalization_properties.zig");
 
 pub const Form = enum { nfc, nfd };
 pub const Equivalence = enum { canonical };
+/// Defined once, by the table generator, and re-exported here and from
+/// `root.zig` so the tags are not written down twice.
+pub const QuickCheck = properties.QuickCheck;
 
 pub const Error = error{ InvalidUtf8, SequenceTooLong };
 pub const WriteError = Error || error{NoSpace};
@@ -518,4 +521,55 @@ fn settled(region: []const u8, prefix_len: usize) Error!bool {
         pos += len;
     }
     return pos == prefix_len;
+}
+
+/// The UAX #15 quick check, three-valued and without settling anything.
+///
+/// `Maybe` means the answer depends on characters this scan deliberately does
+/// not examine. `isNormalized` settles it and returns a boolean; this is the
+/// cheap question underneath, useful when a caller wants to skip work on a
+/// definite Yes and is content to do its own thing on Maybe.
+///
+/// Contract, chosen to be simple rather than clever:
+///
+/// - The whole slice is scanned, even after a decisive `No`, so malformed
+///   UTF-8 anywhere is reported. `isNormalized` may instead stop at a
+///   decisive `false` and leave a suffix unread.
+/// - State is one combining class. The configured run limit is **not**
+///   enforced, so a `Yes` here does not promise that the bounded normalizer
+///   will accept the input: a run longer than `max_nonstarters` is perfectly
+///   normalized and still `SequenceTooLong` to normalize.
+/// - Empty input is `Yes`.
+/// - `No` overrides `Maybe`, and `Maybe` overrides `Yes`.
+///
+/// NFD is two-valued here: a canonical decomposition, Hangul included, is a
+/// definite `No`, and nothing about NFD is conditional on later context.
+pub fn isNormalizedQuick(bytes: []const u8, comptime form: Form) error{InvalidUtf8}!QuickCheck {
+    var pos: usize = 0;
+    var previous_ccc: u8 = 0;
+    var result: QuickCheck = .yes;
+    while (pos < bytes.len) {
+        const decoded = utf8.step(bytes[pos..]);
+        const cp = decoded.cp orelse return error.InvalidUtf8;
+        const class = properties.classOf(cp);
+
+        // Marks out of canonical order are normalized in neither form.
+        if (class.ccc != 0 and previous_ccc > class.ccc) {
+            result = .no;
+        } else switch (form) {
+            .nfd => if (class.decomposes) {
+                result = .no;
+            },
+            .nfc => switch (class.quick_check) {
+                .no => result = .no,
+                .maybe => if (result == .yes) {
+                    result = .maybe;
+                },
+                .yes => {},
+            },
+        }
+        previous_ccc = class.ccc;
+        pos += decoded.len;
+    }
+    return result;
 }
