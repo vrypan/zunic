@@ -29,7 +29,7 @@ test "grapheme traversal retains byte spans and optional terminal measure" {
     const text = "e\xcc\x81界👩‍👩‍👧‍👦\x00";
     var it = unicode.text(text).graphemes().measured().iterator();
     while (it.next()) |span| {
-        const measured = @import("width.zig").measureCluster(text[span.start.value..span.end.value]);
+        const measured = @import("layout").width.measureCluster(text[span.start.value..span.end.value]);
         try std.testing.expectEqual(measured.columns, span.columns);
         try std.testing.expectEqual(measured.renderable, span.renderable);
     }
@@ -120,7 +120,7 @@ test "ASCII arrays agree with the fused record" {
     // The trie is verified exhaustively against the pinned UCD by
     // src/tools/test-properties.py. What that cannot see is scalar.at's ASCII
     // shortcut, which reads two separate arrays and hard-codes one column.
-    const properties = @import("properties.zig");
+    const properties = @import("tables").properties;
     var cp: u7 = 0;
     while (true) {
         const r = properties.record(cp);

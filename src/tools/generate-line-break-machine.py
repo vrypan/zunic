@@ -6,7 +6,7 @@ from line_break_semantics import ROOT, render
 def main():
     if sys.argv[1:] not in (["--write"], ["--check"]):
         raise SystemExit("usage: generate-line-break-machine.py --write|--check")
-    output = ROOT / "line_break_machine_data.zig"
+    output = ROOT / "tables/line_break_machine_data.zig"
     generated = render()
     if sys.argv[1] == "--write":
         output.write_text(generated)

@@ -42,7 +42,7 @@ from ucd_normalizer import validate as validate_normalizer
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-SOURCE = ROOT / "stream_safe_properties.zig"
+SOURCE = ROOT / "tables/stream_safe_properties.zig"
 GENERATOR = ROOT / "tools" / "generate-stream-safe-properties.py"
 FIXTURE = DATA / "stream-safe-fixture.txt"
 MAXCP = 0x110000

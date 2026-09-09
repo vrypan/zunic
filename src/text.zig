@@ -3,11 +3,11 @@
 //! Offsets returned by the text view are always relative to the slice used to
 //! open it. The view never allocates, and opening it does no scanning.
 const std = @import("std");
-const grapheme_engine = @import("grapheme.zig");
-const width_engine = @import("width.zig");
-const normalization = @import("normalization.zig");
-const word_engine = @import("word.zig");
-const wrap_engine = @import("wrap.zig");
+const grapheme_engine = @import("segmentation").grapheme;
+const width_engine = @import("layout").width;
+const normalization = @import("normalization");
+const word_engine = @import("segmentation").word;
+const wrap_engine = @import("layout").wrap;
 
 pub const ByteOffset = struct {
     value: usize,

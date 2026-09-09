@@ -9,8 +9,8 @@
 //! The segmentation partitions the input. Punctuation and whitespace are
 //! emitted as their own spans, flagged `is_word = false`.
 const std = @import("std");
-const utf8 = @import("utf8.zig");
-const word_properties = @import("word_properties.zig");
+const utf8 = @import("encoding").utf8;
+const word_properties = @import("tables").word;
 
 pub const WordBreak = word_properties.WordBreak;
 

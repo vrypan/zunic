@@ -13,9 +13,39 @@ Normalization is the exception to returning positions: its output may reorder,
 expand, or combine input characters. It returns scalar values or writes UTF-8
 into a caller's buffer instead.
 
+## Keep the boundaries enforced, not just tidy
+
+The library is split into Zig modules declared in `build.zig`, not merely
+into directories. A module reaches only what it is granted an import for, so
+adding a dependency that crosses a boundary is a compile error rather than
+something a reviewer has to notice.
+
+| Module | Holds | May import |
+| --- | --- | --- |
+| `tables` | generated Unicode data | nothing |
+| `encoding` | UTF-8 stepping, scalar plus its record | `tables` |
+| `segmentation` | grapheme clusters, word bounds | `tables`, `encoding` |
+| `linebreak` | UAX #14 opportunities and its machine | `tables`, `encoding` |
+| `normalization` | NFC and NFD | `tables`, `encoding` |
+| `layout` | width, scanning, wrapping | all of the above |
+| `zunic` | `root.zig` and the text view | all of the above |
+
+Only `zunic` is public. The internal modules are created rather than named
+in the build graph, so a dependent cannot reach past the facade to one of
+them.
+
+The graph is acyclic and points away from `tables`. Two consequences worth
+knowing: `linebreak`'s state machine is private to that module, and an
+engine cannot quietly start depending on `layout`, which is the module that
+fuses the others.
+
+`-Dnormalization-buffer-bytes` is compiled into `normalization`, so a target
+that needs a different setting gets its own instance of the whole graph
+rather than sharing one.
+
 ## Look up related properties together
 
-[properties.zig](../src/properties.zig) stores grapheme, width, and line-break
+[properties.zig](../src/tables/properties.zig) stores grapheme, width, and line-break
 facts together in a packed record. Repeated blocks of records are stored once.
 The scanner can look up one record and reuse its fields for all three tasks.
 ASCII can skip UTF-8 decoding and use direct array access.

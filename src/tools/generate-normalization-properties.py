@@ -31,7 +31,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-OUT = ROOT / "normalization_properties.zig"
+OUT = ROOT / "tables/normalization_properties.zig"
 FILES = {
     "ud": DATA / "UnicodeData-16.0.0.txt",
     "dnp": DATA / "DerivedNormalizationProps-16.0.0.txt",

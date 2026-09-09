@@ -1,7 +1,7 @@
 //! Behaviour the UAX #29 fixture does not pin: the span contract, the
 //! `is_word` flag, malformed input, and the traversal work bound.
 const std = @import("std");
-const word = @import("word.zig");
+const word = @import("segmentation").word;
 
 const Expected = struct {
     start: usize,
@@ -295,7 +295,7 @@ test "long regional-indicator runs keep their parity across folded marks" {
 /// key that actually occurs, discovered from the pinned table rather than
 /// listed by hand, so a witness set can never fall behind the data.
 fn witnesses(buffer: []u21) []const u21 {
-    const word_properties = @import("word_properties.zig");
+    const word_properties = @import("tables").word;
     var seen = std.StaticBitSet(128).initEmpty();
     var len: usize = 0;
     var cp: u21 = 0;

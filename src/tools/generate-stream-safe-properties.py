@@ -29,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-OUT = ROOT / "stream_safe_properties.zig"
+OUT = ROOT / "tables/stream_safe_properties.zig"
 UNICODE_DATA = DATA / "UnicodeData-16.0.0.txt"
 
 MAXCP = 0x110000

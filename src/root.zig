@@ -15,11 +15,11 @@
 //! using it** -- it measures them as ordinary characters, so styled input
 //! reports the wrong width and can be broken mid-sequence. A `terminal` view
 //! that recognises them may follow.
-pub const utf8 = @import("utf8.zig");
+pub const utf8 = @import("encoding").utf8;
 const text_view = @import("text.zig");
-const wrap_engine = @import("wrap.zig");
-pub const line_break = @import("line_break.zig");
-const normalization = @import("normalization.zig");
+const wrap_engine = @import("layout").wrap;
+pub const line_break = @import("linebreak");
+const normalization = @import("normalization");
 
 pub const ByteOffset = text_view.ByteOffset;
 pub const Column = text_view.Column;

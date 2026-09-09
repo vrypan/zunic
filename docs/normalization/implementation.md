@@ -1,6 +1,6 @@
 # Normalization implementation decisions
 
-[API](README.md) · [Source](../../src/normalization.zig)
+[API](README.md) · [Source](../../src/normalization/normalization.zig)
 
 ## Buffer one combining run
 

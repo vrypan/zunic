@@ -24,10 +24,92 @@ pub fn build(b: *std.Build) void {
     build_options.addOption(WrapFastPath, "wrap_fast_path", wrap_fast_path);
     build_options.addOption(usize, "normalization_buffer_bytes", normalization_buffer_bytes);
 
+    // The internal module graph. A module reaches only what it is granted an
+    // import for here, so an undeclared dependency is a compile error rather
+    // than something a reviewer has to catch. It is acyclic by construction:
+    // `tables` holds generated data and depends on nothing, and every arrow
+    // points away from it.
+    //
+    // `tables` stays one module on purpose. Its `Record` fuses grapheme,
+    // width and line-break facts into a single `u32` so a scanner resolves a
+    // scalar once and answers all three questions from that entry; splitting
+    // it per engine would cost either duplicated tables or a lookup apiece.
+    // See docs/architecture.md.
+    //
+    // These are `createModule`, not `addModule`: only `zunic` is part of the
+    // package's public surface, and a dependent must not be able to reach
+    // past it to an internal module by name.
+    const Modules = struct {
+        tables: *std.Build.Module,
+        encoding: *std.Build.Module,
+        segmentation: *std.Build.Module,
+        linebreak: *std.Build.Module,
+        normalization: *std.Build.Module,
+        layout: *std.Build.Module,
+
+        /// Grant every internal module to `module`. Tests reach past the
+        /// public API into the module they exercise, so they get the same
+        /// graph the library has rather than a private back door.
+        fn addTo(self: @This(), module: *std.Build.Module) void {
+            inline for (@typeInfo(@This()).@"struct".fields) |field|
+                module.addImport(field.name, @field(self, field.name));
+        }
+    };
+
+    // Built per options module rather than once: `-Dnormalization-buffer-bytes`
+    // is compiled into `normalization`, and the large-buffer test target needs
+    // its own instance at a different setting. Sharing one would quietly test
+    // the default.
+    const buildModules = struct {
+        fn call(owner: *std.Build, options: *std.Build.Module) Modules {
+            const tables = owner.createModule(.{ .root_source_file = owner.path("src/tables/tables.zig") });
+
+            const encoding = owner.createModule(.{ .root_source_file = owner.path("src/encoding/encoding.zig") });
+            encoding.addImport("tables", tables);
+
+            const segmentation = owner.createModule(.{ .root_source_file = owner.path("src/segmentation/segmentation.zig") });
+            segmentation.addImport("tables", tables);
+            segmentation.addImport("encoding", encoding);
+
+            const linebreak = owner.createModule(.{ .root_source_file = owner.path("src/linebreak/linebreak.zig") });
+            linebreak.addImport("tables", tables);
+            linebreak.addImport("encoding", encoding);
+
+            const normalization = owner.createModule(.{ .root_source_file = owner.path("src/normalization/normalization.zig") });
+            normalization.addImport("tables", tables);
+            normalization.addImport("encoding", encoding);
+            normalization.addImport("build_options", options);
+
+            const layout = owner.createModule(.{ .root_source_file = owner.path("src/layout/layout.zig") });
+            layout.addImport("tables", tables);
+            layout.addImport("encoding", encoding);
+            layout.addImport("segmentation", segmentation);
+            layout.addImport("linebreak", linebreak);
+            layout.addImport("build_options", options);
+
+            return .{
+                .tables = tables,
+                .encoding = encoding,
+                .segmentation = segmentation,
+                .linebreak = linebreak,
+                .normalization = normalization,
+                .layout = layout,
+            };
+        }
+    }.call;
+
+    // One instance, shared everywhere: a file may belong to exactly one
+    // module, so repeated `createModule()` calls on the same options would
+    // make rival modules rooted at the same generated file.
+    const options_module = build_options.createModule();
+    const internal = buildModules(b, options_module);
+
     const zunic = b.addModule("zunic", .{
         .root_source_file = b.path("src/root.zig"),
     });
-    zunic.addImport("build_options", build_options.createModule());
+    zunic.addImport("build_options", options_module);
+    internal.addTo(zunic);
+
     const test_step = b.step("test", "Run zunic tests");
     const docs_step = b.step("docs-test", "Run documentation examples");
     const transition_step = b.step("line-break-tests", "Run line-break machine protocol tests");
@@ -40,8 +122,8 @@ pub fn build(b: *std.Build) void {
         "src/scan_test.zig",
         "src/word_test.zig",
         "src/normalization_test.zig",
-        "src/line_break.zig",
-        "src/utf8.zig",
+        "src/linebreak/linebreak.zig",
+        "src/encoding/utf8.zig",
     };
     for (roots) |root| {
         const test_mod = b.createModule(.{
@@ -49,12 +131,23 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
-        if (!std.mem.eql(u8, root, "src/line_break.zig")) test_mod.addImport("zunic", zunic);
-        test_mod.addImport("build_options", build_options.createModule());
+        // The two module roots below are tested in place, so they must see
+        // exactly the imports their module is granted -- not `zunic`, which
+        // would be a cycle back through the facade.
+        const in_place = std.mem.eql(u8, root, "src/linebreak/linebreak.zig") or
+            std.mem.eql(u8, root, "src/encoding/utf8.zig");
+        if (!in_place) {
+            test_mod.addImport("zunic", zunic);
+            internal.addTo(test_mod);
+        } else {
+            test_mod.addImport("tables", internal.tables);
+            test_mod.addImport("encoding", internal.encoding);
+        }
+        test_mod.addImport("build_options", options_module);
         const run_test = b.addRunArtifact(b.addTest(.{ .root_module = test_mod }));
         test_step.dependOn(&run_test.step);
         if (std.mem.eql(u8, root, "docs/examples.zig")) docs_step.dependOn(&run_test.step);
-        if (std.mem.eql(u8, root, "src/line_break.zig")) transition_step.dependOn(&run_test.step);
+        if (std.mem.eql(u8, root, "src/linebreak/linebreak.zig")) transition_step.dependOn(&run_test.step);
     }
 
     // Keep the >u16 counter regression in the normal gate without running
@@ -67,7 +160,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    large_normalization_mod.addImport("build_options", large_normalization_options.createModule());
+    const large_options = large_normalization_options.createModule();
+    const large_internal = buildModules(b, large_options);
+    large_normalization_mod.addImport("build_options", large_options);
+    large_internal.addTo(large_normalization_mod);
+    const large_zunic = b.createModule(.{ .root_source_file = b.path("src/root.zig") });
+    large_zunic.addImport("build_options", large_options);
+    large_internal.addTo(large_zunic);
+    large_normalization_mod.addImport("zunic", large_zunic);
     const large_normalization_test = b.addRunArtifact(b.addTest(.{
         .root_module = large_normalization_mod,
         .filters = &.{"large configured runs"},
@@ -82,7 +182,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     regression_mod.addImport("zunic", zunic);
-    regression_mod.addImport("build_options", build_options.createModule());
+    regression_mod.addImport("build_options", options_module);
+    internal.addTo(regression_mod);
     const regression_step = b.step("wrap-regressions", "Run wrapper regression tests");
     regression_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = regression_mod })).step);
 
@@ -92,7 +193,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     exhaustive_mod.addImport("zunic", zunic);
-    exhaustive_mod.addImport("build_options", build_options.createModule());
+    exhaustive_mod.addImport("build_options", options_module);
+    internal.addTo(exhaustive_mod);
     const exhaustive_step = b.step("wrap-exhaustive", "Run the full-alphabet wrapping sweep");
     exhaustive_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = exhaustive_mod })).step);
 

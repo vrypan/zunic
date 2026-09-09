@@ -16,10 +16,10 @@
 //! independent of wrapping width and line count. The bound is enforced by
 //! instrumented-scanner counters in tests; instrumentation is a comptime
 //! option and compiles to nothing in production builds.
-const scalar = @import("scalar.zig");
-const grapheme = @import("grapheme.zig");
-const line_break = @import("line_break.zig");
-const properties = @import("properties.zig");
+const scalar = @import("encoding").scalar;
+const grapheme = @import("segmentation").grapheme;
+const line_break = @import("linebreak");
+const properties = @import("tables").properties;
 
 pub const ascii = @import("ascii_scan.zig");
 

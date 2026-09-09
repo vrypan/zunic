@@ -1,6 +1,6 @@
 # Word-boundary implementation decisions
 
-[API](README.md) · [Source](../../src/word.zig)
+[API](README.md) · [Source](../../src/segmentation/word.zig)
 
 ## Remember both immediate and significant characters
 

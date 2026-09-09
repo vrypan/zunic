@@ -19,8 +19,8 @@
 //! width, wrapping and `utf8.step` keep their tolerant behaviour.
 const std = @import("std");
 const build_options = @import("build_options");
-const utf8 = @import("utf8.zig");
-const properties = @import("normalization_properties.zig");
+const utf8 = @import("encoding").utf8;
+const properties = @import("tables").normalization;
 
 pub const Form = enum { nfc, nfd };
 pub const Equivalence = enum { canonical };

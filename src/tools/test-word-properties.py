@@ -25,7 +25,7 @@ from check_unicode_version import check as check_unicode_version
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-SOURCE = ROOT / "word_properties.zig"
+SOURCE = ROOT / "tables/word_properties.zig"
 GENERATOR = ROOT / "tools" / "generate-word-properties.py"
 MAXCP = 0x110000
 NUMBER_CATEGORIES = ("Nd", "Nl", "No")

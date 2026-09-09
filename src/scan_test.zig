@@ -1,11 +1,11 @@
 const std = @import("std");
-const scan = @import("scan.zig");
-const grapheme = @import("grapheme.zig");
-const line_break = @import("line_break.zig");
-const utf8 = @import("utf8.zig");
-const scalar = @import("scalar.zig");
-const properties = @import("properties.zig");
-const width = @import("width.zig");
+const scan = @import("layout").scan;
+const grapheme = @import("segmentation").grapheme;
+const line_break = @import("linebreak");
+const utf8 = @import("encoding").utf8;
+const scalar = @import("encoding").scalar;
+const properties = @import("tables").properties;
+const width = @import("layout").width;
 
 fn expectScannerMatchesComposedIterators(bytes: []const u8) !void {
     var scanner = scan.Scanner(false){ .bytes = bytes };

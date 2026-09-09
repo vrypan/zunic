@@ -1,6 +1,6 @@
 //! Default extended-grapheme boundaries (UAX #29 core rules).
-const scalar = @import("scalar.zig");
-const properties = @import("properties.zig");
+const scalar = @import("encoding").scalar;
+const properties = @import("tables").properties;
 
 pub const Span = struct {
     start: usize,

@@ -1,6 +1,6 @@
 //! Terminal-cell width policy shared by text measurement and rendering.
-const grapheme = @import("grapheme.zig");
-const scalar = @import("scalar.zig");
+const grapheme = @import("segmentation").grapheme;
+const scalar = @import("encoding").scalar;
 const ascii_scan = @import("ascii_scan.zig");
 
 pub const Measure = struct {

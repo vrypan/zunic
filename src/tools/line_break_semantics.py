@@ -41,7 +41,7 @@ def categories(points=()):
     every category because it can affect a neighboring quotation mark. Raw
     classes are retained here so lookahead and LB1 can be tested independently.
     """
-    text = (ROOT / "properties.zig").read_text()
+    text = (ROOT / "tables/properties.zig").read_text()
     classes = re.search(r"pub const LineBreak = enum\(u6\) \{(.*?)\n\};", text, re.S)
     names = re.findall(r"^    (\w+),$", classes[1], re.M)
     index = [int(x) for x in re.findall(r"\d+", re.search(
@@ -355,7 +355,7 @@ def render():
 
 
 if __name__ == "__main__":
-    output = ROOT / "line_break_machine_data.zig"
+    output = ROOT / "tables/line_break_machine_data.zig"
     rendered = render()
     if sys.argv[1:] == ["--write"]:
         output.write_text(rendered)

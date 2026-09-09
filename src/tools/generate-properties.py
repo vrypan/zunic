@@ -17,7 +17,7 @@ from line_break_categories import category_key as line_break_category_key
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-OUT = ROOT / "properties.zig"
+OUT = ROOT / "tables/properties.zig"
 FILES = {
     "gcb": DATA / "GraphemeBreakProperty-16.0.0.txt",
     "ep": DATA / "emoji-data-16.0.0.txt",

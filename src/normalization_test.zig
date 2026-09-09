@@ -3,8 +3,8 @@
 //! iterator copy semantics, and the two queries.
 const std = @import("std");
 const zunic = @import("root.zig");
-const normalization = @import("normalization.zig");
-const properties = @import("normalization_properties.zig");
+const normalization = @import("normalization");
+const properties = @import("tables").normalization;
 
 const Form = normalization.Form;
 const limit = normalization.max_nonstarters;

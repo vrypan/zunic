@@ -25,7 +25,7 @@ from check_unicode_version import check as check_unicode_version
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-SOURCE = ROOT / "normalization_properties.zig"
+SOURCE = ROOT / "tables/normalization_properties.zig"
 GENERATOR = ROOT / "tools" / "generate-normalization-properties.py"
 FIXTURE = DATA / "NormalizationTest-16.0.0.txt"
 MAXCP = 0x110000

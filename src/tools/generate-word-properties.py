@@ -27,7 +27,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-OUT = ROOT / "word_properties.zig"
+OUT = ROOT / "tables/word_properties.zig"
 FILES = {
     "wb": DATA / "WordBreakProperty-16.0.0.txt",
     "alpha": DATA / "DerivedCoreProperties-16.0.0.txt",

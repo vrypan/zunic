@@ -2,7 +2,7 @@
 //!
 //! Invalid UTF-8 consumes one byte and has `codepoint == null`; its Unicode
 //! properties use the package's existing malformed-input fallbacks.
-const properties = @import("properties.zig");
+const properties = @import("tables").properties;
 const utf8 = @import("utf8.zig");
 
 pub const Token = struct {

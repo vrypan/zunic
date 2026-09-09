@@ -8,7 +8,7 @@
 //! `max_columns` and of how many lines are consumed.
 const scan = @import("scan.zig");
 const ascii_scan = @import("ascii_scan.zig");
-const grapheme = @import("grapheme.zig");
+const grapheme = @import("segmentation").grapheme;
 
 pub const Overflow = enum { allow, grapheme };
 pub const Options = struct {

@@ -4,7 +4,7 @@
 
 ## Share the scan
 
-The general wrapper uses [scan.zig](../../src/scan.zig) to find graphemes,
+The general wrapper uses [scan.zig](../../src/layout/scan.zig) to find graphemes,
 measure them, and check line-break opportunities together. These operations
 need many of the same character properties. Sharing the scan avoids decoding
 and looking up the same character separately for each operation.
@@ -16,7 +16,7 @@ regardless of line width or how many lines the caller requests.
 
 ## Keep a fitting break without starting over
 
-[wrap.zig](../../src/wrap.zig) remembers the most recent fitting break and
+[wrap.zig](../../src/layout/wrap.zig) remembers the most recent fitting break and
 the columns measured since it. When a later cluster overflows, the wrapper can
 return that saved line and carry the already measured tail to the next line.
 It does not restart the general scanner at the saved break. At most one extra

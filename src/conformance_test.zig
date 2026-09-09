@@ -1,8 +1,8 @@
 const std = @import("std");
 const unicode = @import("root.zig");
-const grapheme = @import("grapheme.zig");
-const word = @import("word.zig");
-const normalization = @import("normalization.zig");
+const grapheme = @import("segmentation").grapheme;
+const word = @import("segmentation").word;
+const normalization = @import("normalization");
 
 const fixture = @embedFile("data/GraphemeBreakTest-16.0.0.txt");
 const line_break_fixture = @embedFile("data/LineBreakTest-16.0.0.txt");

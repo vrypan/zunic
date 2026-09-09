@@ -20,7 +20,7 @@ from check_unicode_version import check as check_unicode_version
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-SOURCE = ROOT / "properties.zig"
+SOURCE = ROOT / "tables/properties.zig"
 MAXCP = 0x110000
 
 # EastAsianWidth-16.0.0.txt header: unlisted code points are "N", except

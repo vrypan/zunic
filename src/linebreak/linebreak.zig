@@ -4,9 +4,9 @@
 //! It does not select lines by terminal width, tailor rules with CLDR data, or
 //! perform dictionary segmentation for complex South East Asian text. SA
 //! letters therefore resolve to AL; SA marks resolve to CM as required by LB1.
-const properties = @import("properties.zig");
-const scalar = @import("scalar.zig");
-const semantic_machine = @import("line_break_machine.zig");
+const properties = @import("tables").properties;
+const scalar = @import("encoding").scalar;
+const semantic_machine = @import("machine.zig");
 const std = @import("std");
 
 pub const Opportunity = semantic_machine.Opportunity;
@@ -183,7 +183,7 @@ test "semantic transitions across mixed contexts" {
 }
 
 test "generated semantic machine fits its data budget" {
-    const data = @import("line_break_machine_data.zig");
+    const data = @import("tables").line_break_machine_data;
     try std.testing.expectEqual(@as(usize, 1), @sizeOf(semantic_machine.State));
     try std.testing.expectEqual(data.data_bytes, @sizeOf(@TypeOf(data.transitions)));
     try std.testing.expect(data.data_bytes <= 32 * 1024);
