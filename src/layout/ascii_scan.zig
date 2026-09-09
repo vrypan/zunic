@@ -1,4 +1,5 @@
 //! Internal, bounded detection of ASCII letter-only input.
+const std = @import("std");
 const builtin = @import("builtin");
 const options = @import("build_options");
 
@@ -154,4 +155,63 @@ pub fn simdSupported() bool {
 fn isLetter(byte: u8) bool {
     const lower = byte | 0x20;
     return lower >= 'a' and lower <= 'z';
+}
+
+/// One line's worth of ASCII, measured without deciding where it could break.
+///
+/// `columns` counts printable bytes: every ASCII byte is its own cluster, and
+/// `0x00..0x1F` are zero-width, so the count is exact rather than a bound.
+/// `end` is the first byte of the hard terminator, or the slice end.
+pub const AsciiLine = struct {
+    end: usize,
+    columns: usize,
+    /// Bytes to skip to reach the next line: the terminator's length, `0` at
+    /// end of input. CRLF is one terminator of two bytes.
+    terminator_len: usize,
+};
+
+/// Measure the run at `start` up to the next hard terminator, or null when a
+/// byte outside `0x00..0x7E` appears before one.
+///
+/// The null is the caller's signal to fall back: DEL and everything above it
+/// need the general path, DEL because it is zero-width and the rest because
+/// they are not ASCII at all. A `>` against `0x7E` settles both at once.
+///
+/// This deliberately answers only "how wide is this line", not "where may it
+/// break". A line that fits needs no break opportunity, so it needs none of
+/// the alphabet restrictions `isSimple` imposes -- which is what lets source
+/// code take this path when it cannot take `paragraph`'s.
+pub fn asciiLine(bytes: []const u8, start: usize) ?AsciiLine {
+    var pos = start;
+    var columns: usize = 0;
+    if (selectedBackend() != .off and simdSupported()) {
+        const V = @Vector(simd_width, u8);
+        const Mask = std.meta.Int(.unsigned, simd_width);
+        while (pos + simd_width <= bytes.len) : (pos += simd_width) {
+            const chunk: V = bytes[pos..][0..simd_width].*;
+            // Anything that ends the run, in one mask: a byte the policy
+            // cannot answer (`> 0x7E` covers DEL and non-ASCII alike) or a
+            // hard terminator (the contiguous 0x0A..0x0D).
+            //
+            // Both leave the chunk to the scalar loop rather than deciding
+            // here, because which comes *first* changes the answer: a
+            // terminator ahead of a non-ASCII byte yields a line, the other
+            // order yields null. A whole-chunk reduce cannot see the order.
+            const ends_run = (chunk > @as(V, @splat(0x7E))) |
+                ((chunk >= @as(V, @splat(0x0A))) & (chunk <= @as(V, @splat(0x0D))));
+            if (@reduce(.Or, ends_run)) break;
+            const printable = chunk >= @as(V, @splat(0x20));
+            columns += @popCount(@as(Mask, @bitCast(printable)));
+        }
+    }
+    while (pos < bytes.len) : (pos += 1) {
+        const byte = bytes[pos];
+        if (byte > 0x7E) return null;
+        if (byte >= 0x0A and byte <= 0x0D) {
+            const crlf = byte == '\r' and pos + 1 < bytes.len and bytes[pos + 1] == '\n';
+            return .{ .end = pos, .columns = columns, .terminator_len = if (crlf) 2 else 1 };
+        }
+        if (byte >= 0x20) columns += 1;
+    }
+    return .{ .end = bytes.len, .columns = columns, .terminator_len = 0 };
 }

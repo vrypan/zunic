@@ -525,3 +525,61 @@ test "printable detectors agree at all byte positions and lengths" {
         }
     }
 }
+
+/// `asciiLine` measured the slow, obvious way.
+fn referenceAsciiLine(bytes: []const u8, start: usize) ?scan.ascii.AsciiLine {
+    var columns: usize = 0;
+    var pos = start;
+    while (pos < bytes.len) : (pos += 1) {
+        const byte = bytes[pos];
+        if (byte > 0x7E) return null;
+        if (byte >= 0x0A and byte <= 0x0D) {
+            const crlf = byte == '\r' and pos + 1 < bytes.len and bytes[pos + 1] == '\n';
+            return .{ .end = pos, .columns = columns, .terminator_len = if (crlf) 2 else 1 };
+        }
+        if (byte >= 0x20) columns += 1;
+    }
+    return .{ .end = bytes.len, .columns = columns, .terminator_len = 0 };
+}
+
+test "asciiLine agrees with a scalar reference at every alignment" {
+    var prng = std.Random.DefaultPrng.init(0xA5C11);
+    const random = prng.random();
+    var bytes: [512]u8 = undefined;
+    for (0..20_000) |_| {
+        const len = random.uintLessThan(usize, bytes.len);
+        for (bytes[0..len]) |*b| b.* = switch (random.uintLessThan(u8, 12)) {
+            0 => '\n',
+            1 => '\r',
+            2 => 0x0B,
+            3 => 0x0C,
+            4 => '\t',
+            5 => 0x7F,
+            6 => 0x80 +| random.uintLessThan(u8, 0x7F),
+            else => 0x20 + random.uintLessThan(u8, 0x5F),
+        };
+        // Every start offset, so a chunk boundary lands mid-line too.
+        var start: usize = 0;
+        while (start <= len) : (start += 1) {
+            const want = referenceAsciiLine(bytes[0..len], start);
+            const got = scan.ascii.asciiLine(bytes[0..len], start);
+            try std.testing.expectEqualDeep(want, got);
+        }
+    }
+}
+
+test "asciiLine column count matches the width engine" {
+    // The reason the fast path may trust `columns`: it must equal what the
+    // general width policy reports for the same bytes.
+    const cases = [_][]const u8{
+        "",                       "a",                              "hello world",
+        "  leading spaces",       "trailing   ",                    "\ttabbed\tline",
+        "mixed\ttabs and spaces", "!@#$%^&*()_+-=[]{}|;':\",./<>?", "line one\nline two",
+        "crlf\r\nnext",           "\n",                             "\r\n",
+        "a\r\nb",
+    };
+    for (cases) |bytes| {
+        const line = scan.ascii.asciiLine(bytes, 0) orelse continue;
+        try std.testing.expectEqual(width.textWidth(bytes[0..line.end]), line.columns);
+    }
+}

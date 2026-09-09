@@ -33,6 +33,9 @@ fn IteratorImpl(comptime instrumented: bool) type {
         pending_line: ?Line = null,
         ascii_paragraph: ?ascii_scan.Paragraph = null,
         finished: bool = false,
+        /// Set when a whole-line shortcut emitted a line without advancing
+        /// `scanner`, so the next fallback knows to reposition it.
+        scanner_stale: bool = false,
 
         const Self = @This();
 
@@ -43,8 +46,44 @@ fn IteratorImpl(comptime instrumented: bool) type {
                 // never buffer a pending line, so they skip those checks.
                 .letters => return self.nextAsciiLetters(),
                 .simple => return self.nextAsciiParagraph(),
-                .none => return self.nextGeneral(),
+                .none => return self.nextMixed(),
             }
+        }
+
+        /// A line that already fits needs no break, and a line that needs no
+        /// break needs no break *opportunities* -- so this path is open to any
+        /// ASCII, not just `isSimple`'s alphabet. That is the whole point:
+        /// source code fails `paragraph` on `(`, `-` and tab, yet almost every
+        /// one of its lines is far shorter than the limit.
+        ///
+        /// Only attempted from a clean line start. Mid-line the general path
+        /// holds state -- a carried column count, a candidate break, a pending
+        /// line -- that this cannot reproduce.
+        noinline fn nextMixed(self: *Self) ?Line {
+            if (self.pending_line == null and !self.finished and
+                self.columns == 0 and self.candidate == null and
+                self.line_start < self.bytes.len)
+            {
+                if (ascii_scan.asciiLine(self.bytes, self.line_start)) |line| {
+                    if (line.columns <= self.options.max_columns) {
+                        const result: Line = .{ .start = self.line_start, .end = line.end, .columns = line.columns };
+                        self.line_start = line.end + line.terminator_len;
+                        // The scanner did not move, so it no longer describes
+                        // `line_start`; the next fallback repositions it.
+                        self.scanner_stale = true;
+                        if (self.line_start == self.bytes.len and line.terminator_len == 0) self.finished = true;
+                        return result;
+                    }
+                }
+            }
+            if (self.scanner_stale) {
+                // Safe to restart the machine here rather than replay it: this
+                // is a line start, and UAX #14 begins afresh after a mandatory
+                // break, so no line-break context crosses the boundary.
+                self.scanner = .{ .bytes = self.bytes, .decode_pos = self.line_start };
+                self.scanner_stale = false;
+            }
+            return self.nextGeneral();
         }
 
         // Keep scanner code out of the ASCII dispatch's inlining budget.
