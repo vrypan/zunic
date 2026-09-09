@@ -19,6 +19,7 @@ pub const NormalizationWriteError = NormalizationError || error{NoSpace};
 
 // Free functions
 pub fn text(bytes: []const u8) Text;
+pub fn terminal(bytes: []const u8) Terminal;
 pub fn NormalizationIterator(comptime form: Form) type;
 
 // Text methods
@@ -33,6 +34,9 @@ pub fn normalizedLenBound(self: Text, comptime form: Form) error{Overflow}!usize
 pub fn eql(self: Text, other: []const u8, comptime how: Equivalence) NormalizationError!bool;
 pub fn isNormalized(self: Text, comptime form: Form) NormalizationError!bool;
 pub fn isNormalizedQuick(self: Text, comptime form: Form) error{InvalidUtf8}!QuickCheck;
+
+// Terminal methods (first draft)
+pub fn graphemes(self: Terminal) TerminalGraphemes;
 ```
 
 `text()` borrows the bytes without scanning or allocating. `validate()` checks
@@ -41,6 +45,12 @@ UTF-8; normalization rejects it when encountered. The quick normalization check
 always scans the whole input and can return `.maybe`; `isNormalized()` resolves
 the answer to a boolean and may stop early. See [conventions](conventions.md)
 and [normalization](normalization/README.md) for the error and buffer contracts.
+
+`terminal()` also borrows without scanning. Its initial grapheme iterator skips
+complete supported CSI/OSC escapes while keeping original byte offsets. It
+returns `EscapeInsideGrapheme` if an escape splits a grapheme; successful spans
+exclude recognized escapes. Formatting state, width,
+stripping, and wrapping are pending; see the [terminal draft](terminal/README.md).
 
 ### Views and iterators
 
@@ -51,6 +61,7 @@ are not exported by `zunic`. `Self` below means the corresponding iterator.
 | View | Methods | Iterator result |
 | --- | --- | --- |
 | `Graphemes` | `.iterator()`, `.measured() → MeasuredGraphemes` | `next(self: *Self) ?Span` |
+| `TerminalGraphemes` | `.iterator()` | `next(self: *Self) error{EscapeInsideGrapheme}!?Span` |
 | `MeasuredGraphemes` | `.iterator()` | `next(self: *Self) ?MeasuredSpan` |
 | `Wrapped` | `.iterator()`, `.count() → usize` | `next(self: *Self) ?Line` |
 | `Terminators` | `.iterator() → TerminatorIterator`, `.count() → usize` | `next(self: *Self) ?Span` |
@@ -107,6 +118,7 @@ NFKC/NFKD and stream-safe normalization are not available in the current API.
 | Hard line terminators | [terminators](terminators/README.md) | [Why byte scanning is sufficient](terminators/implementation.md) |
 | Default word boundaries | [wordBounds](word-bounds/README.md) | [Decision tables and selective lookahead](word-bounds/implementation.md) |
 | NFC/NFD and canonical equality | [normalization](normalization/README.md) | [Bounded runs and quick checks](normalization/implementation.md) |
+| Terminal graphemes (draft) | [terminal](terminal/README.md) | [Escape scanning and next steps](terminal/implementation.md) |
 
 [Architecture](architecture.md) explains the shared property data, build options,
 and verification strategy. Implementation pages describe the current source;

@@ -1,6 +1,22 @@
 const std = @import("std");
 const zunic = @import("zunic");
 
+test "docs: terminal graphemes skip surrounding escapes" {
+    const bytes = "\x1b[31mcafe\u{0301}\x1b[0m";
+    var it = zunic.terminal(bytes).graphemes().iterator();
+    for ([_][]const u8{ "c", "a", "f", "e\u{0301}" }) |expected| {
+        const span = (try it.next()).?;
+        try std.testing.expectEqualStrings(expected, bytes[span.start.value..span.end.value]);
+    }
+    try std.testing.expect((try it.next()) == null);
+}
+
+test "docs: terminal grapheme rejects an internal escape" {
+    const bytes = "e\x1b[31m\u{0301}";
+    var it = zunic.terminal(bytes).graphemes().iterator();
+    try std.testing.expectError(error.EscapeInsideGrapheme, it.next());
+}
+
 test "docs: measured graphemes" {
     const bytes = "e\u{0301}界";
     var it = zunic.text(bytes).graphemes().measured().iterator();

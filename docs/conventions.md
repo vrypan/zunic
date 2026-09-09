@@ -32,11 +32,17 @@ Returned spans borrow the input indirectly; they contain no copied text.
 
 ## Plain text and malformed input
 
-The view does not interpret ANSI escape sequences, expand tabs, or emulate a
+The text view does not interpret ANSI escape sequences, expand tabs, or emulate a
 terminal cursor. Strip styling escapes before measuring or wrapping styled
 text. Width is a fixed terminal-cell policy, not font shaping or terminal
 capability detection. CR and LF have zero width; `width()` sums the text's
 columns rather than returning the widest physical line.
+
+The separate [terminal view](terminal/README.md) currently provides grapheme
+iteration that ignores supported CSI/OSC sequences. Its spans still index the
+original bytes and exclude recognized escapes. An escape inside a grapheme
+returns `EscapeInsideGrapheme` before that grapheme is emitted.
+Terminal width and wrapping are not implemented yet.
 
 Grapheme, word, width, and wrap operations tolerate malformed UTF-8, advancing
 one byte at a time on decoding errors. They retain original byte offsets and

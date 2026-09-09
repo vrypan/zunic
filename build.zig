@@ -142,6 +142,7 @@ pub fn build(b: *std.Build) void {
         .{ .path = "src/normalization_test.zig", .group = "normalization", .grants = &.{ .api, .tables, .encoding, .normalization } },
         .{ .path = "src/conformance_test.zig", .group = "conformance", .grants = &.{ .api, .segmentation, .normalization } },
         .{ .path = "src/root_test.zig", .group = "api", .grants = &.{ .api, .tables, .layout } },
+        .{ .path = "src/terminal_test.zig", .group = "terminal", .grants = &.{.api} },
         .{ .path = "docs/examples.zig", .group = "api", .grants = &.{.api} },
     };
 

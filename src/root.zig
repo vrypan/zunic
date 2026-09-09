@@ -1,4 +1,4 @@
-//! Allocation-free Unicode primitives for Zig terminal applications.
+//! Allocation-free Unicode primitives for Zig.
 //!
 //! Open a view over borrowed bytes and ask it questions:
 //!
@@ -13,10 +13,11 @@
 //!
 //! `text` reads bytes as plain text. **Strip ANSI escape sequences before
 //! using it** -- it measures them as ordinary characters, so styled input
-//! reports the wrong width and can be broken mid-sequence. A `terminal` view
-//! that recognises them may follow.
+//! reports the wrong width and can be broken mid-sequence. `terminal` offers
+//! an initial escape-aware grapheme iterator; width and wrapping are pending.
 pub const utf8 = @import("encoding").utf8;
 const text_view = @import("text.zig");
+const terminal_view = @import("terminal.zig");
 const wrap_engine = @import("layout").wrap;
 pub const line_break = @import("linebreak");
 const normalization = @import("normalization");
@@ -30,6 +31,8 @@ pub const WrapOptions = wrap_engine.Options;
 pub const Overflow = wrap_engine.Overflow;
 pub const Wrapped = text_view.Wrapped;
 pub const Text = text_view.Text;
+pub const Terminal = terminal_view.Terminal;
+pub const TerminalGraphemes = terminal_view.Graphemes;
 pub const Terminators = text_view.Terminators;
 pub const TerminatorIterator = text_view.TerminatorIterator;
 pub const Graphemes = text_view.Graphemes;
@@ -55,6 +58,12 @@ pub const MeasuredGraphemes = text_view.MeasuredGraphemes;
 /// Open a text view. Borrowed and zero-cost: no scanning happens until a
 /// question is asked.
 pub fn text(bytes: []const u8) Text {
+    return .{ .bytes = bytes };
+}
+
+/// Open a borrowed terminal view without scanning or allocating.
+/// The initial API provides grapheme iteration with CSI/OSC recognition.
+pub fn terminal(bytes: []const u8) Terminal {
     return .{ .bytes = bytes };
 }
 
