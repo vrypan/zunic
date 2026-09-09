@@ -53,8 +53,9 @@ removes recognized escapes without allocating or decoding UTF-8; use `text()`
 on its output for Unicode operations. `EscapeInsideGrapheme` is returned when later
 content joins a grapheme across an escape, so the grapheme prefix and intervening
 commands may already have been emitted. `stripAnsi()` has no such check and
-returns only `NoSpace` errors. Formatting state and styled wrapping are deferred;
-see the [terminal draft](terminal/README.md).
+returns only `NoSpace` errors. The iterator exposes active formatting as
+`state: TerminalState`. Styled wrapping is deferred; see the
+[terminal draft](terminal/README.md).
 
 ### Views and iterators
 
@@ -84,12 +85,40 @@ written buffer slice. It takes a copy of the iterator. Use
 `normalizedLenBound()` to size the output buffer; that bound does not increase
 the separate combining-run limit.
 
+Each terminal token iterator also exposes `state: TerminalState = .{}`. It is
+updated before returning an SGR or OSC 8 token. Its fields cover foreground,
+background, underline color/style, attributes, fonts, framing, scripts, ideogram
+marks, and a borrowed link. [Full state layout and parameter support](terminal/state.md).
+
 ### Options and results
 
 ```zig
+pub const StyleFields = packed struct {
+    foreground: bool = false,
+    background: bool = false,
+    underline_color: bool = false,
+    bold: bool = false,
+    faint: bool = false,
+    italic: bool = false,
+    fraktur: bool = false,
+    inverse: bool = false,
+    concealed: bool = false,
+    strikethrough: bool = false,
+    overline: bool = false,
+    proportional: bool = false,
+    underline: bool = false,
+    blink: bool = false,
+    frame: bool = false,
+    font: bool = false,
+    script: bool = false,
+    ideogram: bool = false,
+    unhandled: bool = false,
+};
+
+
 pub const Escape = struct {
     span: Span,
-    kind: enum { sgr, other },
+    effect: union(enum) { sgr: StyleFields, hyperlink, other },
 };
 pub const TerminalToken = union(enum) {
     grapheme: Span,

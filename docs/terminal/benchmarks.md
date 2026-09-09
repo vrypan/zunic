@@ -7,7 +7,8 @@ repeat below. Run `private/benchmarks/20260909T204213Z-terminal-module-45df76`
 preserves all 22 checksums, with every median within 2.7% of that run. The archive
 includes comparison output, the source diff, and copies of the new module files.
 
-The native suite includes `terminal_tokens` and `strip_ansi` rows. Run all
+The native suite includes `terminal_tokens`, `terminal_state`, and `strip_ansi`
+rows (36 terminal rows in harness version 12). Run all
 operations with `make bench`, or just the terminal cases with:
 
 ```sh
@@ -20,9 +21,16 @@ Each full sample processes about 4 MiB of input, with seven samples after a
 warm-up. Corpora and the strip output buffer are prepared outside timing.
 The input is a runtime byte slice, including for malformed-input cases.
 
-Token checksums include token kind, escape kind, and byte offsets. The expected
+Token checksums include token kind, escape effect, SGR affected-field flags
+(including `unhandled`), and byte offsets. The expected
 error case must raise `EscapeInsideGrapheme`; unexpected failures abort the run.
-Stripping checksums include every output byte and its length. Checksumming is
+The `terminal_state` operation additionally hashes the default state and every
+state after an escape, including link contents rather than pointer addresses.
+It hashes fields, not struct padding. This keeps state updates observable even
+if the input ends with a reset. Its timing includes this extra checksum work;
+it is not directly comparable to token-only traversal. `terminal_tokens` keeps
+its previous checksum and measures callers that do not read state; an optimizer
+may remove unused state work. Stripping checksums include every output byte and its length. Checksumming is
 inside the timed loop, matching the existing native suite. These are traversal
 and output-consumption measurements, not isolated function-call timings.
 
@@ -116,3 +124,35 @@ the first run’s plain-ASCII token row had high sample spread and did not repea
 | `term-split-grapheme` | -24.53% | -22.94% |
 | `term-unicode` | -7.39% | -11.54% |
 | `term-unterminated-osc` | -18.57% | -17.82% |
+
+## Formatting state baseline (2026-09-09)
+
+Before adding state, the harness-10 run was
+`20260909T205132Z-terminal-state-before-c8dd72`. The harness-10 run
+`20260909T205620Z-terminal-state-after-2f6e07` includes state parsing with the
+same benchmark definitions. All 22 checksums match. Token-only medians increased
+73.5% for escape-only input and 94.4% for dense SGR; plain ASCII changed by
++0.2% (4 KiB) and -1.9% (64 KiB), and sparse SGR by +3.0%. This is a local
+comparison, not a guarantee across machines. The extra parameter parsing is
+measurable even when the caller only consumes tokens.
+
+Harness 11 adds explicit state consumption. Its initial full baseline is
+`20260909T205850Z-terminal-state-v11-7406cf`. The history tool intentionally
+rejects comparison against harness 10 because the set of operations changed.
+Use harness-11 runs for subsequent state-tracking comparisons. There are no
+Unicode-version changes in this work.
+
+Repeat `20260909T205930Z-terminal-state-v11-repeat-5782b6` preserves all 33
+checksums; median changes range from -8.2% to +1.4%. Both
+archives include the source diff and new state files.
+
+## Rich escape effects (harness 12)
+
+Harness 12 consumes the new SGR field bitsets and distinguishes hyperlink effects.
+It also adds `term-unhandled-sgr`, mixing supported and unsupported parameters
+and invalid RGB components. Existing token checksums change because the returned
+results are richer. Compare subsequent runs within harness 12; earlier harnesses
+are not interchangeable. `strip_ansi` behavior remains the same.
+
+Initial full baseline: `20260909T211008Z-terminal-effects-v12-f0b951`
+(36 rows). The archive includes the source diff and new state files.

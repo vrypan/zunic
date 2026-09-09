@@ -17,7 +17,7 @@ test "docs: terminal token traversal" {
     while (try it.next()) |token| switch (token) {
         .grapheme => |span| content += span.end.value - span.start.value,
         .escape => |esc| {
-            try std.testing.expectEqual(.sgr, esc.kind);
+            try std.testing.expectEqual(.sgr, std.meta.activeTag(esc.effect));
             commands += 1;
         },
     };
@@ -158,4 +158,18 @@ test "docs: quick check, including maybe" {
     try std.testing.expectEqual(zunic.QuickCheck.maybe, try zunic.text("a\u{0301}").isNormalizedQuick(.nfc));
     try std.testing.expect(try zunic.text("q\u{0301}").isNormalized(.nfc));
     try std.testing.expect(!try zunic.text("a\u{0301}").isNormalized(.nfc));
+}
+
+test "terminal SGR effects expose affected fields and unhandled parameters" {
+    var it = zunic.terminal("\x1b[1;31;999m").tokens().iterator();
+    const esc = (try it.next()).?.escape;
+    switch (esc.effect) {
+        .sgr => |fields| {
+            try std.testing.expect(fields.bold and fields.foreground);
+            try std.testing.expect(it.state.bold);
+            try std.testing.expectEqual(@as(u8, 1), it.state.foreground.indexed);
+            try std.testing.expect(fields.unhandled);
+        },
+        .hyperlink, .other => unreachable,
+    }
 }

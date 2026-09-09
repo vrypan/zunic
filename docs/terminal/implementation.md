@@ -6,8 +6,9 @@
 
 [terminal.zig](../../src/terminal/terminal.zig) holds the view and token iterator
 in the internal `terminal` module. [escape.zig](../../src/terminal/escape.zig)
-recognizes commands and [strip.zig](../../src/terminal/strip.zig) removes them.
-The latter two files do not import Unicode engines or tables; stripping tests
+recognizes commands, [state.zig](../../src/terminal/state.zig) tracks formatting,
+and [strip.zig](../../src/terminal/strip.zig) removes them.
+These three files do not import Unicode engines or tables; stripping tests
 compile independently of those modules. Shared span types live in
 [types.zig](../../src/types.zig), so terminal code does not import the text view.
 The public entry point remains `zunic.terminal(bytes)`.
@@ -31,13 +32,41 @@ Only graphemes directly before escapes are decoded again to save state. Other
 graphemes use the engine's normal traversal. Keeping this extra pass local avoids
 changing the plain-text engine to expose its temporary boundary state. The
 iterator stores borrowed input, run offsets, the engine iterator, optional saved
-boundary state, and an error flag. No formatting register or output buffer is
+boundary state, an error flag, and a formatting state struct. No output buffer is
 needed by token iteration. The terminal view has no separate grapheme API.
 
 SGR classification accepts CSI with final `m`, numeric parameters and optional
-semicolon/colon separators, and no private prefix or intermediate bytes. It does
-not validate the meaning or range of individual SGR parameters. Other recognized
-commands receive the `.other` tag. No commands are executed.
+semicolon/colon separators, and no private prefix or intermediate bytes. This
+classification checks syntax only; interpretation then checks supported values.
+Valid OSC 8 commands receive the `.hyperlink` effect; other recognized commands
+receive `.other`. The iterator applies supported SGR parameters
+and OSC 8 link commands before returning their tokens. During the same pass,
+SGR assignments set flags in a packed `StyleFields` value. No second parse or
+old/new state comparison is needed. SGR 0 marks all style fields; `unhandled`
+accumulates independently and survives resets within that command. Invalid and
+unsupported parameters set `unhandled` without inventing effects for skipped
+parameters. The original span is always available for exact command bytes.
+The iterator does not execute cursor or screen commands. [Formatting state](state.md) lists the supported parameters.
+
+State records active properties, not a history of commands. Colors retain their
+palette index or RGB value; they are not resolved against a particular terminal's
+palette. Link parameters and URIs borrow input slices, allowing arbitrary lengths
+without allocating or copying strings. A state copy borrows the same input.
+SGR 0 resets every formatting field while preserving the link. Link closing is a
+separate OSC 8 operation.
+
+The struct includes less common SGR fields now, so future formatting and wrapping
+work can use the same layout. It has no fixed ABI or guarantee of covering future
+vendor extensions. Cursor positions, screen contents, terminal modes, palette
+changes, and command stacks are outside this styled-text view.
+
+Parameter parsing uses constant storage and checks numeric overflow. Colon groups
+stay together, so an unsupported underline or color subparameter cannot become a
+separate attribute. Invalid RGB components consume their complete known group but
+leave the color unchanged. An unknown semicolon color mode stops processing that
+SGR because its length is unknown. Earlier parameters are retained; later commands
+still work. This is our explicit recovery policy, not a promise to match every
+terminal's handling of malformed commands.
 
 A failed escape scan leaves its bytes as content. Unexpected ESC bytes stop
 recognition immediately, allowing a later introducer to be examined separately.
@@ -73,11 +102,10 @@ normalization, or wrapping on the terminal view.
 ## Possible later work — not implemented
 
 Formatting-preserving wrapping would be a separate feature. Its input primitive
-would be `tokens()`, with SGR state stored as active style properties rather than
-an unbounded history of commands. Other recognized commands would be ignored.
+would be `tokens()`, using the active formatting and link state already stored
+on its iterator. Other recognized commands would be ignored.
 An output line would need to combine borrowed content with generated reset and
 restore sequences, so the current `Line` span would not be sufficient.
 
 That design also needs a policy for partial output when a later token raises
-`EscapeInsideGrapheme`. No formatting restoration, cursor emulation, or hyperlink
-state is currently implemented.
+`EscapeInsideGrapheme`. No formatting restoration or cursor emulation is currently implemented.

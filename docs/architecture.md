@@ -30,7 +30,7 @@ something a reviewer has to notice.
 | `linebreak` | UAX #14 opportunities and its machine | `tables`, `encoding` |
 | `normalization` | NFC and NFD | `tables`, `encoding` |
 | `layout` | width, scanning, wrapping | `tables`, `encoding`, `segmentation`, `linebreak` |
-| `terminal` | terminal view, tokens, escape recognition, stripping | `types`, `encoding`, `segmentation` |
+| `terminal` | terminal view, tokens, formatting state, escape recognition, stripping | `types`, `encoding`, `segmentation` |
 | `zunic` | `root.zig` and the text view | all of the above |
 
 Only `zunic` is public. The internal modules are created rather than named

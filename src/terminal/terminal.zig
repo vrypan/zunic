@@ -3,6 +3,9 @@ const std = @import("std");
 const types = @import("types");
 const escape = @import("escape.zig");
 const strip = @import("strip.zig");
+const formatting = @import("state.zig");
+pub const State = formatting.State;
+pub const StyleFields = formatting.StyleFields;
 const scalar = @import("encoding").scalar;
 const grapheme = @import("segmentation").grapheme;
 
@@ -26,7 +29,7 @@ pub const Terminal = struct {
 
 pub const Escape = struct {
     span: types.Span,
-    kind: enum { sgr, other },
+    effect: union(enum) { sgr: StyleFields, hyperlink, other },
 };
 
 pub const Token = union(enum) {
@@ -44,6 +47,8 @@ pub const Tokens = struct {
 
 pub const TokenIterator = struct {
     bytes: []const u8,
+    /// Active formatting after the last returned token. Link slices borrow bytes.
+    state: State = .{},
     pos: usize = 0,
     run_start: usize = 0,
     inner: grapheme.Iterator = .{ .bytes = "" },
@@ -60,9 +65,11 @@ pub const TokenIterator = struct {
             if (escape.end(self.bytes, self.pos)) |end| {
                 const start = self.pos;
                 self.pos = end;
+                const command = self.bytes[start..end];
+                const sgr = escape.isSgr(command);
                 return .{ .escape = .{
                     .span = .{ .start = .{ .value = start }, .end = .{ .value = end } },
-                    .kind = if (escape.isSgr(self.bytes[start..end])) .sgr else .other,
+                    .effect = if (sgr) .{ .sgr = formatting.applySgr(&self.state, command) } else if (formatting.applyOther(&self.state, command)) .hyperlink else .other,
                 } };
             }
             if (self.before_escape) |saved| {
