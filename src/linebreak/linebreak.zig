@@ -25,9 +25,11 @@ pub const Iterator = struct {
     initialized: bool = false,
     finished: bool = false,
     state: State = .{},
-    buffered_end: usize = 0,
-    buffered_record: properties.Record = undefined,
-    has_buffered: bool = false,
+    /// The lookahead a contextual rule already decoded, kept for the next
+    /// iteration so it is never decoded twice. An optional rather than a
+    /// value plus a validity flag, matching `scan.Scanner`: the flag form
+    /// left `buffered_record` genuinely `undefined` between uses.
+    buffered: ?Token = null,
 
     pub fn next(self: *Iterator) ?Boundary {
         if (self.finished) return null;
@@ -57,8 +59,11 @@ pub const Iterator = struct {
                 // Only contextual actions decode the following scalar. The
                 // buffered token becomes the next iteration's current token.
                 const following = self.peekToken();
+                // A lookahead that did not advance is end of text, not a
+                // scalar the rule may examine.
+                const has_following = following.end != self.pos;
                 var classifier = scalar.Classifier(false){};
-                break :blk State.opportunityForOpcode(opcode, self.bytes, following.record.line_break, following.record, following.end != self.pos, following.end, &classifier);
+                break :blk State.opportunityForOpcode(opcode, self.bytes, following.record.line_break, following.record, has_following, following.end, &classifier);
             },
             else => unreachable,
         };
@@ -66,23 +71,15 @@ pub const Iterator = struct {
     }
 
     fn takeToken(self: *Iterator) Token {
-        const token = if (self.has_buffered) Token{
-            .end = self.buffered_end,
-            .record = self.buffered_record,
-        } else self.decodeAt(self.pos);
-        self.has_buffered = false;
+        const token = self.buffered orelse self.decodeAt(self.pos);
+        self.buffered = null;
         self.pos = token.end;
         return token;
     }
 
     fn peekToken(self: *Iterator) Token {
-        if (!self.has_buffered) {
-            const token = self.decodeAt(self.pos);
-            self.buffered_end = token.end;
-            self.buffered_record = token.record;
-            self.has_buffered = true;
-        }
-        return .{ .end = self.buffered_end, .record = self.buffered_record };
+        if (self.buffered == null) self.buffered = self.decodeAt(self.pos);
+        return self.buffered.?;
     }
 
     fn decodeAt(self: *const Iterator, offset: usize) Token {

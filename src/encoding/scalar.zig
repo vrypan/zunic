@@ -89,14 +89,35 @@ pub fn Classifier(comptime instrumented: bool) type {
     };
 }
 
+/// What a malformed byte looks like, stated once. Every field the token
+/// contract mentions is set here rather than inherited from `record(0)`: two
+/// of them used to arrive that way, so NUL's properties were silently part of
+/// the definition and a table regeneration could have moved them.
 inline fn malformedRecord() properties.Record {
     return comptime blk: {
         var r = properties.record(0);
         r.gcb = .other;
+        r.incb = .none;
+        r.extended_pictographic = false;
         r.line_break = .al;
         r.width = 0;
         r.line_break_category = properties.line_break_malformed_category;
         break :blk r;
+    };
+}
+
+/// The same facts as a public `Token`. `at` used to spell them out a second
+/// time; the two agreed only by inspection, and nothing made them stay that
+/// way.
+inline fn malformedToken(start: usize, end: usize) Token {
+    const r = comptime malformedRecord();
+    return .{
+        .start = start,
+        .end = end,
+        .codepoint = null,
+        .grapheme = properties.graphemeOf(r),
+        .line_break = r.line_break,
+        .cell_width = r.width,
     };
 }
 
@@ -139,14 +160,7 @@ pub fn at(bytes: []const u8, start: usize) Token {
 
     // Malformed input keeps its existing contract: one advancing AL-like
     // scalar with no code point and no columns.
-    return .{
-        .start = start,
-        .end = start + step.len,
-        .codepoint = null,
-        .grapheme = .{ .gcb = .other, .incb = .none, .extended_pictographic = false },
-        .line_break = .al,
-        .cell_width = 0,
-    };
+    return malformedToken(start, start + step.len);
 }
 
 fn fromCodepoint(start: usize, end: usize, cp: u21) Token {
