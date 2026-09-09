@@ -46,10 +46,17 @@ performance cases and saved baseline results are described in [benchmarks](bench
 ## Byte-only stripping
 
 `stripAnsi()` uses the same escape recognizer directly. It skips recognized
-sequences and copies each remaining byte into the caller's buffer. It does not
+sequences and copies the remaining content into the caller's buffer. Short runs
+use an unrolled prefix of up to 16 bytes, avoiding vector-search overhead between
+dense commands. Longer runs use Zig's SIMD-capable `std.mem.findScalarPos()` to
+locate the next ESC, then copy the intervening block. The search has a scalar
+fallback on targets without vector support. Escape recognition is inlined at
+its call sites; the recognized syntax is unchanged. The stripping path does not
 call the token iterator, UTF-8 decoder, or grapheme engine, so it can remove an
-escape inside a grapheme or even inside a UTF-8 encoding. Capacity is checked
-before each copied byte. The output never grows; writing into storage starting
+escape inside a grapheme or even inside a UTF-8 encoding. A block copy is limited
+to the remaining output capacity; on failure it leaves the same byte prefix as
+the byte-at-a-time path. Forward copying permits the documented in-place use.
+The output never grows; writing into storage starting
 at the input address is safe because the write position never passes the read
 position. Other overlapping storage is not supported.
 

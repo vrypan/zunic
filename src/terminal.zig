@@ -20,15 +20,28 @@ pub const Terminal = struct {
     pub fn stripAnsi(self: Terminal, buffer: []u8) error{NoSpace}![]u8 {
         var read: usize = 0;
         var written: usize = 0;
-        while (read < self.bytes.len) {
+        scan: while (read < self.bytes.len) {
             if (escapeEnd(self.bytes, read)) |end| {
                 read = end;
                 continue;
             }
-            if (written == buffer.len) return error.NoSpace;
-            buffer[written] = self.bytes[read];
-            written += 1;
-            read += 1;
+            // Unroll the short prefix so dense commands do not pay for a
+            // vector search or a per-byte run counter. A failed ESC is content.
+            inline for (0..16) |index| {
+                if (read == self.bytes.len) return buffer[0..written];
+                if (index != 0 and self.bytes[read] == 0x1b) continue :scan;
+                if (written == buffer.len) return error.NoSpace;
+                buffer[written] = self.bytes[read];
+                written += 1;
+                read += 1;
+            }
+            // Longer runs use Zig's SIMD-capable search and a bulk copy.
+            const end = std.mem.findScalarPos(u8, self.bytes, read, 0x1b) orelse self.bytes.len;
+            const count = @min(end - read, buffer.len - written);
+            std.mem.copyForwards(u8, buffer[written..][0..count], self.bytes[read..][0..count]);
+            written += count;
+            if (count < end - read) return error.NoSpace;
+            read = end;
         }
         return buffer[0..written];
     }
@@ -132,7 +145,7 @@ fn isSgr(bytes: []const u8) bool {
 // Recognize only complete 7-bit CSI and OSC sequences. Unsupported or broken
 // sequences fall back to ordinary text. An unexpected ESC aborts recognition,
 // so repeated unterminated introducers cannot cause quadratic rescanning.
-fn escapeEnd(bytes: []const u8, start: usize) ?usize {
+inline fn escapeEnd(bytes: []const u8, start: usize) ?usize {
     if (bytes[start] != 0x1b or bytes.len - start < 2) return null;
     var pos = start + 2;
     switch (bytes[start + 1]) {

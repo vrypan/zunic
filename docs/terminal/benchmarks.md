@@ -82,3 +82,32 @@ work. These numbers are a machine-specific reference, not a cross-machine target
 | `term-split-grapheme` | 158.3 | 665.1 |
 | `term-unicode` | 371.4 | 772.1 |
 | `term-unterminated-osc` | 131.1 | 478.5 |
+
+## Bulk-copy update — 2026-09-09
+
+Stripping now copies a short unrolled prefix, then uses Zig’s SIMD-capable
+ESC search and a forward block copy for longer runs. Escape recognition is
+inlined. The harness, cases, checksums, and build settings are unchanged.
+
+Final runs: `private/benchmarks/20260909T203014Z-terminal-prefix-copy-cb479d` and
+`private/benchmarks/20260909T203109Z-terminal-prefix-repeat-5d1ab4`. Both archives include comparison output and the source diff.
+
+All 22 checksums match the initial baseline. The table shows median elapsed-time
+changes against that baseline; negative means faster. Dense SGR and malformed
+input stayed within 5%, while larger content runs improved. A 6.59% slowdown in
+the first run’s plain-ASCII token row had high sample spread and did not repeat
+(the repeat was +0.78%). No slowdown above 5% repeated across the final runs.
+
+| Strip ANSI case | First run | Repeat |
+| --- | ---: | ---: |
+| `term-commands-only` | -6.19% | -7.56% |
+| `term-dense-sgr` | -0.18% | +3.10% |
+| `term-long-osc` | -14.79% | -15.55% |
+| `term-malformed` | +1.22% | +1.29% |
+| `term-osc` | -5.69% | -7.87% |
+| `term-plain-ascii-64k` | -25.03% | -22.30% |
+| `term-plain-ascii` | -12.50% | -20.82% |
+| `term-sparse-sgr` | -16.97% | -19.68% |
+| `term-split-grapheme` | -24.53% | -22.94% |
+| `term-unicode` | -7.39% | -11.54% |
+| `term-unterminated-osc` | -18.57% | -17.82% |

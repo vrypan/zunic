@@ -1,6 +1,44 @@
 const std = @import("std");
 const zunic = @import("zunic");
 
+test "stripAnsi block copies preserve alignment, overlap and partial prefixes" {
+    const escape = "\x1b[31m";
+    for (0..32) |alignment| {
+        for ([_]usize{ 0, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127 }) |run_len| {
+            var storage: [384]u8 = @splat(0xa5);
+            const len = run_len * 2 + escape.len;
+            const input = storage[alignment..][0..len];
+            @memset(input[0..run_len], 0xff);
+            @memcpy(input[run_len..][0..escape.len], escape);
+            @memset(input[run_len + escape.len ..], 'x');
+            var expected: [254]u8 = undefined;
+            @memset(expected[0..run_len], 0xff);
+            @memset(expected[run_len..][0..run_len], 'x');
+            const output_len = run_len * 2;
+            // Include shortages in either run, exact fits, and spare capacity.
+            for ([_]usize{ 0, run_len, output_len -| 1, output_len, output_len + 1 }) |capacity| {
+                var output: [384]u8 = @splat(0xa5);
+                const buffer = output[alignment..][0..capacity];
+                if (capacity < output_len) {
+                    try std.testing.expectError(error.NoSpace, zunic.terminal(input).stripAnsi(buffer));
+                    try std.testing.expectEqualSlices(u8, expected[0..capacity], buffer);
+                } else {
+                    try std.testing.expectEqualSlices(u8, expected[0..output_len], try zunic.terminal(input).stripAnsi(buffer));
+                }
+                try std.testing.expectEqual(@as(u8, 0xa5), output[alignment + @min(capacity, output_len)]);
+                var inplace = storage;
+                const same = inplace[alignment..][0..len];
+                if (capacity < output_len) {
+                    try std.testing.expectError(error.NoSpace, zunic.terminal(same).stripAnsi(same[0..capacity]));
+                    try std.testing.expectEqualSlices(u8, expected[0..capacity], same[0..capacity]);
+                } else {
+                    try std.testing.expectEqualSlices(u8, expected[0..output_len], try zunic.terminal(same).stripAnsi(same));
+                }
+            }
+        }
+    }
+}
+
 test "stripAnsi removes commands without interpreting content" {
     const cases = [_]struct { input: []const u8, output: []const u8 }{
         .{ .input = "", .output = "" },
