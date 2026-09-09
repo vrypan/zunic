@@ -3,17 +3,21 @@
 Allocation-free Unicode primitives for Zig 0.16.0 or later.
 
 Measure terminal columns, iterate graphemes and word boundaries, wrap text,
-find hard line terminators, and normalize to NFC or NFD.
+find hard line terminators, and normalize to NFC or NFD. For text containing
+ANSI escapes, strip commands into a buffer or iterate tokens with formatting
+and hyperlink state.
 
 ## Why zunic
 
-- **Fast.** Zunic's performance is broadly on par with corresponding Rust
+- **Fast text operations.** Performance is broadly on par with corresponding Rust
   libraries such as `unicode-segmentation`, `unicode-normalization`, and
   `textwrap`, and faster on many tested workloads.
-- **No allocator needed.** Text views borrow your bytes. Iterators return byte
-  ranges; normalization writes into a buffer you supply.
+- **No allocator needed.** Views borrow your bytes. Iterators return byte
+  ranges; normalization and ANSI stripping write into a buffer you supply.
 - **Useful for terminal layout.** Measure whole grapheme clusters and wrap
   without splitting them. Byte offsets let you slice the original text directly.
+- **Parsed terminal formatting.** Tokens expose affected style fields and keep
+  active colors, attributes, and hyperlinks available on the iterator.
 - **Small, separate operations.** Ask for width, boundaries, or normalized text
   without building a larger text object.
 - **Zig only.** No external libraries. Unicode tables are included, with no
@@ -23,8 +27,10 @@ find hard line terminators, and normalize to NFC or NFD.
 
 ## Install
 
+This README describes the development API on the `dev` branch.
+
 ```sh
-zig fetch --save git+https://github.com/vrypan/zunic.git#v0.3.0
+zig fetch --save git+https://github.com/vrypan/zunic.git#dev
 ```
 
 In your application's `build.zig`:
@@ -86,13 +92,46 @@ pub fn main() !void {
 }
 ```
 
-Input is plain text: strip ANSI escape sequences before measuring or wrapping.
+`text()` treats input as plain text. Use `terminal().stripAnsi()` before
+measuring or wrapping input containing ANSI escapes.
 Display operations tolerate malformed UTF-8; normalization rejects it and has a
 [configurable combining-run limit](docs/normalization/README.md#combining-run-limit).
 Call `try text.validate()` first when malformed UTF-8 should be rejected.
 Word boundaries are locale-independent and do not use dictionaries.
 
-## Unicode standards
+## Terminal text
+
+`zunic.terminal(bytes)` provides byte-only ANSI stripping and token iteration.
+It recognizes a subset of CSI and OSC commands, including SGR formatting and
+OSC 8 hyperlinks.
+
+```zig
+const styled = "\x1b[1;31mHello\x1b[0m";
+var buffer: [styled.len]u8 = undefined;
+const plain = try zunic.terminal(styled).stripAnsi(&buffer);
+std.debug.print("width: {d}\n", .{zunic.text(plain).width()}); // 5
+
+var tokens = zunic.terminal(styled).tokens().iterator();
+const fields = (try tokens.next()).?.escape.effect.sgr;
+std.debug.print("sets bold: {any}\n", .{fields.bold}); // true
+std.debug.print("active bold: {any}\n", .{tokens.state.bold}); // true
+```
+
+Tokens return grapheme spans or escapes with `.sgr`, `.hyperlink`, or `.other`
+effects. SGR effects list affected fields and flag unsupported or invalid
+parameters as `unhandled`. Read resulting values from `iterator.state`.
+State updates before the command is returned; links borrow the original input.
+
+Token iteration reports `EscapeInsideGrapheme` when it reaches content that joins
+across an escape. Earlier tokens and state updates are not rolled back. `stripAnsi()`
+simply removes recognized commands, without UTF-8 validation or grapheme checks.
+Terminal width and styled wrapping are not provided yet.
+
+See the [terminal API](docs/terminal/README.md), [state layout](docs/terminal/state.md),
+and [native benchmarks](docs/terminal/benchmarks.md). State tracking adds work,
+especially on command-heavy input; the Rust comparison above covers text operations.
+
+## Standards
 
 Zunic uses **Unicode 16.0.0** data:
 
@@ -106,6 +145,11 @@ Zunic uses **Unicode 16.0.0** data:
 Terminal column counts and line fitting are Zunic policies built on these rules
 and properties. See the [known line-break limitation](docs/wrap/implementation.md#known-limitation).
 
+Escape handling uses a subset of [ECMA-48](https://ecma-international.org/publications-and-standards/standards/ecma-48/)
+and [XTerm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html),
+with [OSC 8 hyperlinks](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda)
+and [colored and styled underlines](https://sw.kovidgoyal.net/kitty/underlines/).
+
 ## Documentation
 
 See [docs/](docs/README.md) for signatures, return values, examples, and
@@ -116,7 +160,8 @@ implementation decisions:
 [Wrap](docs/wrap/README.md) ·
 [Terminators](docs/terminators/README.md) ·
 [Word boundaries](docs/word-bounds/README.md) ·
-[Normalization](docs/normalization/README.md)
+[Normalization](docs/normalization/README.md) ·
+[Terminal text](docs/terminal/README.md)
 
 Run `zig build test` for the test suite or `zig build docs-test` for the
 documentation examples. Build options and verification details are in
