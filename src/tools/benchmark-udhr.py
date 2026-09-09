@@ -39,7 +39,7 @@ OPERATIONS = {
     "graphemes": "blk: { var n: usize = 0; var it = zunic.text(c.text).graphemes().iterator(); while (it.next()) |_| n += 1; break :blk n; }",
     "words": "blk: { var n: usize = 0; var it = zunic.text(c.text).wordBounds().iterator(); while (it.next()) |_| n += 1; break :blk n; }",
     "wrap": "blk: { var n: usize = 0; var it = (zunic.text(c.text).wrap(.{ .max_columns = 80 }) catch unreachable).iterator(); while (it.next()) |_| n += 1; break :blk n; }",
-    "nfc": "blk: { var n: usize = 0; var it = zunic.normalize(c.text, .nfc); while (it.next() catch null) |cp| n +%= cp; break :blk n; }",
+    "nfc": "blk: { var n: usize = 0; var it = zunic.text(c.text).normalize(.nfc); while (it.next() catch null) |cp| n +%= cp; break :blk n; }",
 }
 
 PROBE = """const std = @import("std");

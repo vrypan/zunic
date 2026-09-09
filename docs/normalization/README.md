@@ -34,9 +34,7 @@ pub const NormalizationWriteError = NormalizationError || error{NoSpace};
 pub const QuickCheck = enum { yes, no, maybe };
 pub const unicode_version: std.SemanticVersion; // the pinned data version
 
-pub fn normalize(bytes: []const u8, comptime form: Form) NormalizationIterator(form);
 pub fn NormalizationIterator(comptime form: Form) type;
-pub fn normalizedLenBound(input_len: usize, comptime form: Form) error{Overflow}!usize;
 
 // NormalizationIterator(form), with Self standing for that concrete type
 pub fn next(self: *Self) NormalizationError!?u21;
@@ -44,16 +42,16 @@ pub fn writeTo(self: Self, buffer: []u8) NormalizationWriteError![]u8;
 
 // Text methods
 pub fn normalize(self: Text, comptime form: Form) NormalizationIterator(form);
+pub fn normalizedLenBound(self: Text, comptime form: Form) error{Overflow}!usize;
 pub fn eql(self: Text, other: []const u8, comptime how: Equivalence) NormalizationError!bool;
 pub fn isNormalized(self: Text, comptime form: Form) NormalizationError!bool;
 pub fn isNormalizedQuick(self: Text, comptime form: Form) error{InvalidUtf8}!QuickCheck;
 ```
 
 These signatures use the exported names from `zunic`. `form` and `how` must
-be known at compile time. `Text.normalize()` and the free function
-`zunic.normalize(bytes, .nfc)` are the same iterator; the free function
-remains the primary spelling, because normalization produces new scalars
-rather than spans into the input.
+be known at compile time. All normalization operations start from a text view:
+`zunic.text(bytes).normalize(.nfc)`. The iterator produces new scalars rather
+than spans into the input.
 
 `unicode_version` is the version of the pinned Unicode data. It is not Zunic's
 package version and is unrelated to the Zig version in use. Each table
@@ -77,28 +75,28 @@ it on a new iterator writes the whole normalized text.
 
 ```zig
 const bytes = "cafe\u{0301}";
-const capacity = comptime try zunic.normalizedLenBound(bytes.len, .nfc);
+const capacity = comptime try zunic.text(bytes).normalizedLenBound(.nfc);
 var buffer: [capacity]u8 = undefined;
-const result = try zunic.normalize(bytes, .nfc).writeTo(&buffer);
+const result = try zunic.text(bytes).normalize(.nfc).writeTo(&buffer);
 try std.testing.expectEqualStrings("café", result);
 try std.testing.expectEqual(@as(usize, 4), zunic.text(result).width());
 
-var scalars = zunic.normalize("é", .nfd);
+var scalars = zunic.text("é").normalize(.nfd);
 try std.testing.expectEqual(@as(u21, 'e'), (try scalars.next()).?);
 try std.testing.expectEqual(@as(u21, 0x301), (try scalars.next()).?);
 try std.testing.expect((try scalars.next()) == null);
 ```
 
-`normalizedLenBound(input_len, form)` returns a safe output byte-capacity bound
-for either supported form. The current bound is `3 * input_len`, with checked
+`text.normalizedLenBound(form)` returns a safe output byte-capacity bound
+for either supported form. The current bound is `3 * text.bytes.len`, with checked
 arithmetic; an unrepresentable result is `Overflow`. It is a capacity bound,
 not the exact output size, and does not examine or validate input. Both NFC
 and NFD can grow. Supplying this much space rules out `NoSpace` only.
 
 ```zig
-const capacity = comptime try zunic.normalizedLenBound("é".len, .nfd);
+const capacity = comptime try zunic.text("é").normalizedLenBound(.nfd);
 try std.testing.expectEqual(@as(usize, 6), capacity);
-var it = zunic.normalize("é", .nfd);
+var it = zunic.text("é").normalize(.nfd);
 _ = try it.next(); // Consume 'e'.
 var buffer: [capacity]u8 = undefined;
 try std.testing.expectEqualStrings("\u{0301}", try it.writeTo(&buffer));
@@ -108,7 +106,7 @@ try std.testing.expectEqual(@as(u21, 0x301), (try it.next()).?);
 
 These examples use `comptime` because the input lengths are known at compile
 time, allowing a local array of the calculated size. For runtime input, call
-`try normalizedLenBound(input.len, form)` and supply a buffer with that capacity.
+`try zunic.text(input).normalizedLenBound(form)` and supply a buffer with that capacity.
 
 ## Query normalization and equality
 

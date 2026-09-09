@@ -66,13 +66,13 @@ test "docs: word-like segments" {
 
 test "docs: normalization output" {
     const bytes = "cafe\u{0301}";
-    const capacity = comptime try zunic.normalizedLenBound(bytes.len, .nfc);
+    const capacity = comptime try zunic.text(bytes).normalizedLenBound(.nfc);
     var buffer: [capacity]u8 = undefined;
-    const result = try zunic.normalize(bytes, .nfc).writeTo(&buffer);
+    const result = try zunic.text(bytes).normalize(.nfc).writeTo(&buffer);
     try std.testing.expectEqualStrings("café", result);
     try std.testing.expectEqual(@as(usize, 4), zunic.text(result).width());
 
-    var scalars = zunic.normalize("é", .nfd);
+    var scalars = zunic.text("é").normalize(.nfd);
     try std.testing.expectEqual(@as(u21, 'e'), (try scalars.next()).?);
     try std.testing.expectEqual(@as(u21, 0x301), (try scalars.next()).?);
     try std.testing.expect((try scalars.next()) == null);
@@ -86,9 +86,9 @@ test "docs: normalization queries" {
 }
 
 test "docs: normalization capacity and iterator position" {
-    const capacity = comptime try zunic.normalizedLenBound("é".len, .nfd);
+    const capacity = comptime try zunic.text("é").normalizedLenBound(.nfd);
     try std.testing.expectEqual(@as(usize, 6), capacity);
-    var it = zunic.normalize("é", .nfd);
+    var it = zunic.text("é").normalize(.nfd);
     _ = try it.next(); // Consume 'e'.
     var buffer: [capacity]u8 = undefined;
     try std.testing.expectEqualStrings("\u{0301}", try it.writeTo(&buffer));
@@ -106,9 +106,9 @@ test "docs: the pinned Unicode data version" {
 
 test "docs: normalize from the text view" {
     var buffer: [64]u8 = undefined;
-    // The convenience method and the free function are the same iterator.
+    // Normalize either form through the text view.
     try std.testing.expectEqualStrings("caf\u{00E9}", try zunic.text("cafe\u{0301}").normalize(.nfc).writeTo(&buffer));
-    try std.testing.expectEqualStrings("cafe\u{0301}", try zunic.normalize("caf\u{00E9}", .nfd).writeTo(&buffer));
+    try std.testing.expectEqualStrings("cafe\u{0301}", try zunic.text("caf\u{00E9}").normalize(.nfd).writeTo(&buffer));
 }
 
 test "docs: quick check, including maybe" {

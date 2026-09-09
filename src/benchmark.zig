@@ -379,7 +379,7 @@ fn failureCode(err: anyerror) u64 {
 }
 
 fn writeChecksum(text: []const u8, comptime form: zunic.Form) u64 {
-    const written = zunic.normalize(text, form).writeTo(&normalization_buffer) catch |err|
+    const written = zunic.text(text).normalize(form).writeTo(&normalization_buffer) catch |err|
         return mix(0xcbf29ce484222325, failureCode(err));
     var sum: u64 = 0xcbf29ce484222325;
     for (written) |byte| sum = mix(sum, byte);
@@ -393,7 +393,7 @@ fn nfdChecksum(text: []const u8) u64 {
 }
 /// Scalar-at-a-time traversal, with no encoding and no destination buffer.
 fn nfcIterateChecksum(text: []const u8) u64 {
-    var it = zunic.normalize(text, .nfc);
+    var it = zunic.text(text).normalize(.nfc);
     var sum: u64 = 0xcbf29ce484222325;
     while (it.next() catch |err| return mix(sum, failureCode(err))) |cp| sum = mix(sum, cp);
     return sum;

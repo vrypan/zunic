@@ -171,22 +171,20 @@ test "the pinned Unicode data version is published" {
     try std.testing.expect(unicode.unicode_version.pre == null);
 }
 
-test "Text.normalize is the free function, reached from the view" {
-    var buffer: [64]u8 = undefined;
+test "normalization and capacity are reached from the text view" {
+    const capacity = comptime try unicode.text("cafe\u{0301}").normalizedLenBound(.nfc);
+    try std.testing.expectEqual(@as(usize, 18), capacity);
+    try std.testing.expectEqual(@as(usize, 0), try unicode.text("").normalizedLenBound(.nfd));
+    var buffer: [capacity]u8 = undefined;
     // Composed input, decomposed output, and the reverse.
     try std.testing.expectEqualSlices(u8, "cafe\u{0301}", try unicode.text("caf\u{00E9}").normalize(.nfd).writeTo(&buffer));
     try std.testing.expectEqualSlices(u8, "caf\u{00E9}", try unicode.text("cafe\u{0301}").normalize(.nfc).writeTo(&buffer));
 
-    // Same iterator type and same scalars as the free function.
-    const from_view: unicode.NormalizationIterator(.nfd) = unicode.text("\u{1E69}").normalize(.nfd);
-    var view_it = from_view;
-    var free_it = unicode.normalize("\u{1E69}", .nfd);
-    while (true) {
-        const a = try view_it.next();
-        const b = try free_it.next();
-        try std.testing.expectEqual(b, a);
-        if (a == null) break;
+    var it: unicode.NormalizationIterator(.nfd) = unicode.text("\u{1E69}").normalize(.nfd);
+    for ([_]u21{ 's', 0x0323, 0x0307 }) |expected| {
+        try std.testing.expectEqual(expected, (try it.next()).?);
     }
+    try std.testing.expect((try it.next()) == null);
 }
 
 test "exactly two normalization forms" {

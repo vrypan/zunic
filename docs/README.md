@@ -19,9 +19,7 @@ pub const NormalizationWriteError = NormalizationError || error{NoSpace};
 
 // Free functions
 pub fn text(bytes: []const u8) Text;
-pub fn normalize(bytes: []const u8, comptime form: Form) NormalizationIterator(form);
 pub fn NormalizationIterator(comptime form: Form) type;
-pub fn normalizedLenBound(input_len: usize, comptime form: Form) error{Overflow}!usize;
 
 // Text methods
 pub fn validate(self: Text) error{InvalidUtf8}!void;
@@ -31,6 +29,7 @@ pub fn wrap(self: Text, options: WrapOptions) error{InvalidWidth}!Wrapped;
 pub fn terminators(self: Text) Terminators;
 pub fn wordBounds(self: Text) WordBounds;
 pub fn normalize(self: Text, comptime form: Form) NormalizationIterator(form);
+pub fn normalizedLenBound(self: Text, comptime form: Form) error{Overflow}!usize;
 pub fn eql(self: Text, other: []const u8, comptime how: Equivalence) NormalizationError!bool;
 pub fn isNormalized(self: Text, comptime form: Form) NormalizationError!bool;
 pub fn isNormalizedQuick(self: Text, comptime form: Form) error{InvalidUtf8}!QuickCheck;

@@ -176,8 +176,8 @@ test "writeTo chains off a temporary and matches scalar iteration" {
 }
 
 test "the named iterator types are part of the surface" {
-    var nfd: zunic.NormalizationIterator(.nfd) = zunic.normalize("a\u{0301}", .nfd);
-    var nfc: zunic.NormalizationIterator(.nfc) = zunic.normalize("a\u{0301}", .nfc);
+    var nfd: zunic.NormalizationIterator(.nfd) = zunic.text("a\u{0301}").normalize(.nfd);
+    var nfc: zunic.NormalizationIterator(.nfc) = zunic.text("a\u{0301}").normalize(.nfc);
     const form: zunic.Form = .nfc;
     _ = form;
     try std.testing.expectEqual(@as(?u21, 'a'), try nfd.next());
@@ -574,10 +574,10 @@ test "isNormalized counts marks inside precomposed starters" {
         const over_limit = at_limit ++ "\u{0305}";
         var output: [over_limit.len * 3]u8 = undefined;
         try std.testing.expect(try zunic.text(at_limit).isNormalized(.nfc));
-        try std.testing.expectEqualSlices(u8, at_limit, try zunic.normalize(at_limit, .nfc).writeTo(&output));
+        try std.testing.expectEqualSlices(u8, at_limit, try zunic.text(at_limit).normalize(.nfc).writeTo(&output));
         try std.testing.expectError(error.SequenceTooLong, zunic.text(over_limit).isNormalized(.nfc));
         inline for ([_]Form{ .nfd, .nfc }) |form| {
-            try std.testing.expectError(error.SequenceTooLong, zunic.normalize(over_limit, form).writeTo(&output));
+            try std.testing.expectError(error.SequenceTooLong, zunic.text(over_limit).normalize(form).writeTo(&output));
         }
         // A new starter resets the decomposed count.
         try std.testing.expect(try zunic.text(at_limit ++ "x" ++ at_limit).isNormalized(.nfc));
@@ -592,10 +592,10 @@ test "the queries are reachable from the text view" {
     try std.testing.expect(try zunic.text("caf\u{00E9}").isNormalized(.nfc));
     try std.testing.expect(!try zunic.text("caf\u{00E9}").isNormalized(.nfd));
 
-    const bound = try zunic.normalizedLenBound("cafe\u{0301}".len, .nfc);
+    const bound = try zunic.text("cafe\u{0301}").normalizedLenBound(.nfc);
     var buffer: [64]u8 = undefined;
     try std.testing.expect(bound <= buffer.len);
-    try std.testing.expectEqualSlices(u8, "caf\u{00E9}", try zunic.normalize("cafe\u{0301}", .nfc).writeTo(buffer[0..bound]));
+    try std.testing.expectEqualSlices(u8, "caf\u{00E9}", try zunic.text("cafe\u{0301}").normalize(.nfc).writeTo(buffer[0..bound]));
 }
 
 test "the table module agrees with the engine on Hangul" {

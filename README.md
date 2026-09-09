@@ -70,9 +70,9 @@ pub fn main() !void {
 
     // Compose an accent into NFC, using caller-owned storage.
     const input = "cafe\u{0301}";
-    const capacity = comptime try zunic.normalizedLenBound(input.len, .nfc); // 18 bytes
+    const capacity = comptime try zunic.text(input).normalizedLenBound(.nfc); // 18 bytes
     var buffer: [capacity]u8 = undefined;
-    const normalized = try zunic.normalize(input, .nfc).writeTo(&buffer);
+    const normalized = try zunic.text(input).normalize(.nfc).writeTo(&buffer);
     std.debug.print("normalized: {s}\n", .{normalized}); // café
     std.debug.print("normalized width: {d}\n", .{zunic.text(normalized).width()}); // 4
 

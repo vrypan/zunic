@@ -168,11 +168,17 @@ pub const Text = struct {
 
     /// The scalars of this text in `form`, as a lazy iterator.
     ///
-    /// Convenience for `zunic.normalize(bytes, form)`; the two are the same
-    /// iterator. Normalization produces new scalars rather than spans into the
-    /// input, so the free function remains the primary spelling.
+    /// Borrows the input without scanning it. Produces new scalars rather
+    /// than spans into the input.
     pub fn normalize(self: Text, comptime form: normalization.Form) normalization.Iterator(form) {
         return normalization.normalize(self.bytes, form);
+    }
+
+    /// A safe output byte capacity for normalization in `form`.
+    /// Uses only the input length, without scanning or validating the bytes.
+    /// Returns Overflow if the bound cannot fit in usize.
+    pub fn normalizedLenBound(self: Text, comptime form: normalization.Form) error{Overflow}!usize {
+        return normalization.normalizedLenBound(self.bytes.len, form);
     }
 
     /// Whether these bytes and `other` are canonically equivalent -- the same
