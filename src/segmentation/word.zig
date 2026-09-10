@@ -11,6 +11,7 @@
 const std = @import("std");
 const utf8 = @import("encoding").utf8;
 const word_properties = @import("tables").word;
+const ascii = @import("word_ascii.zig");
 
 pub const WordBreak = word_properties.WordBreak;
 
@@ -381,6 +382,7 @@ fn IteratorImpl(comptime tabled: bool, comptime instrumented: bool) type {
         cur: Token,
         state: State,
         exhausted: bool,
+        ascii_mode: enum { unknown, unicode, ascii } = .unknown,
         counters: if (instrumented) Counters else void = if (instrumented) .{} else {},
 
         fn init(bytes: []const u8) Self {
@@ -405,6 +407,22 @@ fn IteratorImpl(comptime tabled: bool, comptime instrumented: bool) type {
 
         pub fn next(self: *Self) ?Span {
             if (self.exhausted) return null;
+            // Decide once, on first traversal rather than when opening the view.
+            // Mixed text stays with the full rules: marks can attach to ASCII,
+            // and punctuation lookahead can reach beyond an ASCII run.
+            if (tabled and self.ascii_mode != .unicode) {
+                if (self.ascii_mode == .unknown) {
+                    self.ascii_mode = if (ascii.allAscii(self.bytes)) .ascii else .unicode;
+                }
+                if (self.ascii_mode == .ascii) {
+                    const start = self.start;
+                    const end = ascii.next(self.bytes, start);
+                    self.start = end.offset;
+                    self.exhausted = end.offset == self.bytes.len;
+                    if (instrumented) self.counters.scalars = end.offset;
+                    return .{ .start = start, .end = end.offset, .is_word = end.is_word };
+                }
+            }
             const start = self.start;
             var is_word = self.cur.word_like;
             while (true) {

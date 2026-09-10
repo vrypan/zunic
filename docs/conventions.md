@@ -81,5 +81,6 @@ edges when called and returns the narrowed slice.
 
 Lazy does not mean zero lookahead: grapheme boundaries need a following token,
 word rules may look past ignored marks, and normalization buffers a combining
-run. Wrapping can inspect the entire byte slice on its first `next()` to
-select an ASCII fast path, even if the caller only requests one line.
+run. Wrapping and word iteration can inspect the entire byte slice on their
+first `next()` to select an ASCII fast path, even if the caller only requests
+one result.

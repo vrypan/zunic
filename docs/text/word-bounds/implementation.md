@@ -2,6 +2,27 @@
 
 [API](README.md) · [Source](../../../src/segmentation/word.zig)
 
+## Scan entirely ASCII input as bytes
+
+On its first `next()` call, the iterator checks whether the whole input is
+ASCII. It checks a vector of bytes at a time, then any short tail. If all bytes
+are ASCII, a dedicated scanner handles letters, digits, underscores, spaces,
+CRLF, and punctuation between letters or digits. It returns the same spans and
+`is_word` flags as the Unicode rules, including non-word spans.
+
+The check belongs to the iterator, not Text, and is repeated for each new
+iterator. Opening a view still does no scanning. Requesting only the first
+segment can now inspect the whole input to select this path.
+
+Any non-ASCII byte selects the existing Unicode iterator for the entire input.
+This keeps combining marks, ignored formatting characters, and lookahead across
+ASCII/non-ASCII boundaries under the full rules. Malformed bytes also take that
+path. English text with curly quotes or accented characters is not all ASCII.
+
+The direct reference iterator bypasses the shortcut. Tests compare every ASCII
+byte pair, four-character punctuation contexts, random ASCII runs, and mixed
+input against that reference, alongside the Unicode conformance fixture.
+
 ## Remember both immediate and significant characters
 
 Some rules depend on adjacent characters, while others ignore intervening

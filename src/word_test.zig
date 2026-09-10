@@ -413,3 +413,77 @@ test "both engines agree over the fixture and over random bytes" {
         try expectSameSegmentation(bytes[0..len]);
     }
 }
+
+// The reference iterator deliberately bypasses the ASCII scanner.
+test "ASCII shortcut matches every byte and every pair" {
+    var bytes: [2]u8 = undefined;
+    for (0..128) |a| {
+        bytes[0] = @intCast(a);
+        try expectSameSegmentation(bytes[0..1]);
+        for (0..128) |b| {
+            bytes[1] = @intCast(b);
+            try expectSameSegmentation(&bytes);
+        }
+    }
+}
+
+test "ASCII shortcut preserves four-character punctuation contexts" {
+    // Every ASCII word class, with distinct letter/digit spellings and case.
+    const alphabet = "Aa09_ ':.,;\"\r\n\x0b\t\x00\x7f";
+    var bytes: [4]u8 = undefined;
+    for (alphabet) |a| {
+        bytes[0] = a;
+        for (alphabet) |b| {
+            bytes[1] = b;
+            for (alphabet) |c| {
+                bytes[2] = c;
+                for (alphabet) |d| {
+                    bytes[3] = d;
+                    try expectSameSegmentation(&bytes);
+                }
+            }
+        }
+    }
+}
+
+test "ASCII shortcut matches long runs and falls back at every byte position" {
+    var prng = std.Random.DefaultPrng.init(0xa5c11_29);
+    const random = prng.random();
+    var bytes: [1024]u8 = undefined;
+    for (0..1000) |_| {
+        const len = random.intRangeAtMost(usize, 0, bytes.len);
+        random.bytes(bytes[0..len]);
+        for (bytes[0..len]) |*byte| byte.* &= 0x7f;
+        try expectSameSegmentation(bytes[0..len]);
+    }
+    // Exercise vector boundaries, short tails, and non-ASCII at every offset.
+    for (1..130) |len| {
+        @memset(bytes[0..len], 'a');
+        try expectSameSegmentation(bytes[0..len]);
+        for (0..len) |pos| {
+            bytes[pos] = 0xff;
+            try expectSameSegmentation(bytes[0..len]);
+            bytes[pos] = 'a';
+        }
+    }
+    for ([_][]const u8{ "\u{0308}", "\u{200d}", "\u{00e9}", "\u{05d0}", "\u{1f1e6}" }) |suffix| {
+        const text = build(&bytes, "", "abc_12 ", 100, suffix);
+        try expectSameSegmentation(text);
+    }
+    try expectSegments("a.\u{0308}b", &.{w(0, 5)});
+    try expectSegments("1,\u{0308}2", &.{w(0, 5)});
+}
+
+test "ASCII iterator copies keep independent progress and stable exhaustion" {
+    const bytes = "__ alpha_9 can't 1,000 \r\n";
+    var original = word.iterator(bytes);
+    var initial_copy = original;
+    try std.testing.expectEqualDeep(original.next(), initial_copy.next());
+    var copy = original;
+    while (original.next()) |span| try std.testing.expectEqualDeep(span, copy.next().?);
+    try std.testing.expectEqual(@as(?word.Span, null), copy.next());
+    try std.testing.expectEqual(@as(?word.Span, null), original.next());
+    var counted = word.instrumentedIterator(bytes);
+    while (counted.next()) |_| {}
+    try std.testing.expectEqual(bytes.len, counted.counters.scalars);
+}

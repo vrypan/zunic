@@ -36,6 +36,8 @@ not merged just because they share `is_word = false`.
 `next()` returns `null` at exhaustion. Empty input yields no segments. The
 view and iterator allocate nothing and do not normalize or copy text.
 Creating the view scans nothing; creating its iterator reads the first character.
+The first `next()` may inspect the whole input to select the ASCII fast path,
+even if you only request one segment.
 
 ## What `is_word` means
 
