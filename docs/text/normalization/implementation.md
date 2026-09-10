@@ -1,6 +1,6 @@
 # Normalization implementation decisions
 
-[API](README.md) · [Source](../../src/normalization/normalization.zig)
+[API](README.md) · [Source](../../../src/normalization/normalization.zig)
 
 ## Buffer one combining run
 
@@ -67,7 +67,7 @@ need at most three times the input byte count; NFC can grow too because some
 decompositions are excluded from recomposition. Multiplication is checked for
 overflow. The output bound says nothing about UTF-8 validity or run length.
 
-[Normalization tests](../../src/normalization_test.zig) cover Unicode fixtures,
+[Normalization tests](../../../src/normalization_test.zig) cover Unicode fixtures,
 ordering, composition, malformed input, buffer limits, partial results, and
 query shortcuts. Property-generator tests check the scratch-size and expansion
 bounds against the pinned data.

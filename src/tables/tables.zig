@@ -4,7 +4,7 @@
 //! `properties` is deliberately shared rather than split per engine. Its
 //! `Record` packs grapheme, width and line-break facts into one `u32` so a
 //! scanner looks a scalar up once and answers all three questions from the
-//! same entry; see `docs/architecture.md`. Splitting it would mean either
+//! same entry; see `docs/internals/README.md`. Splitting it would mean either
 //! duplicating table data or paying a lookup per question.
 //!
 //! Regenerate with the scripts under `src/tools/`; never hand-edit.

@@ -1,6 +1,6 @@
 # Normalization
 
-[Documentation index](../README.md) · [Implementation](implementation.md)
+[Text view](../README.md) · [Documentation index](../../README.md) · [Implementation](implementation.md)
 
 Normalization provides canonical NFC and NFD forms using Unicode 16 data.
 NFD decomposes characters and orders combining marks. NFC also combines
@@ -178,7 +178,7 @@ The build option `-Dnormalization-buffer-bytes=N` accepts positive multiples of
 32. Each entry uses four bytes; the accepted non-starter limit is `N / 4 - 2`.
 For example, 256 bytes permits 62. This sizes the iterator's inline working
 buffer, not its complete object: the iterator also stores input, state, and
-scratch space. See [build options](../architecture.md#build-options).
+scratch space. See [build options](../../internals/README.md#build-options).
 
 Over-limit input is rejected. Zunic does not insert separators, truncate marks,
 or silently allocate a larger buffer.

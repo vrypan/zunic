@@ -210,13 +210,14 @@ test "docs: trim then chain" {
     try std.testing.expectEqual(@as(usize, 2), wrapped.count());
 }
 
-test "docs: Span.isWhitespace while iterating graphemes" {
+test "docs: Text.isWhitespace while iterating graphemes" {
     const bytes = "Hello,   \u{4E16}\u{754C}! \t\n";
-    var graphemes = zunic.text(bytes).graphemes().iterator();
+    const view = zunic.text(bytes);
+    var graphemes = view.graphemes().iterator();
     var whitespace_count: usize = 0;
     var content_count: usize = 0;
     while (graphemes.next()) |span| {
-        if (span.isWhitespace(bytes)) {
+        if (view.isWhitespace(span)) {
             whitespace_count += 1;
         } else {
             content_count += 1;
@@ -228,13 +229,14 @@ test "docs: Span.isWhitespace while iterating graphemes" {
     try std.testing.expectEqual(@as(usize, 6), whitespace_count);
 }
 
-test "docs: Span.isWhitespace composes with terminal tokens" {
+test "docs: Text.isWhitespace composes with terminal tokens" {
     // zunic does not ship a trim for styled text, because whether a space
     // wrapped in escapes is padding or meaningful content (a colored block,
-    // say) is a policy call this library cannot make. Span.isWhitespace lets
+    // say) is a policy call this library cannot make. Text.isWhitespace lets
     // that policy be built from Terminal.tokens() using zunic's own
     // whitespace definition instead of a re-derived one.
     const styled = "\x1b[31m hello\x1b[41m \x1b[0m"; // fg red, space, "hello", bg red, space, reset
+    const view = zunic.text(styled);
     var it = zunic.terminal(styled).tokens().iterator();
     var keep_from: usize = 0;
     var found_content = false;
@@ -247,7 +249,7 @@ test "docs: Span.isWhitespace composes with terminal tokens" {
                     .default => true,
                     else => false,
                 };
-                const is_padding = span.isWhitespace(styled) and on_default_background;
+                const is_padding = view.isWhitespace(span) and on_default_background;
                 if (is_padding) {
                     keep_from = span.end.value;
                 } else {

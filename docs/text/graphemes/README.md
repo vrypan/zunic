@@ -1,6 +1,6 @@
 # Graphemes
 
-[Documentation index](../README.md) · [Implementation](implementation.md)
+[Text view](../README.md) · [Documentation index](../../README.md) · [Implementation](implementation.md)
 
 ## Unicode standards
 

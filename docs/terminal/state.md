@@ -12,6 +12,27 @@ fields listed below. It does not represent a terminal screen, cursor, palette
 contents, title, keyboard modes, or a stack of saved states. Future protocol
 extensions may still require changes; the layout is not a fixed ABI.
 
+## Traversal example
+
+Each iterator starts with default colors, no attributes, and no link. State is
+updated before an escape token is returned. For a grapheme token it describes
+that grapheme's formatting. Copying an iterator copies its state.
+
+```zig
+const bytes = "\x1b[1;31mA\x1b[0m";
+var it = zunic.terminal(bytes).tokens().iterator();
+_ = (try it.next()).?.escape;
+try std.testing.expect(it.state.bold);
+try std.testing.expectEqual(@as(u8, 1), it.state.foreground.indexed);
+_ = (try it.next()).?.grapheme; // A is bold, with palette color 1.
+_ = (try it.next()).?.escape;
+try std.testing.expectEqualDeep(zunic.TerminalState{}, it.state);
+```
+
+SGR resets affect formatting, but do not close OSC 8 links. Link URI and parameter
+slices borrow the original input, including in saved copies of state. Keep that
+input alive. The layout and supported parameters are listed below.
+
 ## Layout
 
 ```zig
@@ -109,7 +130,7 @@ could accidentally become attributes. Numeric overflow is ignored, never wrapped
 
 Other recognized commands do not change state. Malformed escape sequences remain
 ordinary content under the token scanner's existing rules. SGR effects report affected fields and an `unhandled` flag; see
-[escape effects](README.md#escape-effects). Unknown effects are
+[escape effects](tokens.md#escape-effects). Unknown effects are
 not stored, so state cannot reproduce arbitrary escape sequences losslessly.
 Use the original escape tokens when exact command preservation is required.
 

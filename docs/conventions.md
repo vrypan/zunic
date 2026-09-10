@@ -4,11 +4,11 @@
 
 ```zig
 pub fn text(bytes: []const u8) Text;
-pub fn validate(self: Text) error{InvalidUtf8}!void;
+pub fn terminal(bytes: []const u8) Terminal;
 ```
 
-`zunic.text(bytes)` constructs a view without scanning, validating, copying,
-or allocating. `Text.bytes` is the borrowed slice. Keep its storage alive and
+`zunic.text(bytes)` and `zunic.terminal(bytes)` construct views without scanning,
+validating, copying, or allocating. Both expose the borrowed slice as `.bytes`. Keep its storage alive and
 unchanged while using a view or iterator. A view does not own or free memory.
 
 Every `.iterator()` call creates independent traversal state at the beginning
@@ -25,8 +25,9 @@ pub const Span = struct { start: ByteOffset, end: ByteOffset };
 ```
 
 All spans are half-open: `bytes[span.start.value..span.end.value]`.
-Offsets index the original slice passed to `text`, even when that slice is
-itself a substring. They count **bytes**, not scalars, graphemes, or columns.
+Offsets index the input slice of the Text or Terminal view, even when that
+slice is itself a substring. Trimming returns a new Text; its offsets index
+the retained slice, starting at zero. They count **bytes**, not scalars, graphemes, or columns.
 `Column` deliberately separates display measurements from byte offsets.
 Returned spans borrow the input indirectly; they contain no copied text.
 
@@ -67,7 +68,7 @@ nothing. It does not change the view or the behavior of later operations.
 
 Normalization is deliberately different: it returns `InvalidUtf8` for malformed
 input and `SequenceTooLong` when its configured combining-run limit is reached.
-See [normalization error semantics](normalization/README.md#errors-and-partial-results).
+See [normalization error semantics](text/normalization/README.md#errors-and-partial-results).
 
 ## Laziness
 

@@ -1,10 +1,10 @@
 # Wrap implementation decisions
 
-[API](README.md) · [Architecture](../architecture.md)
+[API](README.md) · [Architecture](../../internals/README.md)
 
 ## Share the scan
 
-The general wrapper uses [scan.zig](../../src/layout/scan.zig) to find graphemes,
+The general wrapper uses [scan.zig](../../../src/layout/scan.zig) to find graphemes,
 measure them, and check line-break opportunities together. These operations
 need many of the same character properties. Sharing the scan avoids decoding
 and looking up the same character separately for each operation.
@@ -16,7 +16,7 @@ regardless of line width or how many lines the caller requests.
 
 ## Keep a fitting break without starting over
 
-[wrap.zig](../../src/layout/wrap.zig) remembers the most recent fitting break and
+[wrap.zig](../../../src/layout/wrap.zig) remembers the most recent fitting break and
 the columns measured since it. When a later cluster overflows, the wrapper can
 return that saved line and carry the already measured tail to the next line.
 It does not restart the general scanner at the saved break. At most one extra
@@ -33,7 +33,7 @@ numeric punctuation exception directly.
 Characters such as `-`, `/`, parentheses, `$`, `%`, and `+` are excluded from
 that broader shortcut because their line-break rules need more context. Any
 unsupported byte selects the mixed path described below. The shortcut is checked against
-the full rules in [exhaustive tests](../../src/wrap_exhaustive_test.zig).
+the full rules in [exhaustive tests](../../../src/wrap_exhaustive_test.zig).
 
 The detector can use 16-byte vector checks on supported CPUs. This first scan
 is a tradeoff: it saves rule work on ASCII input but may inspect the whole input
@@ -67,7 +67,7 @@ and future decisions. Most entries directly say allowed, prohibited, or
 mandatory. A few request a small amount of lookahead.
 
 The table is generated ahead of time and checked into the source tree; normal
-builds do not run Python. [The generator notes](../../src/tools/line-break-machine.md)
+builds do not run Python. [The generator notes](../../../src/tools/line-break-machine.md)
 document the state counts, rule mapping, and checks in detail. There is one
 production engine; the old `-Dline-break-engine` selector is no longer available.
 
@@ -82,7 +82,7 @@ opportunity does not automatically become a wrapped-line boundary.
 This is an inherited correctness issue, not an intentional speed shortcut.
 Passing the pinned line-break fixtures does not cover every possible input.
 
-See [scanner tests](../../src/scan_test.zig),
-[wrap tests](../../src/wrap_test.zig), and
-[regression tests](../../src/wrap_regression_test.zig) for checks of the shared
+See [scanner tests](../../../src/scan_test.zig),
+[wrap tests](../../../src/wrap_test.zig), and
+[regression tests](../../../src/wrap_regression_test.zig) for checks of the shared
 scan, output slices, and work limits.

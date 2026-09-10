@@ -1,8 +1,8 @@
 # Grapheme implementation decisions
 
-[API](README.md) · [Shared architecture](../architecture.md)
+[API](README.md) · [Shared architecture](../../internals/README.md)
 
-The reference `ClusterState` in [grapheme.zig](../../src/segmentation/grapheme.zig) expresses
+The reference `ClusterState` in [grapheme.zig](../../../src/segmentation/grapheme.zig) expresses
 the boundary rules and state updates. At compile time, the engine evaluates
 them into transition tables. Runtime traversal uses a category and state ID to
 obtain both the next state and the boundary decision, avoiding a chain of rule
@@ -29,6 +29,6 @@ Malformed tokens advance one byte with the `Other` grapheme category and no
 width. The normal boundary rules still apply: this is tolerant traversal, not
 replacement encoding or validation.
 
-[Conformance tests](../../src/conformance_test.zig) exercise pinned Unicode
-fixtures. [Scanner tests](../../src/scan_test.zig) also compare compiled
+[Conformance tests](../../../src/conformance_test.zig) exercise pinned Unicode
+fixtures. [Scanner tests](../../../src/scan_test.zig) also compare compiled
 grapheme transitions with the reference rules on byte streams.

@@ -17,7 +17,7 @@
 //! escape-aware tokens and byte-only stripping; use `text` on stripped output.
 pub const utf8 = @import("encoding").utf8;
 const text_view = @import("text.zig");
-const text_trim = @import("text_trim");
+const text_trim = @import("text_trim.zig");
 const terminal_view = @import("terminal");
 const types = @import("types");
 const wrap_engine = @import("layout").wrap;
@@ -74,27 +74,27 @@ pub fn terminal(bytes: []const u8) Terminal {
 }
 
 /// Unicode 16.0.0 `White_Space=Yes`: the predicate `Text.trim()`, `trimStart()`
-/// and `trimEnd()` apply at each edge, and `Span.isWhitespace` /
-/// `MeasuredSpan.isWhitespace` apply to a whole span. Not general category
-/// `Zs`, not `Pattern_White_Space`, and not the zero-width set; see
-/// [trim](../docs/trim/README.md) for the full 25-code-point table.
+/// and `trimEnd()` apply at each edge, and `Text.isWhitespace(span)` applies
+/// to a whole span. Not general category `Zs`, not `Pattern_White_Space`, and
+/// not the zero-width set; see [trim](../docs/text/trim/README.md) for the full
+/// 25-code-point table.
 ///
 /// This scalar form is exposed for code working with a code point directly
 /// rather than a span of bytes -- most span-shaped code should reach for
-/// `Span.isWhitespace(bytes)` instead, which also confirms the span is
+/// `text(bytes).isWhitespace(span)` instead, which also confirms the span is
 /// exactly one such scalar rather than merely starting with one.
 pub const isWhitespace = text_trim.isWhitespace;
 
 /// Whether `glyph` is exactly one `White_Space` scalar and nothing else --
-/// the primitive behind `Span.isWhitespace` and `MeasuredSpan.isWhitespace`,
-/// exposed directly for a byte slice that did not come from either type. For
-/// building operations `Text` and `Terminal` do not provide -- for example, a
-/// trim over `terminal(bytes).tokens()` that also consults escape state, so a
-/// styled space with a non-default background can be kept as content rather
-/// than treated as padding -- prefer `token.grapheme.isWhitespace(bytes)`
+/// the primitive behind `Text.isWhitespace`, exposed directly for a byte
+/// slice that did not come from a span at all. For building operations
+/// `Text` and `Terminal` do not provide -- for example, a trim over
+/// `terminal(bytes).tokens()` that also consults escape state, so a styled
+/// space with a non-default background can be kept as content rather than
+/// treated as padding -- prefer `text(bytes).isWhitespace(token.grapheme)`
 /// after matching out the `.escape` case; what counts as trimmable in the
 /// presence of escapes is a policy decision for that caller to make, and this
-/// function and its `Span` siblings only answer the Unicode question, so such
+/// function and `Text.isWhitespace` only answer the Unicode question, so such
 /// code does not have to re-derive `PropList.txt` to match `Text.trim()`'s
 /// definition.
 pub const isWhitespaceSlice = text_trim.isWhitespaceSlice;

@@ -1,6 +1,6 @@
 # Word-boundary implementation decisions
 
-[API](README.md) · [Source](../../src/segmentation/word.zig)
+[API](README.md) · [Source](../../../src/segmentation/word.zig)
 
 ## Remember both immediate and significant characters
 
@@ -31,7 +31,7 @@ less than twice as many scalar decodes as there are input scalars.
 
 ## Compute the flag while scanning
 
-[word_properties.zig](../../src/tables/word_properties.zig) supplies the word class,
+[word_properties.zig](../../../src/tables/word_properties.zig) supplies the word class,
 pictographic bit, and word-like bit together. The iterator accumulates the
 word-like bit as it consumes each segment. It does not scan the returned slice
 again to compute `is_word`.
@@ -40,5 +40,5 @@ The word-like bit cannot be inferred from the word class: an ideograph and a
 superscript number can have class `Other` and still qualify. Keeping separate
 data preserves the documented flag without changing boundary decisions.
 
-[Word tests](../../src/word_test.zig) cover the Unicode fixtures, the flag,
+[Word tests](../../../src/word_test.zig) cover the Unicode fixtures, the flag,
 malformed input, reference/table agreement, and lookahead work limits.

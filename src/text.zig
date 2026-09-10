@@ -8,7 +8,7 @@ const width_engine = @import("layout").width;
 const normalization = @import("normalization");
 const word_engine = @import("segmentation").word;
 const wrap_engine = @import("layout").wrap;
-const text_trim = @import("text_trim");
+const text_trim = @import("text_trim.zig");
 
 const types = @import("types");
 pub const ByteOffset = types.ByteOffset;
@@ -241,6 +241,27 @@ pub const Text = struct {
     /// the borrowing rules.
     pub fn trimEnd(self: Text) Text {
         return .{ .bytes = self.bytes[0..text_trim.endIndex(self.bytes)] };
+    }
+
+    /// Whether `span` (a `Span`, `MeasuredSpan`, or anything else with
+    /// `start`/`end` byte offsets) is exactly one Unicode 16.0.0
+    /// `White_Space` scalar within this text -- not a span that merely
+    /// starts with one. `span` is assumed to index `self.bytes`; a span from
+    /// a different byte slice gives a meaningless answer rather than an
+    /// error.
+    ///
+    /// This is the same definition `trim()` uses, extended to a span you
+    /// already have -- while iterating `graphemes()`, for example, or a
+    /// `TerminalToken`'s `.grapheme` field. Correct, if not always an
+    /// interesting question, for a span that was never grapheme content:
+    /// every single-scalar UAX #14 hard terminator (LF, VT, FF, CR, NEL, LS,
+    /// PS) is also `White_Space`, so its `Terminators` span answers `true`
+    /// -- except CRLF, the one terminator that is two scalars, which like
+    /// any other two-scalar span answers `false`. An escape sequence's
+    /// leading `ESC` byte is not `White_Space`, so a `TerminalToken`'s
+    /// `Escape.span` answers `false`.
+    pub fn isWhitespace(self: Text, span: anytype) bool {
+        return text_trim.isWhitespaceSlice(self.bytes[span.start.value..span.end.value]);
     }
 
     /// Greedy display lines within a finite column limit.

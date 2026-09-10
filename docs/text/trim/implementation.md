@@ -1,6 +1,6 @@
 # How trimming scans the edges
 
-[API](README.md) · [Source](../../src/text_trim.zig)
+[API](README.md) · [Source](../../../src/text_trim.zig)
 
 Both scans are scalar, in `src/text_trim.zig`, behind the three `Text` methods
 in `src/text.zig`. `Text`'s representation is unchanged: a trimmed view is the
@@ -86,7 +86,7 @@ size-dependent timing on the unchanged-input cases.
 
 ## Tests
 
-[src/trim_test.zig](../../src/trim_test.zig) drives the public API only. It
+[src/trim_test.zig](../../../src/trim_test.zig) drives the public API only. It
 carries its own transcription of the `White_Space` ranges from `PropList.txt`
 and sweeps every scalar in Unicode against it, so a predicate that gains or
 loses a code point fails there rather than in a sampled case. No host-language

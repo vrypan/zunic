@@ -7,10 +7,9 @@
 //! is never scanned through its middle.
 //!
 //! `isWhitespace` and `isWhitespaceSlice` are shared beyond this file: the
-//! former as `zunic.isWhitespace`, the latter backing `Span.isWhitespace` and
-//! `MeasuredSpan.isWhitespace` in `src/types.zig` as well as
-//! `zunic.isWhitespaceSlice` directly. See their doc comments at those call
-//! sites for what each is for.
+//! former as `zunic.isWhitespace`, the latter backing `Text.isWhitespace` in
+//! `src/text.zig` as well as `zunic.isWhitespaceSlice` directly. See their
+//! doc comments at those call sites for what each is for.
 //!
 //! The only dependency is the tolerant UTF-8 decoder. Grapheme, word, width,
 //! normalization and line-break engines answer other questions, and the fused

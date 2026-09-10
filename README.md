@@ -94,7 +94,7 @@ pub fn main() !void {
 `text()` treats input as plain text. Use `terminal().stripAnsi()` before
 measuring or wrapping input containing ANSI escapes.
 Display operations tolerate malformed UTF-8; normalization rejects it and has a
-[configurable combining-run limit](docs/normalization/README.md#combining-run-limit).
+[configurable combining-run limit](docs/text/normalization/README.md#combining-run-limit).
 Call `try text.validate()` first when malformed UTF-8 should be rejected.
 Word boundaries are locale-independent and do not use dictionaries.
 
@@ -143,7 +143,7 @@ Zunic uses **Unicode 16.0.0** data:
 | [UAX #44: Unicode Character Database](https://www.unicode.org/reports/tr44/tr44-36.html) | The `White_Space` property used by trimming |
 
 Terminal column counts and line fitting are Zunic policies built on these rules
-and properties. See the [known line-break limitation](docs/wrap/implementation.md#known-limitation).
+and properties. See the [known line-break limitation](docs/text/wrap/implementation.md#known-limitation).
 
 Escape handling uses a subset of [ECMA-48](https://ecma-international.org/publications-and-standards/standards/ecma-48/)
 and [XTerm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html),
@@ -155,15 +155,10 @@ and [colored and styled underlines](https://sw.kovidgoyal.net/kitty/underlines/)
 See [docs/](docs/README.md) for signatures, return values, examples, and
 implementation decisions:
 
-[Graphemes](docs/graphemes/README.md) ·
-[Width](docs/width/README.md) ·
-[Wrap](docs/wrap/README.md) ·
-[Terminators](docs/terminators/README.md) ·
-[Word boundaries](docs/word-bounds/README.md) ·
-[Trim](docs/trim/README.md) ·
-[Normalization](docs/normalization/README.md) ·
-[Terminal text](docs/terminal/README.md)
+[Text view](docs/text/README.md) ·
+[Terminal view](docs/terminal/README.md) ·
+[API overview](docs/README.md#api-overview)
 
 Run `zig build test` for the test suite or `zig build docs-test` for the
 documentation examples. Build options and verification details are in
-[the architecture notes](docs/architecture.md).
+[the architecture notes](docs/internals/README.md).
