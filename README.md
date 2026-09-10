@@ -29,7 +29,7 @@ you iterate.
 ## Install
 
 ```sh
-zig fetch --save git+https://github.com/vrypan/zunic.git#v0.3.0
+zig fetch --save git+https://github.com/vrypan/zunic.git#v0.3.1
 ```
 
 In your application's `build.zig`:
