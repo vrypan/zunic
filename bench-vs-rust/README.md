@@ -21,9 +21,9 @@ Rust/Cargo, Python 3, curl, and Make installed.
 | [ANSI stripping](rust-strip-ansi/README.md) | strip-ansi-escapes 0.2.1 | Reused and allocated output buffers |
 
 <!-- recorded-results:start -->
-## Recorded results: 8075772 on MacBook Pro M4
+## Recorded results: 870043a on MacBook Pro M4
 
-**Date:** 2026-09-10. **Zunic commit:** `8075772`. **Machine:** MacBook Pro M4,
+**Date:** 2026-09-10. **Zunic commit:** `870043a`. **Machine:** MacBook Pro M4,
 macOS 26.6.2 (arm64). **Compilers:** Zig 0.16.0 and Rust 1.97.1.
 Zig ReleaseFast/native; Rust release/native with LTO and one code-generation unit.
 
@@ -37,17 +37,19 @@ overall average. Expand a suite for its times, counts, and output comparisons.
 
 | Suite | Operation | Rust/Zunic range | Exact outputs matched |
 | --- | --- | ---: | ---: |
-| Line breaking | Opportunities | 0.77–1.00× | 1/8 |
-| Normalization | NFC | 1.02–1.49× | 8/8 |
-| Normalization | NFD | 0.91–1.27× | 8/8 |
-| Words | All boundaries, iterator | 1.27–2.83× | 8/8 |
-| Words | All boundaries, collected | 0.95–1.66× | 8/8 |
-| Words | Word-like segments | 0.27–3.64× | 8/8 |
-| Wrapping | Full document, iterator | 1.62–2.97× | 0/8 |
-| Wrapping | Full document, collected | 0.93–2.89× | 0/8 |
-| Wrapping | First 24 lines | 23.28–92.62× | 2/8 |
-| ANSI stripping | Reused output | 3.33–8.45× | 10/10 |
-| ANSI stripping | Allocated output | 3.29–8.41× | 10/10 |
+| Line breaking | Opportunities | 0.79–1.02× | 1/8 |
+| Normalization | NFC | 1.13–1.49× | 8/8 |
+| Normalization | NFD | 0.92–1.19× | 8/8 |
+| Normalization | NFKC | 1.09–1.43× | 8/8 |
+| Normalization | NFKD | 0.88–1.19× | 8/8 |
+| Words | All boundaries, iterator | 1.22–6.63× | 8/8 |
+| Words | All boundaries, collected | 0.94–2.92× | 8/8 |
+| Words | Word-like segments | 1.22–3.59× | 8/8 |
+| Wrapping | Full document, iterator | 1.62–2.93× | 0/8 |
+| Wrapping | Full document, collected | 1.02–2.86× | 0/8 |
+| Wrapping | First 24 lines | 22.72–92.14× | 2/8 |
+| ANSI stripping | Reused output | 3.33–8.47× | 10/10 |
+| ANSI stripping | Allocated output | 3.29–8.36× | 10/10 |
 
 Wrapping outputs differ on every full-document corpus. The first-24 results
 match only for `source_code` and `mandarin`. Zunic stops after 24 lines, while
@@ -59,10 +61,15 @@ policies; the matching corpus in this run is listed in its table.
 ANSI timings cover only the ten fixtures whose outputs match. The additional
 control-byte and malformed-input diagnostics are excluded from these timings.
 
+The `source_code` corpus's Rust/Zunic ratio on word boundaries jumped between
+snapshots (1.71x to 6.63x on the lazy partition). Zunic gained an ASCII fast
+path for word boundaries after the prior snapshot; `source_code` is mostly
+ASCII, so this reflects a real Zunic speedup, not new Rust overhead or noise.
+
 <details>
 <summary>Line breaking — per-corpus results</summary>
 
-Saved run: `benchmarks/20260910T155140Z-rust-machine-5a8ed5/summary.json`.
+Saved run: `benchmarks/20260910T202053Z-rust-machine-6e2384/summary.json`.
 
 Unicode: Zunic **16.0.0**; unicode-linebreak 0.1.5 **15.0.0 with SA tailoring**.
 
@@ -70,21 +77,21 @@ Unicode: Zunic **16.0.0**; unicode-linebreak 0.1.5 **15.0.0 with SA tailoring**.
 
 | Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| arabic | 135.628 | 128.995 | 0.95× | 4698/4697 | diff |
-| hindi | 111.649 | 104.159 | 0.93× | 3721/3717 | diff |
-| korean | 126.592 | 110.999 | 0.88× | 14759/14759 | same |
-| russian | 142.496 | 133.508 | 0.94× | 3889/3891 | diff |
-| source_code | 282.476 | 225.097 | 0.80× | 7756/7756 | diff |
-| english | 292.903 | 225.973 | 0.77× | 8029/8039 | diff |
-| japanese | 116.388 | 106.861 | 0.92× | 14337/14332 | diff |
-| mandarin | 104.778 | 105.066 | 1.00× | 14966/14893 | diff |
+| arabic | 136.645 | 129.026 | 0.94× | 4698/4697 | diff |
+| hindi | 107.938 | 103.453 | 0.96× | 3721/3717 | diff |
+| korean | 126.586 | 111.479 | 0.88× | 14759/14759 | same |
+| russian | 141.506 | 133.392 | 0.94× | 3889/3891 | diff |
+| source_code | 285.879 | 226.070 | 0.79× | 7756/7756 | diff |
+| english | 292.020 | 229.362 | 0.79× | 8029/8039 | diff |
+| japanese | 114.566 | 107.152 | 0.94× | 14337/14332 | diff |
+| mandarin | 103.144 | 105.191 | 1.02× | 14966/14893 | diff |
 
 </details>
 
 <details>
 <summary>Normalization — per-corpus results</summary>
 
-Saved run: `benchmarks/20260910T142029Z-normalize-bytes-29fc51/summary.json`.
+Saved run: `benchmarks/20260910T202440Z-normalize-bytes-a997a6/summary.json`.
 
 Unicode: Zunic **16.0.0**; unicode-normalization 0.1.24 **16.0.0**.
 
@@ -92,34 +99,60 @@ Unicode: Zunic **16.0.0**; unicode-normalization 0.1.24 **16.0.0**.
 
 | Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| arabic | 287.319 | 312.654 | 1.09× | 27647/27647 | same |
-| hindi | 174.020 | 238.602 | 1.37× | 19595/19595 | same |
-| korean | 303.898 | 420.927 | 1.39× | 21191/21191 | same |
-| russian | 273.792 | 312.584 | 1.14× | 28552/28552 | same |
-| source_code | 324.373 | 415.005 | 1.28× | 50202/50202 | same |
-| english | 320.963 | 400.335 | 1.25× | 49489/49489 | same |
-| japanese | 217.237 | 222.599 | 1.02× | 18108/18108 | same |
-| mandarin | 128.360 | 191.826 | 1.49× | 17639/17639 | same |
+| arabic | 264.879 | 313.167 | 1.18× | 27647/27647 | same |
+| hindi | 165.905 | 239.205 | 1.44× | 19595/19595 | same |
+| korean | 302.888 | 406.845 | 1.34× | 21191/21191 | same |
+| russian | 252.483 | 316.123 | 1.25× | 28552/28552 | same |
+| source_code | 280.643 | 414.586 | 1.48× | 50202/50202 | same |
+| english | 276.822 | 411.166 | 1.49× | 49489/49489 | same |
+| japanese | 197.343 | 223.241 | 1.13× | 18108/18108 | same |
+| mandarin | 129.734 | 190.947 | 1.47× | 17639/17639 | same |
 
 ### NFD
 
 | Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| arabic | 203.119 | 213.471 | 1.05× | 28526/28526 | same |
-| hindi | 146.023 | 169.114 | 1.16× | 19595/19595 | same |
-| korean | 288.213 | 280.788 | 0.97× | 41705/41705 | same |
-| russian | 196.948 | 207.245 | 1.05× | 28947/28947 | same |
-| source_code | 262.029 | 239.380 | 0.91× | 50202/50202 | same |
-| english | 258.346 | 237.576 | 0.92× | 49489/49489 | same |
-| japanese | 145.384 | 151.170 | 1.04× | 19129/19129 | same |
-| mandarin | 101.544 | 129.073 | 1.27× | 17651/17651 | same |
+| arabic | 199.677 | 213.538 | 1.07× | 28526/28526 | same |
+| hindi | 146.029 | 170.387 | 1.17× | 19595/19595 | same |
+| korean | 292.867 | 280.280 | 0.96× | 41705/41705 | same |
+| russian | 195.058 | 208.811 | 1.07× | 28947/28947 | same |
+| source_code | 262.428 | 240.198 | 0.92× | 50202/50202 | same |
+| english | 258.140 | 239.882 | 0.93× | 49489/49489 | same |
+| japanese | 148.651 | 151.286 | 1.02× | 19129/19129 | same |
+| mandarin | 109.066 | 129.419 | 1.19× | 17651/17651 | same |
+
+### NFKC
+
+| Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
+| --- | ---: | ---: | ---: | ---: | :---: |
+| arabic | 265.933 | 322.737 | 1.21× | 27647/27647 | same |
+| hindi | 170.328 | 241.810 | 1.42× | 19595/19595 | same |
+| korean | 306.870 | 401.517 | 1.31× | 21191/21191 | same |
+| russian | 244.291 | 318.555 | 1.30× | 28553/28553 | same |
+| source_code | 280.451 | 401.904 | 1.43× | 50202/50202 | same |
+| english | 278.475 | 399.265 | 1.43× | 49489/49489 | same |
+| japanese | 207.392 | 225.779 | 1.09× | 18118/18118 | same |
+| mandarin | 149.380 | 205.858 | 1.38× | 17639/17639 | same |
+
+### NFKD
+
+| Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
+| --- | ---: | ---: | ---: | ---: | :---: |
+| arabic | 203.127 | 223.838 | 1.10× | 28526/28526 | same |
+| hindi | 145.479 | 173.020 | 1.19× | 19595/19595 | same |
+| korean | 293.374 | 280.862 | 0.96× | 41705/41705 | same |
+| russian | 194.343 | 217.622 | 1.12× | 28948/28948 | same |
+| source_code | 261.469 | 229.007 | 0.88× | 50202/50202 | same |
+| english | 256.576 | 227.005 | 0.88× | 49489/49489 | same |
+| japanese | 154.527 | 159.390 | 1.03× | 19139/19139 | same |
+| mandarin | 126.713 | 144.913 | 1.14× | 17651/17651 | same |
 
 </details>
 
 <details>
 <summary>Words — per-corpus results</summary>
 
-Saved run: `benchmarks/20260910T142252Z-unicode-segmentation-zunic-words-b78001/summary.json`.
+Saved run: `benchmarks/20260910T202918Z-unicode-segmentation-zunic-words-fa66d8/summary.json`.
 
 Unicode: Zunic **16.0.0**; unicode-segmentation 1.13.3 **17.0.0**.
 
@@ -127,47 +160,47 @@ Unicode: Zunic **16.0.0**; unicode-segmentation 1.13.3 **17.0.0**.
 
 | Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| arabic | 157.877 | 243.630 | 1.54× | 9802/9802 | same |
-| hindi | 139.385 | 230.902 | 1.66× | 8083/8083 | same |
-| korean | 141.515 | 194.944 | 1.38× | 10523/10523 | same |
-| russian | 159.862 | 203.115 | 1.27× | 8794/8794 | same |
-| source_code | 323.317 | 553.027 | 1.71× | 19320/19320 | same |
-| english | 318.468 | 473.210 | 1.49× | 17432/17432 | same |
-| japanese | 125.995 | 356.552 | 2.83× | 17184/17184 | same |
-| mandarin | 118.070 | 243.301 | 2.06× | 17215/17215 | same |
+| arabic | 162.212 | 237.909 | 1.47× | 9802/9802 | same |
+| hindi | 143.224 | 233.230 | 1.63× | 8083/8083 | same |
+| korean | 147.390 | 189.461 | 1.29× | 10523/10523 | same |
+| russian | 165.029 | 201.707 | 1.22× | 8794/8794 | same |
+| source_code | 81.739 | 542.279 | 6.63× | 19320/19320 | same |
+| english | 314.922 | 469.891 | 1.49× | 17432/17432 | same |
+| japanese | 126.788 | 356.552 | 2.81× | 17184/17184 | same |
+| mandarin | 120.237 | 242.683 | 2.02× | 17215/17215 | same |
 
 ### the same partition, materialized
 
 | Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| arabic | 227.978 | 252.600 | 1.11× | 9802/9802 | same |
-| hindi | 196.131 | 242.707 | 1.24× | 8083/8083 | same |
-| korean | 205.878 | 204.182 | 0.99× | 10523/10523 | same |
-| russian | 224.209 | 212.632 | 0.95× | 8794/8794 | same |
-| source_code | 453.610 | 566.392 | 1.25× | 19320/19320 | same |
-| english | 420.473 | 489.575 | 1.16× | 17432/17432 | same |
-| japanese | 229.178 | 379.630 | 1.66× | 17184/17184 | same |
-| mandarin | 223.491 | 264.130 | 1.18× | 17215/17215 | same |
+| arabic | 224.011 | 250.508 | 1.12× | 9802/9802 | same |
+| hindi | 207.222 | 243.953 | 1.18× | 8083/8083 | same |
+| korean | 207.997 | 202.620 | 0.97× | 10523/10523 | same |
+| russian | 225.169 | 212.349 | 0.94× | 8794/8794 | same |
+| source_code | 192.656 | 561.791 | 2.92× | 19320/19320 | same |
+| english | 414.802 | 488.072 | 1.18× | 17432/17432 | same |
+| japanese | 233.512 | 378.197 | 1.62× | 17184/17184 | same |
+| mandarin | 223.180 | 264.177 | 1.18× | 17215/17215 | same |
 
 ### word-like segments only
 
 | Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| arabic | 157.589 | 379.947 | 2.41× | 4639/4639 | same |
-| hindi | 137.008 | 383.525 | 2.80× | 3628/3628 | same |
-| korean | 139.278 | 351.295 | 2.52× | 4796/4796 | same |
-| russian | 159.088 | 286.182 | 1.80× | 3787/3787 | same |
-| source_code | 324.183 | 88.072 | 0.27× | 5520/5520 | same |
-| english | 310.337 | 499.707 | 1.61× | 7883/7883 | same |
-| japanese | 139.798 | 509.360 | 3.64× | 13914/13914 | same |
-| mandarin | 130.767 | 350.188 | 2.68× | 14797/14797 | same |
+| arabic | 159.854 | 370.692 | 2.32× | 4639/4639 | same |
+| hindi | 145.665 | 382.142 | 2.62× | 3628/3628 | same |
+| korean | 146.549 | 343.987 | 2.35× | 4796/4796 | same |
+| russian | 162.026 | 283.102 | 1.75× | 3787/3787 | same |
+| source_code | 70.889 | 86.758 | 1.22× | 5520/5520 | same |
+| english | 312.191 | 496.400 | 1.59× | 7883/7883 | same |
+| japanese | 142.146 | 510.636 | 3.59× | 13914/13914 | same |
+| mandarin | 132.497 | 351.443 | 2.65× | 14797/14797 | same |
 
 </details>
 
 <details>
 <summary>Wrapping — per-corpus results</summary>
 
-Saved run: `benchmarks/20260910T155547Z-textwrap-zunic-3e59a1/summary.json`.
+Saved run: `benchmarks/20260910T203247Z-textwrap-zunic-06ba5c/summary.json`.
 
 Unicode: Zunic **16.0.0**; textwrap 0.16.2 **linebreak 15.0.0; width 17.0.0**.
 
@@ -175,47 +208,47 @@ Unicode: Zunic **16.0.0**; textwrap 0.16.2 **linebreak 15.0.0; width 17.0.0**.
 
 | Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| arabic | 297.795 | 587.067 | 1.97× | 427/427 | diff |
-| hindi | 245.823 | 460.556 | 1.87× | 321/327 | diff |
-| korean | 256.208 | 689.939 | 2.69× | 632/633 | diff |
-| russian | 304.370 | 556.196 | 1.83× | 477/472 | diff |
-| source_code | 50.713 | 82.139 | 1.62× | 1672/1673 | diff |
-| english | 455.696 | 831.324 | 1.82× | 800/792 | diff |
-| japanese | 231.443 | 673.317 | 2.91× | 629/630 | diff |
-| mandarin | 225.400 | 669.799 | 2.97× | 699/700 | diff |
+| arabic | 298.993 | 585.182 | 1.96× | 427/427 | diff |
+| hindi | 244.511 | 456.726 | 1.87× | 321/327 | diff |
+| korean | 256.036 | 687.787 | 2.69× | 632/633 | diff |
+| russian | 305.536 | 556.081 | 1.82× | 477/472 | diff |
+| source_code | 50.685 | 82.058 | 1.62× | 1672/1673 | diff |
+| english | 452.935 | 825.282 | 1.82× | 800/792 | diff |
+| japanese | 231.363 | 662.937 | 2.87× | 629/630 | diff |
+| mandarin | 224.613 | 658.023 | 2.93× | 699/700 | diff |
 
 ### Full document: collected results
 
 | Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| arabic | 303.597 | 587.067 | 1.93× | 427/427 | diff |
-| hindi | 249.496 | 460.556 | 1.85× | 321/327 | diff |
-| korean | 268.784 | 689.939 | 2.57× | 632/633 | diff |
-| russian | 313.427 | 556.196 | 1.77× | 477/472 | diff |
-| source_code | 87.912 | 82.139 | 0.93× | 1672/1673 | diff |
-| english | 460.008 | 831.324 | 1.81× | 800/792 | diff |
-| japanese | 237.508 | 673.317 | 2.83× | 629/630 | diff |
-| mandarin | 231.765 | 669.799 | 2.89× | 699/700 | diff |
+| arabic | 302.812 | 585.182 | 1.93× | 427/427 | diff |
+| hindi | 247.530 | 456.726 | 1.85× | 321/327 | diff |
+| korean | 260.645 | 687.787 | 2.64× | 632/633 | diff |
+| russian | 309.430 | 556.081 | 1.80× | 477/472 | diff |
+| source_code | 80.272 | 82.058 | 1.02× | 1672/1673 | diff |
+| english | 460.410 | 825.282 | 1.79× | 800/792 | diff |
+| japanese | 236.901 | 662.937 | 2.80× | 629/630 | diff |
+| mandarin | 230.467 | 658.023 | 2.86× | 699/700 | diff |
 
 ### First 24 lines
 
 | Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| arabic | 18.066 | 539.877 | 29.88× | 24/24 | diff |
-| hindi | 18.018 | 419.482 | 23.28× | 24/24 | diff |
-| korean | 8.468 | 641.452 | 75.75× | 24/24 | diff |
-| russian | 14.593 | 509.795 | 34.93× | 24/24 | diff |
-| source_code | 0.759 | 32.418 | 42.71× | 24/24 | same |
-| english | 14.452 | 787.064 | 54.46× | 24/24 | diff |
-| japanese | 6.709 | 621.408 | 92.62× | 24/24 | diff |
-| mandarin | 8.523 | 616.899 | 72.38× | 24/24 | same |
+| arabic | 18.104 | 536.716 | 29.65× | 24/24 | diff |
+| hindi | 18.004 | 409.036 | 22.72× | 24/24 | diff |
+| korean | 8.424 | 639.001 | 75.85× | 24/24 | diff |
+| russian | 14.569 | 504.751 | 34.65× | 24/24 | diff |
+| source_code | 0.758 | 31.972 | 42.18× | 24/24 | same |
+| english | 14.549 | 779.261 | 53.56× | 24/24 | diff |
+| japanese | 6.696 | 616.968 | 92.14× | 24/24 | diff |
+| mandarin | 8.506 | 609.552 | 71.66× | 24/24 | same |
 
 </details>
 
 <details>
 <summary>ANSI stripping — per-corpus results</summary>
 
-Saved run: `benchmarks/20260910T142923Z-strip-ansi-565f7f/summary.json`.
+Saved run: `benchmarks/20260910T203540Z-strip-ansi-22a101/summary.json`.
 
 Unicode: Zunic **not applicable (byte-only)**; strip-ansi-escapes 0.2.1 (vte 0.14.1) **not applicable (no Unicode property tables)**.
 
@@ -223,31 +256,31 @@ Unicode: Zunic **not applicable (byte-only)**; strip-ansi-escapes 0.2.1 (vte 0.1
 
 | Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| plain_ascii | 4.535 | 37.103 | 8.18× | 4095/4095 | same |
-| plain_ascii_64k | 72.512 | 612.719 | 8.45× | 65520/65520 | same |
-| sparse_sgr | 4.556 | 36.580 | 8.03× | 3648/3648 | same |
-| dense_sgr | 1.670 | 10.785 | 6.46× | 264/264 | same |
-| unicode | 4.416 | 22.062 | 5.00× | 3484/3484 | same |
-| osc_links | 2.351 | 12.094 | 5.14× | 495/495 | same |
-| commands_only | 1.473 | 7.353 | 4.99× | 0/0 | same |
-| custom_osc | 2.844 | 17.493 | 6.15× | 1116/1116 | same |
-| split_grapheme | 2.748 | 17.458 | 6.35× | 1260/1260 | same |
-| long_osc | 32.633 | 108.556 | 3.33× | 0/0 | same |
+| plain_ascii | 4.640 | 39.302 | 8.47× | 4095/4095 | same |
+| plain_ascii_64k | 73.164 | 613.674 | 8.39× | 65520/65520 | same |
+| sparse_sgr | 4.529 | 36.922 | 8.15× | 3648/3648 | same |
+| dense_sgr | 1.635 | 10.734 | 6.57× | 264/264 | same |
+| unicode | 4.460 | 22.066 | 4.95× | 3484/3484 | same |
+| osc_links | 2.371 | 12.437 | 5.25× | 495/495 | same |
+| commands_only | 1.481 | 7.448 | 5.03× | 0/0 | same |
+| custom_osc | 2.855 | 17.370 | 6.08× | 1116/1116 | same |
+| split_grapheme | 2.757 | 17.265 | 6.26× | 1260/1260 | same |
+| long_osc | 32.751 | 109.116 | 3.33× | 0/0 | same |
 
 ### Allocated output: stripAnsi + allocation vs strip
 
 | Corpus | Zunic µs | Rust µs | Rust/Zunic | Units Z/R | Output |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| plain_ascii | 4.528 | 38.064 | 8.41× | 4095/4095 | same |
-| plain_ascii_64k | 76.589 | 607.293 | 7.93× | 65520/65520 | same |
-| sparse_sgr | 4.533 | 37.197 | 8.21× | 3648/3648 | same |
-| dense_sgr | 1.652 | 11.163 | 6.76× | 264/264 | same |
-| unicode | 4.404 | 22.383 | 5.08× | 3484/3484 | same |
-| osc_links | 2.357 | 12.136 | 5.15× | 495/495 | same |
-| commands_only | 1.472 | 7.539 | 5.12× | 0/0 | same |
-| custom_osc | 2.847 | 17.424 | 6.12× | 1116/1116 | same |
-| split_grapheme | 2.742 | 17.470 | 6.37× | 1260/1260 | same |
-| long_osc | 32.997 | 108.568 | 3.29× | 0/0 | same |
+| plain_ascii | 4.586 | 38.327 | 8.36× | 4095/4095 | same |
+| plain_ascii_64k | 78.116 | 614.133 | 7.86× | 65520/65520 | same |
+| sparse_sgr | 4.543 | 37.369 | 8.23× | 3648/3648 | same |
+| dense_sgr | 1.612 | 10.887 | 6.75× | 264/264 | same |
+| unicode | 4.469 | 22.665 | 5.07× | 3484/3484 | same |
+| osc_links | 2.370 | 12.374 | 5.22× | 495/495 | same |
+| commands_only | 1.479 | 7.641 | 5.17× | 0/0 | same |
+| custom_osc | 2.870 | 17.530 | 6.11× | 1116/1116 | same |
+| split_grapheme | 2.762 | 17.634 | 6.38× | 1260/1260 | same |
+| long_osc | 33.203 | 109.076 | 3.29× | 0/0 | same |
 
 </details>
 
