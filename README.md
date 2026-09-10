@@ -2,28 +2,22 @@
 
 Allocation-free Unicode primitives for Zig 0.16.0 or later.
 
-Measure terminal columns, iterate graphemes and word boundaries, wrap text,
-find hard line terminators, and normalize to NFC or NFD. For text containing
-ANSI escapes, strip commands into a buffer or iterate tokens with formatting
-and hyperlink state.
+Measure width, iterate graphemes and words, wrap text, find line endings, and
+normalize Unicode. Strip ANSI escapes or track formatting as you iterate.
 
 ## Why zunic
 
-- **Fast text operations.** Performance is broadly on par with corresponding Rust
-  libraries such as `unicode-segmentation`, `unicode-normalization`, and
-  `textwrap`, and faster on many tested workloads.
-- **No allocator needed.** Views borrow your bytes. Iterators return byte
+- **Fast.** On par with corresponding Rust libraries in our benchmarks,
+  and faster on many workloads.
+- **No allocation.** Views borrow your bytes. Iterators return byte
   ranges; normalization and ANSI stripping write into a buffer you supply.
-- **Useful for terminal layout.** Measure whole grapheme clusters and wrap
-  without splitting them. Byte offsets let you slice the original text directly.
-- **Parsed terminal formatting.** Tokens expose affected style fields and keep
-  active colors, attributes, and hyperlinks available on the iterator.
-- **Small, separate operations.** Ask for width, boundaries, or normalized text
-  without building a larger text object.
-- **Zig only.** No external libraries. Unicode tables are included, with no
-  code generation or data downloads during a normal build.
-- **Tested rules and shortcuts.** Tests cover the pinned Unicode fixtures,
-  ASCII fast paths, and limits on repeated scanning.
+- **Wrap without breaking.** Measure whole grapheme clusters and wrap
+  without splitting them.
+- **Use what you need.** Ask for width, boundaries, or normalized text
+  without building a larger object.
+- **Parsed terminal formatting.** Track ANSI styles and hyperlinks as you iterate.
+- **Zig only.** No external libraries.
+- **Tested.** Tests cover Unicode rules, fast paths, and edge cases.
 
 ## Install
 
