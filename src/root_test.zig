@@ -187,9 +187,10 @@ test "normalization and capacity are reached from the text view" {
     try std.testing.expect((try it.next()) == null);
 }
 
-test "exactly two normalization forms" {
-    // NFKC and NFKD are deferred; asking for one must not compile, and the
-    // count is asserted so adding a form is a deliberate act.
-    try std.testing.expectEqual(@as(usize, 2), @typeInfo(unicode.Form).@"enum".fields.len);
-    try std.testing.expectEqual(@as(usize, 1), @typeInfo(unicode.Equivalence).@"enum".fields.len);
+test "exactly four normalization forms" {
+    // NFC, NFD, NFKC, NFKD -- canonical and compatibility, each with and
+    // without composition. The count is asserted so adding a fifth form (or
+    // removing one of these four) is a deliberate act, not an accident.
+    try std.testing.expectEqual(@as(usize, 4), @typeInfo(unicode.Form).@"enum".fields.len);
+    try std.testing.expectEqual(@as(usize, 2), @typeInfo(unicode.Equivalence).@"enum".fields.len);
 }

@@ -29,7 +29,11 @@ const corpora = @import("corpora.zig");
 // name, corpus and checksum is untouched.
 // Version 14 adds the is_ascii rows and their dedicated corpora. Every
 // earlier row name, corpus and checksum is untouched.
-const harness_version = "14";
+// Version 15 adds nfkc/nfkd/is_nfkc/nfkc_quick/nfkd_quick/eql_compat rows on
+// the existing normalization corpora, plus dedicated compat_corpora for
+// compatibility-mapping-heavy input. Every earlier row name, corpus and
+// checksum is untouched.
+const harness_version = "15";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
 const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
@@ -72,6 +76,19 @@ const normalization_corpora = [_]Corpus{
     .{ .name = "adversarial", .seed = "a\u{0301}\u{0327}\u{0316}\u{0300}\u{031D}\u{0302} ", .length = 4096 },
     .{ .name = "hangul", .seed = "\u{1111}\u{1171}\u{11B6}\u{1100}\u{1161}\u{11A8}\u{D4DB}\u{AC01} ", .length = 4096 },
     .{ .name = "ascii", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 4096 },
+};
+
+/// Compatibility-mapping-heavy input for nfkc/nfkd, run through the whole
+/// normalization operation set above (nfc/nfd included) so the cost of a
+/// compatibility mapping is visible against the canonical forms' cost on the
+/// exact same bytes, not just against a different corpus. `max-expansion` is
+/// the generated witness (U+FDFA, verified 18 scalars, 11x bytes) repeated,
+/// the worst per-byte case rather than an ordinary compatibility-heavy text.
+const compat_corpora = [_]Corpus{
+    .{ .name = "compat-ligatures", .seed = "o\u{FB03}ce \u{FB01}nd \u{FB02}avor \u{FB00}", .length = 4096 },
+    .{ .name = "compat-fullwidth", .seed = "\u{FF21}\u{FF22}\u{FF23}\u{FF11}\u{FF12}\u{FF13} ", .length = 4096 },
+    .{ .name = "compat-circled-and-super", .seed = "\u{2460}\u{2461}\u{2462}\u{00B2}\u{00B3}\u{00B9} ", .length = 4096 },
+    .{ .name = "max-expansion", .seed = "\u{FDFA}", .length = 4096 },
 };
 
 // Whole seeds keep intended UTF-8 and escape boundaries intact. Each shape
@@ -293,6 +310,24 @@ pub fn main(init: std.process.Init) !void {
         try printSamples(output, name, "nfc_quick", text, target_bytes, nfcQuickChecksum, io);
         try printSamples(output, name, "nfd_quick", text, target_bytes, nfdQuickChecksum, io);
         try printSamples(output, name, "eql", text, target_bytes, eqlChecksum, io);
+        try printSamples(output, name, "nfkc", text, target_bytes, nfkcChecksum, io);
+        try printSamples(output, name, "nfkd", text, target_bytes, nfkdChecksum, io);
+        try printSamples(output, name, "is_nfkc", text, target_bytes, isNfkcChecksum, io);
+        try printSamples(output, name, "nfkc_quick", text, target_bytes, nfkcQuickChecksum, io);
+        try printSamples(output, name, "nfkd_quick", text, target_bytes, nfkdQuickChecksum, io);
+        try printSamples(output, name, "eql_compat", text, target_bytes, eqlCompatChecksum, io);
+    }
+    for (compat_corpora) |corpus| {
+        const name = try std.fmt.allocPrint(allocator, "norm-{s}", .{corpus.name});
+        const text = try makeCorpus(allocator, corpus);
+        try printSamples(output, name, "nfc", text, target_bytes, nfcChecksum, io);
+        try printSamples(output, name, "nfd", text, target_bytes, nfdChecksum, io);
+        try printSamples(output, name, "nfkc", text, target_bytes, nfkcChecksum, io);
+        try printSamples(output, name, "nfkd", text, target_bytes, nfkdChecksum, io);
+        try printSamples(output, name, "is_nfkc", text, target_bytes, isNfkcChecksum, io);
+        try printSamples(output, name, "nfkc_quick", text, target_bytes, nfkcQuickChecksum, io);
+        try printSamples(output, name, "nfkd_quick", text, target_bytes, nfkdQuickChecksum, io);
+        try printSamples(output, name, "eql_compat", text, target_bytes, eqlCompatChecksum, io);
     }
     try runAsciiCases(output, allocator, target_bytes, io);
     // Scaled off target_bytes so `--smoke` stays quick; a byte budget would
@@ -589,6 +624,12 @@ fn nfcChecksum(text: []const u8) u64 {
 fn nfdChecksum(text: []const u8) u64 {
     return writeChecksum(text, .nfd);
 }
+fn nfkcChecksum(text: []const u8) u64 {
+    return writeChecksum(text, .nfkc);
+}
+fn nfkdChecksum(text: []const u8) u64 {
+    return writeChecksum(text, .nfkd);
+}
 /// Scalar-at-a-time traversal, with no encoding and no destination buffer.
 fn nfcIterateChecksum(text: []const u8) u64 {
     var it = zunic.text(text).normalize(.nfc);
@@ -608,8 +649,19 @@ fn nfcQuickChecksum(text: []const u8) u64 {
 fn nfdQuickChecksum(text: []const u8) u64 {
     return quickChecksum(text, .nfd);
 }
+fn nfkcQuickChecksum(text: []const u8) u64 {
+    return quickChecksum(text, .nfkc);
+}
+fn nfkdQuickChecksum(text: []const u8) u64 {
+    return quickChecksum(text, .nfkd);
+}
 fn isNfcChecksum(text: []const u8) u64 {
     const answer = zunic.text(text).isNormalized(.nfc) catch |err|
+        return mix(0xcbf29ce484222325, failureCode(err));
+    return mix(0xcbf29ce484222325, @intFromBool(answer));
+}
+fn isNfkcChecksum(text: []const u8) u64 {
+    const answer = zunic.text(text).isNormalized(.nfkc) catch |err|
         return mix(0xcbf29ce484222325, failureCode(err));
     return mix(0xcbf29ce484222325, @intFromBool(answer));
 }
@@ -617,6 +669,11 @@ fn isNfcChecksum(text: []const u8) u64 {
 /// to the end rather than stopping at the first difference.
 fn eqlChecksum(text: []const u8) u64 {
     const answer = zunic.text(text).eql(text, .canonical) catch |err|
+        return mix(0xcbf29ce484222325, failureCode(err));
+    return mix(0xcbf29ce484222325, @intFromBool(answer));
+}
+fn eqlCompatChecksum(text: []const u8) u64 {
+    const answer = zunic.text(text).eql(text, .compatibility) catch |err|
         return mix(0xcbf29ce484222325, failureCode(err));
     return mix(0xcbf29ce484222325, @intFromBool(answer));
 }

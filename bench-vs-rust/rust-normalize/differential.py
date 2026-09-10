@@ -30,5 +30,5 @@ for case, form in sorted(zunic):
     else:
         failures += 1
         print(f"case={case} form={form} status=differs zunic_bytes={len(z)} rust_bytes={len(r)}")
-print(f"total: {len(zunic)} canonical outputs, {failures} byte differences")
+print(f"total: {len(zunic)} outputs (canonical and compatibility), {failures} byte differences")
 raise SystemExit(bool(failures))

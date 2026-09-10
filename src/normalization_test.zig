@@ -216,7 +216,7 @@ test "runs at, below and above the configured limit" {
     var input: [4096]u8 = undefined;
     var output: [8192]u8 = undefined;
 
-    inline for ([_]Form{ .nfd, .nfc }) |form| {
+    inline for ([_]Form{ .nfd, .nfc, .nfkd, .nfkc }) |form| {
         // One below and exactly at the limit both succeed.
         _ = try normalization.normalize(manyMarks(&input, "a", limit - 1), form).writeTo(&output);
         _ = try normalization.normalize(manyMarks(&input, "a", limit), form).writeTo(&output);
@@ -300,7 +300,7 @@ test "large configured runs exceed u16 without overflowing" {
     const marks = std.math.maxInt(u16);
     if (limit < marks) return error.SkipZigTest;
     const input = "a" ++ "\u{0305}" ** marks;
-    inline for ([_]Form{ .nfd, .nfc }) |form| {
+    inline for ([_]Form{ .nfd, .nfc, .nfkd, .nfkc }) |form| {
         var it = normalization.normalize(input, form);
         try std.testing.expectEqual(@as(?u21, 'a'), try it.next());
         for (0..marks) |_| try std.testing.expectEqual(@as(?u21, 0x0305), try it.next());
@@ -329,7 +329,7 @@ const malformed = [_][]const u8{
 test "malformed UTF-8 is an error, never a replacement character" {
     var output: [64]u8 = undefined;
     for (malformed) |bad| {
-        inline for ([_]Form{ .nfd, .nfc }) |form| {
+        inline for ([_]Form{ .nfd, .nfc, .nfkd, .nfkc }) |form| {
             try std.testing.expectError(error.InvalidUtf8, normalization.normalize(bad, form).writeTo(&output));
 
             // In a prefix, in a suffix, and between marks.
@@ -482,7 +482,7 @@ test "isNormalized agrees with normalizing" {
     };
     var buffer: [256]u8 = undefined;
     for (cases) |input| {
-        inline for ([_]Form{ .nfc, .nfd }) |form| {
+        inline for ([_]Form{ .nfc, .nfd, .nfkc, .nfkd }) |form| {
             const normalized = try normalization.normalize(input, form).writeTo(&buffer);
             std.testing.expectEqual(
                 std.mem.eql(u8, input, normalized),
@@ -576,7 +576,7 @@ test "isNormalized counts marks inside precomposed starters" {
         try std.testing.expect(try zunic.text(at_limit).isNormalized(.nfc));
         try std.testing.expectEqualSlices(u8, at_limit, try zunic.text(at_limit).normalize(.nfc).writeTo(&output));
         try std.testing.expectError(error.SequenceTooLong, zunic.text(over_limit).isNormalized(.nfc));
-        inline for ([_]Form{ .nfd, .nfc }) |form| {
+        inline for ([_]Form{ .nfd, .nfc, .nfkd, .nfkc }) |form| {
             try std.testing.expectError(error.SequenceTooLong, zunic.text(over_limit).normalize(form).writeTo(&output));
         }
         // A new starter resets the decomposed count.
@@ -784,4 +784,250 @@ test "quick check reaches the text view" {
     try std.testing.expectEqual(QuickCheck.yes, try zunic.text("caf\u{00E9}").isNormalizedQuick(.nfc));
     try std.testing.expectEqual(QuickCheck.no, try zunic.text("caf\u{00E9}").isNormalizedQuick(.nfd));
     try std.testing.expectEqual(QuickCheck.maybe, try zunic.text("q\u{0301}").isNormalizedQuick(.nfc));
+}
+
+// --------------------------------------------------------- NFKC and NFKD
+
+fn expectNfkd(input: []const u8, expected: []const u8) !void {
+    var buffer: [4096]u8 = undefined;
+    try std.testing.expectEqualSlices(u8, expected, try normalization.normalize(input, .nfkd).writeTo(&buffer));
+}
+
+fn expectNfkc(input: []const u8, expected: []const u8) !void {
+    var buffer: [4096]u8 = undefined;
+    try std.testing.expectEqualSlices(u8, expected, try normalization.normalize(input, .nfkc).writeTo(&buffer));
+}
+
+test "NFC and NFD never apply a compatibility mapping" {
+    const compat_mapped = [_][]const u8{
+        "\u{FB01}", // LATIN SMALL LIGATURE FI
+        "\u{FF21}", // FULLWIDTH LATIN CAPITAL LETTER A
+        "\u{2460}", // CIRCLED DIGIT ONE
+        "\u{00B2}", // SUPERSCRIPT TWO
+        "\u{00A0}", // NO-BREAK SPACE
+    };
+    for (compat_mapped) |input| {
+        try expectNfc(input, input);
+        try expectNfd(input, input);
+    }
+}
+
+test "NFKC and NFKD apply compatibility mappings NFC/NFD do not" {
+    try expectNfkd("\u{FB01}", "fi"); // ligature
+    try expectNfkc("\u{FB01}", "fi");
+    try expectNfkd("\u{FF21}", "A"); // fullwidth
+    try expectNfkc("\u{FF21}", "A");
+    try expectNfkd("\u{2460}", "1"); // circled digit
+    try expectNfkc("\u{2460}", "1");
+    try expectNfkd("\u{00B2}", "2"); // superscript
+    try expectNfkc("\u{00B2}", "2");
+    try expectNfkd("\u{00A0}", " "); // no-break space
+    try expectNfkc("\u{00A0}", " ");
+}
+
+test "a recursive compatibility mapping: compatibility target that itself canonically decomposes" {
+    // U+01C4 LATIN CAPITAL LETTER DZ WITH CARON has the compatibility
+    // mapping <compat> 0044 017D ("D" + U+017D), and U+017D itself
+    // canonically decomposes to "Z" + combining caron -- so the full NFKD
+    // recurses through both a compatibility and a canonical step.
+    try expectNfkd("\u{01C4}", "DZ\u{030C}");
+    // NFKC recomposes the canonical part (Z + caron -> U+017D) but the
+    // compatibility boundary is never rebuilt: the result is "D" + U+017D,
+    // not the original ligature-style U+01C4.
+    try expectNfkc("\u{01C4}", "D\u{017D}");
+}
+
+test "a canonical decomposition that changes meaning under NFKC but not NFC" {
+    // U+0385 GREEK DIALYTIKA TONOS decomposes canonically to U+00A8 U+0301.
+    // NFC leaves it alone (its own NFC_QC is Yes). But U+00A8 DIAERESIS has a
+    // compatibility mapping to U+0020 U+0308, so NFKD replaces it with a
+    // plain space carrying the two marks -- and composition can never
+    // recover U+0385 from a space, so NFKC changes it too.
+    try expectNfc("\u{0385}", "\u{0385}");
+    try expectNfd("\u{0385}", "\u{00A8}\u{0301}");
+    try expectNfkd("\u{0385}", " \u{0308}\u{0301}");
+    try expectNfkc("\u{0385}", " \u{0308}\u{0301}");
+    try std.testing.expect(try normalization.isNormalized("\u{0385}", .nfc));
+    try std.testing.expect(!try normalization.isNormalized("\u{0385}", .nfkc));
+    try std.testing.expectEqual(QuickCheck.yes, try normalization.isNormalizedQuick("\u{0385}", .nfc));
+    try std.testing.expectEqual(QuickCheck.no, try normalization.isNormalizedQuick("\u{0385}", .nfkc));
+}
+
+test "the generated maximum compatibility expansion witness" {
+    // U+FDFA ARABIC LIGATURE SALLALLAHOU ALAYHE WASALLAM: 18 scalars, the
+    // measured maximum recursive expansion under NFKD (verified exhaustively
+    // by test-normalization-properties.py, not just for this one witness).
+    const expected = "\u{635}\u{644}\u{649} \u{627}\u{644}\u{644}\u{647} \u{639}\u{644}\u{64a}\u{647} \u{648}\u{633}\u{644}\u{645}";
+    try expectNfkd("\u{FDFA}", expected);
+    // None of the 18 scalars are combining marks and no adjacent pair is a
+    // canonical composition, so NFKC leaves the decomposition exactly as is
+    // rather than recomposing anything.
+    try expectNfkc("\u{FDFA}", expected);
+
+    // Exact-size and undersized buffers, mirroring the canonical witness
+    // tests: writeTo must succeed with exactly enough room and fail with one
+    // byte less, without writing a partial encoding.
+    var exact: [expected.len]u8 = undefined;
+    try std.testing.expectEqualStrings(expected, try normalization.normalize("\u{FDFA}", .nfkd).writeTo(&exact));
+    var short: [expected.len - 1]u8 = undefined;
+    try std.testing.expectError(error.NoSpace, normalization.normalize("\u{FDFA}", .nfkd).writeTo(&short));
+
+    // Scalar iteration agrees with writeTo, over the one input that actually
+    // exercises the full compatibility scratch buffer.
+    var iterated: [expected.len]u8 = undefined;
+    var len: usize = 0;
+    var it = normalization.normalize("\u{FDFA}", .nfkd);
+    while (try it.next()) |cp| len += try std.unicode.utf8Encode(cp, iterated[len..]);
+    try std.testing.expectEqualStrings(expected, iterated[0..len]);
+}
+
+test "NFKC and NFKD adjacent to the maximum-expansion witness" {
+    // The witness immediately preceded and followed by ordinary content, so
+    // an off-by-one in the scratch buffer would corrupt a neighbour rather
+    // than only the witness itself.
+    try expectNfkd("a\u{FDFA}b", "a\u{635}\u{644}\u{649} \u{627}\u{644}\u{644}\u{647} \u{639}\u{644}\u{64a}\u{647} \u{648}\u{633}\u{644}\u{645}b");
+    try expectNfkd("\u{FDFA}\u{FDFA}", "\u{635}\u{644}\u{649} \u{627}\u{644}\u{644}\u{647} \u{639}\u{644}\u{64a}\u{647} \u{648}\u{633}\u{644}\u{645}" ** 2);
+}
+
+test "Hangul is algorithmic under NFKD and NFKC too" {
+    // NFKD always fully decomposes, the same as NFD.
+    try expectNfkd("\u{AC00}", "\u{1100}\u{1161}"); // GA
+    try expectNfkd("\u{AC01}", "\u{1100}\u{1161}\u{11A8}"); // GAG
+    // NFKC composes L+V and LV+T back arithmetically, the same as NFC: a
+    // Hangul syllable round-trips under NFKC exactly as it does under NFC,
+    // because canonical composition is unaffected by compatibility mapping.
+    try expectNfkc("\u{AC00}", "\u{AC00}");
+    try expectNfkc("\u{AC01}", "\u{AC01}");
+    try expectNfkc("\u{1100}\u{1161}\u{11A8}", "\u{AC01}");
+}
+
+test "singletons are never reversed by NFKC" {
+    // NFC maps KELVIN SIGN to K and never the reverse; NFKC must not either,
+    // since compatibility mappings are excluded from composition the same
+    // way canonical singletons are.
+    try expectNfkc("\u{212A}", "K");
+    try expectNfkc("K", "K");
+    try expectNfkd("\u{212A}", "K");
+}
+
+test "composition is blocked under NFKC exactly as under NFC" {
+    // Neither input here involves a compatibility mapping, so NFKC's answer
+    // must match NFC's proven one exactly -- this checks that composition
+    // blocking is genuinely shared between the two forms, not reproved.
+    try expectNfkc("A\u{0328}\u{0301}", "\u{0104}\u{0301}");
+    try expectNfkc("a\u{0300}\u{0301}", "\u{00E0}\u{0301}");
+}
+
+test "eql .compatibility over equivalent and unequal input" {
+    try std.testing.expect(try normalization.eql("\u{FB01}", "fi", .compatibility));
+    try std.testing.expect(!try normalization.eql("\u{FB01}", "fi", .canonical));
+    try std.testing.expect(try normalization.eql("\u{2460}", "1", .compatibility));
+    try std.testing.expect(!try normalization.eql("\u{2460}", "2", .compatibility));
+    // Canonically equivalent input is also compatibility-equivalent: NFD is
+    // a subset of NFKD's decomposition, so nothing here can cancel that out.
+    try std.testing.expect(try normalization.eql("cafe\u{0301}", "caf\u{00E9}", .compatibility));
+    // Compatibility-only equivalence is never canonical.
+    try std.testing.expect(!try normalization.eql("\u{FF21}", "A", .canonical));
+}
+
+test "eql .compatibility propagates errors from either operand" {
+    try std.testing.expectError(error.InvalidUtf8, normalization.eql("\xff", "fi", .compatibility));
+    try std.testing.expectError(error.InvalidUtf8, normalization.eql("\u{FB01}", "\xff", .compatibility));
+    var input: [4096]u8 = undefined;
+    const over = manyMarks(&input, "a", limit + 1);
+    try std.testing.expectError(error.SequenceTooLong, normalization.eql(over, "a", .compatibility));
+    try std.testing.expectError(error.SequenceTooLong, normalization.eql("a", over, .compatibility));
+}
+
+test "normalizedLenBound for the compatibility forms" {
+    // The compatibility factor (11) is distinct from and larger than the
+    // canonical one (3): a caller sizing a buffer for NFKC/NFKD must not
+    // reuse the canonical bound.
+    try std.testing.expectEqual(@as(usize, 33), try normalization.normalizedLenBound(3, .nfkd));
+    try std.testing.expectEqual(@as(usize, 33), try normalization.normalizedLenBound(3, .nfkc));
+    try std.testing.expectEqual(@as(usize, 9), try normalization.normalizedLenBound(3, .nfd));
+    // A compile-time bound, sizing a stack buffer -- the plan's motivating
+    // use case, exercised here for a compatibility form specifically.
+    const capacity = comptime normalization.normalizedLenBound("\u{FDFA}".len, .nfkd) catch unreachable;
+    var buffer: [capacity]u8 = undefined;
+    const written = try normalization.normalize("\u{FDFA}", .nfkd).writeTo(&buffer);
+    try std.testing.expect(written.len <= capacity);
+}
+
+/// A function generic over the normalization form, the shape `Text.normalize`
+/// itself has: `comptime form: Form` selects both the iterator type and the
+/// scratch/compose behaviour at compile time, with no runtime branch on which
+/// form is in use.
+fn normalizedLength(comptime form: Form, input: []const u8) !usize {
+    var it = normalization.normalize(input, form);
+    var count: usize = 0;
+    while (try it.next()) |_| count += 1;
+    return count;
+}
+
+test "compile-time form selection" {
+    // "fi" never recomposes: there is no canonical pair for f+i, so NFKC
+    // stops at the same two decomposed scalars NFKD produces. NFC/NFD leave
+    // the one-scalar ligature untouched, never seeing it as decomposable.
+    try std.testing.expectEqual(@as(usize, 2), try normalizedLength(.nfkd, "\u{FB01}"));
+    try std.testing.expectEqual(@as(usize, 2), try normalizedLength(.nfkc, "\u{FB01}"));
+    try std.testing.expectEqual(@as(usize, 1), try normalizedLength(.nfc, "\u{FB01}"));
+    try std.testing.expectEqual(@as(usize, 1), try normalizedLength(.nfd, "\u{FB01}"));
+}
+
+test "isNormalized and isNormalizedQuick over compatibility-mapped input" {
+    inline for (.{
+        .{ "\u{FB01}", false }, .{ "fi", true },
+        .{ "\u{00A0}", false }, .{ " ", true },
+        .{ "\u{2460}", false }, .{ "1", true },
+    }) |case| {
+        const input, const expected = case;
+        try std.testing.expectEqual(expected, try normalization.isNormalized(input, .nfkc));
+        try std.testing.expectEqual(expected, try normalization.isNormalized(input, .nfkd));
+        const quick_result = try normalization.isNormalizedQuick(input, .nfkc);
+        if (expected) {
+            try std.testing.expect(quick_result != .no);
+        } else {
+            try std.testing.expectEqual(QuickCheck.no, quick_result);
+        }
+    }
+    // NFKD_QC, like NFD_QC, is never Maybe.
+    try std.testing.expectEqual(QuickCheck.no, try normalization.isNormalizedQuick("\u{FB01}", .nfkd));
+    try std.testing.expectEqual(QuickCheck.yes, try normalization.isNormalizedQuick("fi", .nfkd));
+}
+
+test "runs at and beyond the nonstarter limit after compatibility decomposition" {
+    // U+FB01's compatibility mapping ("f", "i") is two starters with no
+    // marks of its own, so this exercises a run of marks that only begins
+    // *after* a compatibility expansion has already been flushed -- a case
+    // the generic "'a' plus marks" limit tests never reach, since plain "a"
+    // has no compatibility expansion to flush first.
+    var input: [4096]u8 = undefined;
+    var output: [8192]u8 = undefined;
+    inline for ([_]Form{ .nfkc, .nfkd }) |form| {
+        _ = try normalization.normalize(manyMarks(&input, "\u{FB01}", limit), form).writeTo(&output);
+        const over = manyMarks(&input, "\u{FB01}", limit + 1);
+        try std.testing.expectError(error.SequenceTooLong, normalization.normalize(over, form).writeTo(&output));
+        // isNormalized short-circuits on the ligature itself (its NFKC_QC/
+        // decomposes-under-NFKD answer is already a definite No), so it
+        // returns `false` here rather than ever reaching the mark run or
+        // the limit -- the documented short-circuit contract, not a special
+        // case for compatibility mappings.
+        try std.testing.expectEqual(false, try normalization.isNormalized(over, form));
+        // isNormalizedQuick does not enforce the limit and is unaffected by
+        // it either way.
+        _ = try normalization.isNormalizedQuick(over, form);
+    }
+}
+
+test "NFKC/NFKD reachable from the text view" {
+    try std.testing.expect(try zunic.text("\u{FB01}").eql("fi", .compatibility));
+    var buffer: [8]u8 = undefined;
+    try std.testing.expectEqualStrings("fi", try zunic.text("\u{FB01}").normalize(.nfkd).writeTo(&buffer));
+    try std.testing.expectEqualStrings("fi", try zunic.text("\u{FB01}").normalize(.nfkc).writeTo(&buffer));
+    // NFC never touches a compatibility-only mapping, so the ligature is
+    // already NFC-normalized; NFKC is what changes it.
+    try std.testing.expect(try zunic.text("\u{FB01}").isNormalized(.nfc));
+    try std.testing.expect(!try zunic.text("\u{FB01}").isNormalized(.nfkc));
+    try std.testing.expectEqual(QuickCheck.no, try zunic.text("\u{FB01}").isNormalizedQuick(.nfkc));
 }

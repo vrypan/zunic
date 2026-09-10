@@ -46,6 +46,22 @@ fn nfd_bytes(bytes: &[u8]) -> BenchResult {
     )
 }
 
+fn nfkc_bytes(bytes: &[u8]) -> BenchResult {
+    consume(
+        std::str::from_utf8(bytes)
+            .expect("benchmark requires valid UTF-8")
+            .nfkc(),
+    )
+}
+
+fn nfkd_bytes(bytes: &[u8]) -> BenchResult {
+    consume(
+        std::str::from_utf8(bytes)
+            .expect("benchmark requires valid UTF-8")
+            .nfkd(),
+    )
+}
+
 const HELP: &str = "Usage: unicode-normalization-zunic CORPUS_DIR MODE\n\nModes:\n  --bench  Run timing benchmarks\n  --dump   Print exact output records (bytes are hex-encoded)\n  --bench-prevalidated  Diagnostic timings with UTF-8 validation excluded\n  --help, -h  Print this help\n\nNo arguments prints help. CORPUS_DIR is read before timing.\n";
 
 fn main() {
@@ -86,6 +102,8 @@ fn main() {
                     std::fs::read(Path::new(&directory).join(format!("{name}.txt"))).unwrap();
                 measure(name, "nfc", bytes.as_slice(), bytes.len(), nfc_bytes);
                 measure(name, "nfd", bytes.as_slice(), bytes.len(), nfd_bytes);
+                measure(name, "nfkc", bytes.as_slice(), bytes.len(), nfkc_bytes);
+                measure(name, "nfkd", bytes.as_slice(), bytes.len(), nfkd_bytes);
                 continue;
             }
             let text = load(Path::new(&directory), name);
@@ -94,6 +112,12 @@ fn main() {
             });
             measure(name, "nfd", text.as_str(), text.len(), |text| {
                 consume(text.nfd())
+            });
+            measure(name, "nfkc", text.as_str(), text.len(), |text| {
+                consume(text.nfkc())
+            });
+            measure(name, "nfkd", text.as_str(), text.len(), |text| {
+                consume(text.nfkd())
             });
         }
         return;
@@ -104,6 +128,8 @@ fn main() {
         for (form, normalized) in [
             ("nfc", text.nfc().collect::<String>()),
             ("nfd", text.nfd().collect::<String>()),
+            ("nfkc", text.nfkc().collect::<String>()),
+            ("nfkd", text.nfkd().collect::<String>()),
         ] {
             print!("case={name} form={form} input=");
             for byte in text.bytes() {
@@ -160,11 +186,11 @@ fn measure<T: Copy>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use unicode_normalization::{is_nfc, is_nfd};
+    use unicode_normalization::{is_nfc, is_nfd, is_nfkc, is_nfkd};
 
     #[test]
     fn byte_passes_match_prevalidated_and_reject_invalid_utf8() {
-        for text in ["", "ASCII", "a\u{301}", "\u{d4db}"] {
+        for text in ["", "ASCII", "a\u{301}", "\u{d4db}", "\u{fb01}"] {
             assert_eq!(
                 nfc_bytes(text.as_bytes()).checksum,
                 text.nfc().map(|cp| cp as u64).sum()
@@ -173,8 +199,16 @@ mod tests {
                 nfd_bytes(text.as_bytes()).checksum,
                 text.nfd().map(|cp| cp as u64).sum()
             );
+            assert_eq!(
+                nfkc_bytes(text.as_bytes()).checksum,
+                text.nfkc().map(|cp| cp as u64).sum()
+            );
+            assert_eq!(
+                nfkd_bytes(text.as_bytes()).checksum,
+                text.nfkd().map(|cp| cp as u64).sum()
+            );
         }
-        for pass in [nfc_bytes, nfd_bytes] {
+        for pass in [nfc_bytes, nfd_bytes, nfkc_bytes, nfkd_bytes] {
             assert!(std::panic::catch_unwind(|| pass(&[0xff])).is_err());
         }
     }
@@ -199,10 +233,16 @@ mod tests {
         for text in inputs {
             let nfc = text.nfc().collect::<String>();
             let nfd = text.nfd().collect::<String>();
+            let nfkc = text.nfkc().collect::<String>();
+            let nfkd = text.nfkd().collect::<String>();
             assert!(is_nfc(&nfc));
             assert!(is_nfd(&nfd));
+            assert!(is_nfkc(&nfkc));
+            assert!(is_nfkd(&nfkd));
             assert_eq!(nfc.nfc().collect::<String>(), nfc);
             assert_eq!(nfd.nfd().collect::<String>(), nfd);
+            assert_eq!(nfkc.nfkc().collect::<String>(), nfkc);
+            assert_eq!(nfkd.nfkd().collect::<String>(), nfkd);
         }
     }
 
@@ -229,6 +269,10 @@ mod tests {
                 };
                 assert_eq!(&input.nfc().collect::<String>(), nfc, "{raw}");
                 assert_eq!(&input.nfd().collect::<String>(), nfd, "{raw}");
+                // NFKC and NFKD target c4 and c5 regardless of which column
+                // is the source -- unlike NFC/NFD, which split at index 3.
+                assert_eq!(&input.nfkc().collect::<String>(), &columns[3], "{raw}");
+                assert_eq!(&input.nfkd().collect::<String>(), &columns[4], "{raw}");
             }
             cases += 1;
         }

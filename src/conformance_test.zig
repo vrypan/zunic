@@ -344,11 +344,21 @@ test "Unicode 16.0.0 NormalizationTest" {
             try expectNormalizes(source.slice(), .nfd, c5.slice());
             assertions += 1;
         }
+        // NFKC(c1) = NFKC(c2) = NFKC(c3) = NFKC(c4) = NFKC(c5) = c4
+        for ([_]*const Column{ &c1, &c2, &c3, &c4, &c5 }) |source| {
+            try expectNormalizes(source.slice(), .nfkc, c4.slice());
+            assertions += 1;
+        }
+        // NFKD(c1) = NFKD(c2) = NFKD(c3) = NFKD(c4) = NFKD(c5) = c5
+        for ([_]*const Column{ &c1, &c2, &c3, &c4, &c5 }) |source| {
+            try expectNormalizes(source.slice(), .nfkd, c5.slice());
+            assertions += 1;
+        }
     }
     try std.testing.expectEqual(@as(usize, 19965), cases);
 
     // The fixture header's own invariant: any scalar missing from Part 1 is
-    // its own NFC and NFD.
+    // its own NFC, NFD, NFKC, and NFKD.
     var encoded: [4]u8 = undefined;
     var cp: u21 = 0;
     while (cp < 0x110000) : (cp += 1) {
@@ -357,7 +367,9 @@ test "Unicode 16.0.0 NormalizationTest" {
         const len = try std.unicode.utf8Encode(cp, &encoded);
         try expectNormalizes(encoded[0..len], .nfc, encoded[0..len]);
         try expectNormalizes(encoded[0..len], .nfd, encoded[0..len]);
-        assertions += 2;
+        try expectNormalizes(encoded[0..len], .nfkc, encoded[0..len]);
+        try expectNormalizes(encoded[0..len], .nfkd, encoded[0..len]);
+        assertions += 4;
     }
-    try std.testing.expect(assertions > 2_000_000);
+    try std.testing.expect(assertions > 4_000_000);
 }

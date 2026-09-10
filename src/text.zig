@@ -178,14 +178,18 @@ pub const Text = struct {
         return normalization.normalizedLenBound(self.bytes.len, form);
     }
 
-    /// Whether these bytes and `other` are canonically equivalent -- the same
-    /// text, however it happens to be encoded. `"caf\u{00E9}"` and
-    /// `"cafe\u{0301}"` are equal; `"\u{FB01}"` and `"fi"` are not, being
-    /// compatibility-equivalent only.
+    /// Whether these bytes and `other` are equivalent under `how`.
+    ///
+    /// `.canonical`: the same text, however it happens to be encoded.
+    /// `"caf\u{00E9}"` and `"cafe\u{0301}"` are equal; `"\u{FB01}"` and `"fi"`
+    /// are not, being compatibility-equivalent only -- ask with
+    /// `.compatibility` for that broader, lossier relation instead.
     ///
     /// Decided in lockstep without normalizing either side into a buffer, so
-    /// it allocates nothing and needs no form: canonical equivalence is
-    /// form-independent.
+    /// it allocates nothing: each equivalence is form-independent within
+    /// itself (`NFD(a) == NFD(b)` exactly when `NFC(a) == NFC(b)`, and
+    /// likewise for `NFKD`/`NFKC`), which is why `how` selects a relation and
+    /// not a normalization form.
     pub fn eql(self: Text, other: []const u8, comptime how: normalization.Equivalence) normalization.Error!bool {
         return normalization.eql(self.bytes, other, how);
     }

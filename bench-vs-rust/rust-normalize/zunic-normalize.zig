@@ -18,7 +18,7 @@ fn printHex(out: *std.Io.Writer, bytes: []const u8) !void {
 }
 
 fn printDump(out: *std.Io.Writer, allocator: std.mem.Allocator) !void {
-    for (cases) |case| inline for ([_]zunic.Form{ .nfc, .nfd }) |form| {
+    for (cases) |case| inline for ([_]zunic.Form{ .nfc, .nfd, .nfkc, .nfkd }) |form| {
         const capacity = try zunic.text(case.text).normalizedLenBound(form);
         const buffer = try allocator.alloc(u8, capacity);
         defer allocator.free(buffer);
@@ -117,6 +117,8 @@ fn printBench(io: std.Io, out: *std.Io.Writer) !void {
     for (cases) |case| {
         try measure(io, out, case, .nfc);
         try measure(io, out, case, .nfd);
+        try measure(io, out, case, .nfkc);
+        try measure(io, out, case, .nfkd);
     }
     try out.flush();
 }
@@ -133,14 +135,14 @@ fn expectIdempotent(allocator: std.mem.Allocator, bytes: []const u8, comptime fo
     try std.testing.expect(try zunic.text(normalized).isNormalized(form));
 }
 
-test "NFC and NFD are idempotent over shared corpora and Rust regression cases" {
+test "all four forms are idempotent over shared corpora and Rust regression cases" {
     const regressions = [_][]const u8{
         "a\u{0301}",                          "\u{2126}", "\u{1E0B}\u{0323}", "\u{D4DB}",
-        "a\u{0300}\u{0305}\u{0315}\u{05AE}b",
+        "a\u{0300}\u{0305}\u{0315}\u{05AE}b", "\u{FB01}",  "\u{01C4}",
     };
     const allocator = std.testing.allocator;
-    for (regressions) |bytes| inline for ([_]zunic.Form{ .nfc, .nfd }) |form|
+    for (regressions) |bytes| inline for ([_]zunic.Form{ .nfc, .nfd, .nfkc, .nfkd }) |form|
         try expectIdempotent(allocator, bytes, form);
-    inline for (cases) |case| inline for ([_]zunic.Form{ .nfc, .nfd }) |form|
+    inline for (cases) |case| inline for ([_]zunic.Form{ .nfc, .nfd, .nfkc, .nfkd }) |form|
         try expectIdempotent(allocator, case.text, form);
 }

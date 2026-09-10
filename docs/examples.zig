@@ -142,9 +142,33 @@ test "docs: the pinned Unicode data version" {
 
 test "docs: normalize from the text view" {
     var buffer: [64]u8 = undefined;
-    // Normalize either form through the text view.
+    // Normalize either canonical form through the text view.
     try std.testing.expectEqualStrings("caf\u{00E9}", try zunic.text("cafe\u{0301}").normalize(.nfc).writeTo(&buffer));
     try std.testing.expectEqualStrings("cafe\u{0301}", try zunic.text("caf\u{00E9}").normalize(.nfd).writeTo(&buffer));
+}
+
+test "docs: NFKC/NFKD and compatibility equality" {
+    // A ligature plus an accented letter: NFC/NFD leave the ligature alone,
+    // since it has no *canonical* decomposition; NFKC/NFKD expand it, in
+    // addition to doing everything NFC/NFD already do.
+    const bytes = "\u{FB01}sh\u{00E9}"; // "ﬁshé"
+    var buffer: [16]u8 = undefined;
+    try std.testing.expectEqualStrings("\u{FB01}sh\u{00E9}", try zunic.text(bytes).normalize(.nfc).writeTo(&buffer));
+    try std.testing.expectEqualStrings("fishe\u{0301}", try zunic.text(bytes).normalize(.nfkd).writeTo(&buffer));
+
+    // The ligature is already NFC-normalized -- NFC never applies a
+    // compatibility mapping -- but not NFKC-normalized.
+    try std.testing.expect(try zunic.text("\u{FB01}").isNormalized(.nfc));
+    try std.testing.expect(!try zunic.text("\u{FB01}").isNormalized(.nfkc));
+
+    // Compatibility equality treats the ligature and its expansion as the
+    // same text; canonical equality, the default distinction, does not.
+    try std.testing.expect(try zunic.text("\u{FB01}").eql("fi", .compatibility));
+    try std.testing.expect(!try zunic.text("\u{FB01}").eql("fi", .canonical));
+
+    // Buffer sizing must use the form actually being produced: NFKC/NFKD can
+    // expand up to 11x, well past NFC/NFD's 3x.
+    try std.testing.expectEqual(@as(usize, 33), try zunic.text("\u{FDFA}").normalizedLenBound(.nfkd));
 }
 
 test "docs: quick check, including maybe" {

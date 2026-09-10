@@ -2,8 +2,9 @@
 
 [All Rust comparisons](../README.md)
 
-Compare `text(bytes).normalize(.nfc)` and `.normalize(.nfd)` with
-unicode-normalization 0.1.24 using the shared texts in `../texts/`.
+Compare `text(bytes).normalize(form)` for all four forms -- `.nfc`, `.nfd`,
+`.nfkc`, `.nfkd` -- with unicode-normalization 0.1.24 using the shared texts
+in `../texts/`.
 
 ## Run
 
@@ -24,10 +25,14 @@ settings, fetched inputs, sampling, and cleanup. Results are saved under
 
 ## Timed operations
 
-Both peers iterate normalized scalars for NFC and NFD, count them, and compute
-a wrapping u64 sum. Timing includes UTF-8 validation, decoding, and scalar
-iteration. It excludes output UTF-8 encoding, file I/O, and caller output
-allocation. This does not benchmark `writeTo()` or normalization queries.
+Both peers iterate normalized scalars for all four forms, count them, and
+compute a wrapping u64 sum. Timing includes UTF-8 validation, decoding, and
+scalar iteration. It excludes output UTF-8 encoding, file I/O, and caller
+output allocation. This does not benchmark `writeTo()` or normalization
+queries. NFKC and NFKD use the same corpora as NFC and NFD, none of which are
+adversarially chosen for compatibility expansion; they exercise ordinary
+compatibility-mapping density in real text, not the worst-case 18-scalar
+expansion the native suite (`zig build benchmark`) covers separately.
 
 Rust validates raw bytes inside each timed pass and may allocate internal
 combining buffers. Zunic uses its configured bounded buffer. See the
@@ -49,9 +54,9 @@ python3 differential.py
 
 Each dump record contains `case`, `form`, `input` (hex), and `hex` (normalized
 UTF-8 bytes). Saved runs keep before/after dumps for each peer. The driver
-compares normalized bytes separately for NFC and NFD and checks the timed
-scalar count/sum against them. Output encoding is performed for verification
-outside the timed iterator workload.
+compares normalized bytes separately per form -- never across forms -- and
+checks the timed scalar count/sum against them. Output encoding is performed
+for verification outside the timed iterator workload.
 
 ## Versions and limits
 

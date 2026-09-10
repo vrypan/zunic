@@ -2,22 +2,32 @@
 
 [Text view](../README.md) · [Documentation index](../../README.md) · [Implementation](implementation.md)
 
-Normalization provides canonical NFC and NFD forms using Unicode 16 data.
-NFD decomposes characters and orders combining marks. NFC also combines
-characters where canonical composition is possible. Compatibility forms
-NFKC/NFKD, case folding, and compatibility equality are not supported.
+Normalization provides all four Unicode 16 normalization forms. NFD decomposes
+characters canonically and orders combining marks; NFC also combines
+characters where canonical composition is possible. NFKD and NFKC do the same,
+but decompose compatibility mappings too -- ligatures, fullwidth and
+half-width forms, circled and superscript digits, and similar -- which NFC and
+NFD never touch. Case folding is not supported.
+
+Compatibility equivalence, `eql(..., .compatibility)`, is a separate, coarser
+relation than canonical equivalence: `"\u{FB01}"` (a ligature) and `"fi"` are
+compatibility-equivalent but not canonically equivalent. Choosing it is an
+explicit decision by the caller, not a default -- see
+[Query normalization and equality](#query-normalization-and-equality).
 
 ## Unicode standards
 
-The methods use Unicode 16.0.0 canonical normalization as described in
+The methods use Unicode 16.0.0 normalization as described in
 [UAX #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/):
 
-- `normalize()`, `next()`, and `writeTo()` produce NFC or NFD.
+- `normalize()`, `next()`, and `writeTo()` produce NFC, NFD, NFKC, or NFKD.
 - `isNormalized()` checks the selected form, including its quick-check rules.
-- `eql(..., .canonical)` compares canonical equivalence through NFD.
+- `eql(..., .canonical)` compares canonical equivalence through NFD;
+  `eql(..., .compatibility)` compares compatibility equivalence through NFKD.
 - `normalizedLenBound()` is a Zunic capacity helper derived from the pinned data, not a separate UAX operation.
 
-- `isNormalizedQuick()` is the UAX #15 quick check itself, three-valued.
+- `isNormalizedQuick()` is the UAX #15 quick check itself, three-valued for
+  the two composing forms and two-valued for the two decomposing ones.
 
 The configurable run limit is a Zunic restriction. It does not implement
 UAX #15's Stream-Safe Text Format, which uses a different counting rule and
@@ -26,8 +36,8 @@ inserts separators. Zunic returns `SequenceTooLong` instead.
 ## Signatures
 
 ```zig
-pub const Form = enum { nfc, nfd };
-pub const Equivalence = enum { canonical };
+pub const Form = enum { nfc, nfd, nfkc, nfkd };
+pub const Equivalence = enum { canonical, compatibility };
 pub const NormalizationError = error{ InvalidUtf8, SequenceTooLong };
 pub const NormalizationWriteError = NormalizationError || error{NoSpace};
 
@@ -87,11 +97,16 @@ try std.testing.expectEqual(@as(u21, 0x301), (try scalars.next()).?);
 try std.testing.expect((try scalars.next()) == null);
 ```
 
-`text.normalizedLenBound(form)` returns a safe output byte-capacity bound
-for either supported form. The current bound is `3 * text.bytes.len`, with checked
-arithmetic; an unrepresentable result is `Overflow`. It is a capacity bound,
-not the exact output size, and does not examine or validate input. Both NFC
-and NFD can grow. Supplying this much space rules out `NoSpace` only.
+`text.normalizedLenBound(form)` returns a safe output byte-capacity bound for
+the requested form, with checked arithmetic; an unrepresentable result is
+`Overflow`. It is a capacity bound, not the exact output size, and does not
+examine or validate input. Supplying this much space rules out `NoSpace` only.
+
+The bound is `3 * text.bytes.len` for NFC/NFD and `11 * text.bytes.len` for
+NFKC/NFKD -- compatibility mappings can expand much further than canonical
+ones (U+FDFA, an Arabic ligature, is three bytes in and thirty-three out).
+Sizing a buffer with the wrong form's bound risks `NoSpace` on real input, not
+just a pathological one.
 
 ```zig
 const capacity = comptime try zunic.text("é").normalizedLenBound(.nfd);
@@ -111,15 +126,26 @@ time, allowing a local array of the calculated size. For runtime input, call
 ## Query normalization and equality
 
 `isNormalized(form)` tests whether the input is already in that form.
-`eql(other, .canonical)` compares canonical forms without creating output
-strings. It handles composed and decomposed spellings, but does not ignore
-case or compatibility differences.
+`eql(other, how)` compares forms without creating output strings, in lockstep
+over both inputs. `.canonical` handles composed and decomposed spellings but
+not compatibility or case differences; `.compatibility` also treats a
+ligature, fullwidth form, or similar as equivalent to its expansion, at the
+cost of also erasing that distinction. Neither ignores case.
 
 ```zig
 try std.testing.expect(try zunic.text("café").eql("cafe\u{0301}", .canonical));
 try std.testing.expect(try zunic.text("café").isNormalized(.nfc));
 try std.testing.expect(!try zunic.text("café").isNormalized(.nfd));
 try std.testing.expect(!try zunic.text("ﬁ").eql("fi", .canonical));
+
+// The same pair, compared the other way: equivalent by expansion, not by
+// canonical spelling. Neither call reaches for the other's answer -- the
+// caller decides up front which distinction matters. NFC never applies a
+// compatibility mapping, so the ligature is already NFC-normalized; NFKC is
+// what expands it.
+try std.testing.expect(try zunic.text("ﬁ").eql("fi", .compatibility));
+try std.testing.expect(try zunic.text("ﬁ").isNormalized(.nfc));
+try std.testing.expect(!try zunic.text("ﬁ").isNormalized(.nfkc));
 ```
 
 Both queries can stop at a decisive `false` and leave later bytes unexamined.
@@ -134,11 +160,17 @@ equality, or the complete input for `isNormalized`.
 try std.testing.expectEqual(zunic.QuickCheck.yes, try zunic.text("café").isNormalizedQuick(.nfc));
 try std.testing.expectEqual(zunic.QuickCheck.no, try zunic.text("café").isNormalizedQuick(.nfd));
 try std.testing.expectEqual(zunic.QuickCheck.maybe, try zunic.text("q\u{0301}").isNormalizedQuick(.nfc));
+try std.testing.expectEqual(zunic.QuickCheck.no, try zunic.text("ﬁ").isNormalizedQuick(.nfkc));
 ```
 
 `maybe` is an answer, not a failure: it means the question depends on context
 the check does not gather. `isNormalized()` settles it and returns a boolean,
-at a cost. NFD is never `maybe`.
+at a cost. NFD and NFKD are never `maybe`: a decomposition (canonical for
+NFD, canonical or compatibility for NFKD) is a definite `no`, with nothing
+left to depend on context. `NFKC_QC` is a separate property from `NFC_QC`,
+not derived from it: a code point can quick-check `yes` under NFC while
+quick-checking `no` under NFKC, when its canonical decomposition target is
+itself compatibility-decomposable.
 
 Three differences from `isNormalized()` are worth knowing:
 
@@ -170,15 +202,20 @@ whole input. More space does not fix invalid UTF-8 or an over-limit run.
 ## Combining-run limit
 
 The default working buffer is 128 bytes, allowing 30 consecutive non-starters
-after full canonical decomposition. A non-starter is a character with a nonzero
-canonical combining class. The count applies to decomposed characters, not
-input bytes or the number of marks visible in the original spelling.
+after full decomposition -- canonical for NFC/NFD, canonical and compatibility
+for NFKC/NFKD. A non-starter is a character with a nonzero canonical combining
+class. The count applies to decomposed characters, not input bytes or the
+number of marks visible in the original spelling, and is the same limit and
+the same rule for all four forms: a compatibility mapping's own expansion is
+counted exactly like a canonical one's.
 
 The build option `-Dnormalization-buffer-bytes=N` accepts positive multiples of
 32. Each entry uses four bytes; the accepted non-starter limit is `N / 4 - 2`.
 For example, 256 bytes permits 62. This sizes the iterator's inline working
 buffer, not its complete object: the iterator also stores input, state, and
-scratch space. See [build options](../../internals/README.md#build-options).
+scratch space, and the scratch space is larger for NFKC/NFKD than for NFC/NFD
+(see [implementation](implementation.md#a-second-scratch-buffer-for-compatibility-mappings)).
+See [build options](../../internals/README.md#build-options).
 
 Over-limit input is rejected. Zunic does not insert separators, truncate marks,
 or silently allocate a larger buffer.

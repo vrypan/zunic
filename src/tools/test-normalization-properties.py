@@ -37,16 +37,20 @@ S_COUNT = L_COUNT * N_COUNT
 
 
 def read_unicode_data():
-    ccc, mapping = {}, {}
+    ccc, mapping, compat = {}, {}, {}
     for raw in (DATA / "UnicodeData-16.0.0.txt").read_text(encoding="utf-8").splitlines():
         parts = raw.split(";")
         cp = int(parts[0], 16)
         if int(parts[3]):
             ccc[cp] = int(parts[3])
         text = parts[5].strip()
-        if text and "<" not in text:
+        if not text:
+            continue
+        if text.startswith("<"):
+            compat[cp] = [int(item, 16) for item in text.split(">", 1)[1].split()]
+        else:
             mapping[cp] = [int(item, 16) for item in text.split()]
-    return ccc, mapping
+    return ccc, mapping, compat
 
 
 def read_derived(name):
@@ -98,6 +102,11 @@ def parse_zig():
         "factor": int(re.search(r"pub const expansion_factor: usize = (\d+);", text).group(1)),
         "first_decomposition": int(re.search(r"pub const first_decomposition: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
         "first_composable": int(re.search(r"pub const first_composable: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
+        "compat_decomposition": array("compat_decomposition_entries", 16),
+        "compat_data": array("compat_decomposition_data", 16),
+        "compat_factor": int(re.search(r"pub const compat_expansion_factor: usize = (\d+);", text).group(1)),
+        "max_compat_expansion": int(re.search(r"pub const max_compat_expansion: usize = (\d+);", text).group(1)),
+        "first_compat_decomposition": int(re.search(r"pub const first_compat_decomposition: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
     }
 
 
@@ -144,10 +153,12 @@ def main():
 
     check_regeneration()
     check_stale_source_is_preserved()
-    ccc, mapping = read_unicode_data()
+    ccc, mapping, compat = read_unicode_data()
     full = {cp for cp, value in read_derived("Full_Composition_Exclusion").items() if value == "Yes"}
     nfc_qc = read_derived("NFC_QC")
     nfd_qc = read_derived("NFD_QC")
+    nfkc_qc = read_derived("NFKC_QC")
+    nfkd_qc = read_derived("NFKD_QC")
     table = parse_zig()
 
     failures = []
@@ -179,7 +190,8 @@ def main():
     # invisible to every other check: ASCII would simply get a wrong answer.
     for cp in range(128):
         packed = trie_class(cp)
-        if packed & 0xFF or packed >> 8 & 3 or packed >> 10 & 1 or packed >> 12 & 1:
+        if (packed & 0xFF or packed >> 8 & 3 or packed >> 10 & 1 or packed >> 12 & 1
+                or packed >> 13 & 3 or packed >> 15 & 1):
             fail(f"U+{cp:04X} breaks the ASCII uniformity the shortcut assumes")
         if bool(table["ascii_bases"] >> cp & 1) != bool(packed >> 11 & 1):
             fail(f"U+{cp:04X} ascii_bases disagrees with the trie")
@@ -203,14 +215,14 @@ def main():
     for cp in range(MAXCP):
         packed = class_of(cp)
         got = (packed & 0xFF, qc_bits[packed >> 8 & 3], bool(packed >> 10 & 1),
-               bool(packed >> 11 & 1), bool(packed >> 12 & 1))
+               bool(packed >> 11 & 1), bool(packed >> 12 & 1),
+               qc_bits[packed >> 13 & 3], bool(packed >> 15 & 1))
         want = (ccc.get(cp, 0), nfc_qc.get(cp, "Y"),
                 cp in mapping or hangul_decompose(cp) is not None,
-                cp in firsts, cp in seconds)
+                cp in firsts, cp in seconds,
+                nfkc_qc.get(cp, "Y"), cp in compat)
         if got != want:
             fail(f"U+{cp:04X} class: table={got} expected={want}")
-        if packed >> 13:
-            fail(f"U+{cp:04X} class has bits set outside the packed struct")
 
     # --- decompositions, over every code point ----------------------------
     decomposition = {}
@@ -241,6 +253,50 @@ def main():
     for cp in range(S_BASE, S_BASE + S_COUNT):
         if cp in decomposition:
             fail(f"U+{cp:04X} is a Hangul syllable and must not be in the table")
+
+    # --- compatibility decompositions, over every code point --------------
+    # Canonical and compatibility mappings are mutually exclusive in the
+    # source data (one field, one value), so this is checked once here
+    # rather than in the per-code-point loop that follows.
+    overlap = set(mapping) & set(compat)
+    if overlap:
+        fail(f"{len(overlap)} code points have both a canonical and a compatibility mapping")
+
+    compat_decomposition = {}
+    compat_keys = [entry & 0x3FFFF for entry in table["compat_decomposition"]]
+    if compat_keys != sorted(compat_keys):
+        fail("compat_decomposition_entries is not sorted by code point")
+    if len(set(compat_keys)) != len(compat_keys):
+        fail("compat_decomposition_entries has a duplicate code point")
+    entries = table["compat_decomposition"]
+    for index, entry in enumerate(entries):
+        cp = entry & 0x3FFFF
+        offset = entry >> 18 & 0x3FFF
+        end = (entries[index + 1] >> 18 & 0x3FFF) if index + 1 < len(entries) else len(table["compat_data"])
+        if end < offset:
+            fail(f"U+{cp:04X} compat entry has a negative implied length")
+            continue
+        compat_decomposition[cp] = table["compat_data"][offset:end]
+    for cp in range(MAXCP):
+        expected = compat.get(cp)
+        got = compat_decomposition.get(cp)
+        if expected is None:
+            if got is not None:
+                fail(f"U+{cp:04X} has a table compatibility decomposition but no compatibility mapping")
+            continue
+        if got is None:
+            fail(f"U+{cp:04X} compatibility mapping is missing from the table")
+            continue
+        if list(got) != expected:
+            fail(f"U+{cp:04X} compat decomposition: table={list(got)} expected={expected}")
+    # Hangul is algorithmic under NFKD too, identically to NFD, and must not
+    # appear in either mapping table.
+    for cp in range(S_BASE, S_BASE + S_COUNT):
+        if cp in compat_decomposition:
+            fail(f"U+{cp:04X} is a Hangul syllable and must not be in the compat table")
+    if compat and table["first_compat_decomposition"] != min(compat):
+        fail(f"first_compat_decomposition is 0x{table['first_compat_decomposition']:X}, "
+             f"data says 0x{min(compat):X}")
 
     # --- composition pairs ------------------------------------------------
     expected_pairs = {
@@ -297,6 +353,17 @@ def main():
         got_nfd = "N" if (cp in decomposition or hangul_decompose(cp) is not None) else "Y"
         if got_nfd != expected_nfd:
             fail(f"U+{cp:04X} NFD_QC: table={got_nfd} expected={expected_nfd}")
+        # NFKD_QC is not stored: the engine derives it as "No iff this
+        # decomposes canonically, compatibly, or as Hangul". Verified here
+        # against the real property rather than assumed, since NFKC_QC's
+        # relationship to NFC_QC has exceptions and this one must not.
+        expected_nfkd = nfkd_qc.get(cp, "Y")
+        got_nfkd = "N" if (cp in decomposition or cp in compat_decomposition
+                            or hangul_decompose(cp) is not None) else "Y"
+        if got_nfkd != expected_nfkd:
+            fail(f"U+{cp:04X} NFKD_QC derivation: got={got_nfkd} expected={expected_nfkd}")
+        # NFKC_QC itself is checked per code point in the class loop above
+        # (it is a stored class field, unlike NFKD_QC).
 
     # --- the expansion factor, re-derived ---------------------------------
     def full_decomposition(cp):
@@ -327,11 +394,42 @@ def main():
     if longest > 4:
         fail(f"longest recursive decomposition is {longest}, expected at most 4")
 
+    # --- the compatibility expansion factor and scratch bound, re-derived -
+    def full_compat_decomposition(cp):
+        hangul = hangul_decompose(cp)
+        if hangul is not None:
+            return hangul
+        if cp in compat:
+            parts = compat[cp]
+        elif cp in mapping:
+            parts = mapping[cp]
+        else:
+            return [cp]
+        out = []
+        for part in parts:
+            out.extend(full_compat_decomposition(part))
+        return out
+
+    compat_worst = 1.0
+    compat_longest = 1
+    for cp in list(mapping) + list(compat) + [S_BASE, S_BASE + 1]:
+        parts = full_compat_decomposition(cp)
+        compat_longest = max(compat_longest, len(parts))
+        compat_worst = max(compat_worst, sum(utf8_len(part) for part in parts) / utf8_len(cp))
+    if compat_worst > table["compat_factor"]:
+        fail(f"compat_expansion_factor {table['compat_factor']} is below the measured {compat_worst:.3f}")
+    if compat_longest > table["max_compat_expansion"]:
+        fail(f"max_compat_expansion {table['max_compat_expansion']} is below the measured {compat_longest}")
+    elif compat_longest != table["max_compat_expansion"]:
+        fail(f"max_compat_expansion {table['max_compat_expansion']} is looser than the measured "
+             f"{compat_longest}; tighten it so the bound stays tied to real data")
+
     # --- the fixture's worst decomposed run -------------------------------
     # The plan records a maximum of five consecutive non-starters across all
     # five columns; reproduce it so drift is visible rather than silently
     # raising the configured limit.
     longest_run = 0
+    longest_compat_run = 0
     cases = 0
     for raw in FIXTURE.read_text(encoding="utf-8").splitlines():
         body = raw.split("#", 1)[0].strip()
@@ -340,27 +438,40 @@ def main():
         cases += 1
         for column in body.split(";")[:5]:
             run = 0
+            compat_run = 0
             for token in column.split():
-                for part in full_decomposition(int(token, 16)):
+                cp = int(token, 16)
+                for part in full_decomposition(cp):
                     if ccc.get(part, 0):
                         run += 1
                         longest_run = max(longest_run, run)
                     else:
                         run = 0
+                for part in full_compat_decomposition(cp):
+                    if ccc.get(part, 0):
+                        compat_run += 1
+                        longest_compat_run = max(longest_compat_run, compat_run)
+                    else:
+                        compat_run = 0
 
     if failures:
         sys.exit(f"{len(failures)} mismatches over {MAXCP} code points")
     size = (16 + len(table["class_table"]) * 2 + len(table["class_stage1"]) +
             len(table["class_stage2"]) + len(table["class_stage3"]) +
             len(table["decomposition"]) * 4 + len(table["data"]) * 4 +
-            len(table["composition"]) * 2)
+            len(table["composition"]) * 2 +
+            len(table["compat_decomposition"]) * 4 + len(table["compat_data"]) * 4)
     print(f"ok: {MAXCP} code points verified against the pinned UCD")
     print(f"    {len(table['class_table'])} classes, {len(table['decomposition'])} decompositions, "
-          f"{len(table['composition'])} composition pairs")
+          f"{len(table['composition'])} composition pairs, {len(table['compat_decomposition'])} "
+          f"compatibility decompositions")
     print(f"    expansion factor {table['factor']} (measured worst {worst:.3f}), "
           f"longest recursive decomposition {longest}")
-    print(f"    fixture: {cases} cases, longest decomposed non-starter run {longest_run}")
-    print(f"    {size} bytes of 32768")
+    print(f"    compat expansion factor {table['compat_factor']} (measured worst {compat_worst:.3f}), "
+          f"longest recursive compat decomposition {compat_longest}")
+    print(f"    fixture: {cases} cases, longest decomposed non-starter run {longest_run} "
+          f"(compat: {longest_compat_run})")
+    print(f"    {size} bytes")
 
 
 if __name__ == "__main__":

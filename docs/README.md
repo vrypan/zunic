@@ -81,8 +81,8 @@ the separate combining-run limit.
 #### Text options and results
 
 ```zig
-pub const Form = enum { nfc, nfd };
-pub const Equivalence = enum { canonical };
+pub const Form = enum { nfc, nfd, nfkc, nfkd };
+pub const Equivalence = enum { canonical, compatibility };
 pub const QuickCheck = enum { yes, no, maybe };
 pub const NormalizationError = error{ InvalidUtf8, SequenceTooLong };
 pub const NormalizationWriteError = NormalizationError || error{NoSpace};
@@ -112,9 +112,13 @@ Neither splits an individual grapheme. A zero width is `InvalidWidth`.
 `isAscii()` scans the whole slice on every call, with no cache; it is a
 byte-range test, not UTF-8 validation.
 
-`isNormalizedQuick()` scans the whole input and can return `.maybe`;
-`isNormalized()` resolves the answer to a boolean and may stop early.
-NFKC/NFKD and stream-safe normalization are not available.
+`isNormalizedQuick()` scans the whole input and can return `.maybe` for a
+composing form (`.nfc`/`.nfkc`); a decomposing form (`.nfd`/`.nfkd`) never
+does. `isNormalized()` resolves the answer to a boolean and may stop early.
+`.nfkc`/`.nfkd` also decompose compatibility mappings (ligatures, fullwidth
+forms, and similar) that `.nfc`/`.nfd` leave untouched; `eql(..., .compatibility)`
+is the matching broader equivalence. Case folding and stream-safe
+normalization are not available.
 
 ### Terminal
 

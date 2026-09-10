@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild, verify, snapshot, and time NFC/NFD scalar iterators sequentially."""
+"""Rebuild, verify, snapshot, and time all four scalar iterators sequentially."""
 import argparse
 import datetime as dt
 import hashlib
@@ -20,7 +20,7 @@ from benchmark_contract import fields, parse_timing
 from benchmark_report import create_summary, markdown_report, terminal_report as common_terminal_report
 TEXTS = HERE.parent / "texts"
 CORPORA = ("arabic", "hindi", "korean", "russian", "source_code", "english", "japanese", "mandarin")
-EXPECTED = {(case, form) for case in CORPORA for form in ("nfc", "nfd")}
+EXPECTED = {(case, form) for case in CORPORA for form in ("nfc", "nfd", "nfkc", "nfkd")}
 
 
 def sha(path):
@@ -53,10 +53,10 @@ def parse(text, outputs, snapshots, expected_input="bytes"):
     header = next(fields(line) for line in text.splitlines() if line.startswith("protocol="))
     peer = header.get("peer")
     nested = parse_timing(text, suite="normalize", peer=peer, cases=CORPORA,
-                          operations=("nfc", "nfd"), expected_input=expected_input)
+                          operations=("nfc", "nfd", "nfkc", "nfkd"), expected_input=expected_input)
     rows = {}
     for case in CORPORA:
-        for operation in ("nfc", "nfd"):
+        for operation in ("nfc", "nfd", "nfkc", "nfkd"):
             key = (case, operation)
             row = nested[case][operation]
             normalized = outputs[key].decode("utf-8")
@@ -147,13 +147,13 @@ def main():
         raise ValueError("corpora changed during timing")
     run_state["uptime_after"] = run(["uptime"])
     outputs = {case: {"equal": all(before["zunic"][(case, form)] == before["rust"][(case, form)]
-                                           for form in ("nfc", "nfd")),
-                      "zunic_count": 2, "rust_count": 2} for case in CORPORA}
+                                           for form in ("nfc", "nfd", "nfkc", "nfkd")),
+                      "zunic_count": 4, "rust_count": 4} for case in CORPORA}
     summary = create_summary(
         suite="normalize", title="Canonical normalization", label=args.label,
         pairs=run_state["pairs"],
         comparisons=[{"id": form, "label": form.upper(), "zunic": form, "rust": form}
-                     for form in ("nfc", "nfd")],
+                     for form in ("nfc", "nfd", "nfkc", "nfkd")],
         peers={"zunic": {"name": "Zunic", "unicode": "16.0.0"},
                "rust": {"name": "unicode-normalization 0.1.24", "unicode": "16.0.0"}},
         contract={"input": "bytes" if args.rust_input == "bytes" else "zunic=bytes,rust=prevalidated",
@@ -162,7 +162,7 @@ def main():
             "equal": before["zunic"][(case, form)] == before["rust"][(case, form)],
             "zunic_count": len(before["zunic"][(case, form)].decode("utf-8")),
             "rust_count": len(before["rust"][(case, form)].decode("utf-8")),
-        } for case in CORPORA} for form in ("nfc", "nfd")},
+        } for case in CORPORA} for form in ("nfc", "nfd", "nfkc", "nfkd")},
         notes=["UTF-8 validation is timed in the primary bytes workload; file I/O and output encoding are excluded."],
         environment={key: run_state[key] for key in ("platform", "zig", "rustc", "zig_target", "rustflags")},
         provenance={key: run_state[key] for key in ("commands", "git_head", "binary_hashes", "corpus_hashes",

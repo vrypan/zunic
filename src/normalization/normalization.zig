@@ -1,16 +1,27 @@
-//! Canonical normalization: Unicode 16.0 Forms C and D (UAX #15).
+//! All four Unicode 16.0 normalization forms (UAX #15): NFC, NFD, NFKC, NFKD.
 //!
-//! Compatibility forms are deliberately absent. `Form` has no `nfkc`/`nfkd`
-//! and `Equivalence` has no `.compatibility`, so a caller cannot accidentally
-//! ask for a guarantee this module does not provide: `U+FB01` and `"fi"` are
-//! compatibility-equivalent but **not** canonically equivalent, and answering
-//! otherwise gives silently wrong results in search and deduplication.
+//! Canonical and compatibility decomposition are read from separate generated
+//! tables (see `src/tables/normalization_properties.zig`): canonical mappings
+//! are at most two scalars immediate, compatibility mappings run up to 18
+//! (U+FDFA). NFKC composes with exactly the same canonical composition pairs
+//! and exclusions as NFC; a compatibility mapping is never rebuilt by
+//! composition, in either direction.
+//!
+//! Compatibility equivalence is an explicit, narrower guarantee than
+//! canonical equivalence: `U+FB01` and `"fi"` are compatibility-equivalent
+//! but not canonically equivalent, and the two are never confused by a
+//! default -- a caller chooses `.canonical` or `.compatibility` explicitly.
 //!
 //! Nothing here allocates. The working buffer is inline and its size is a
 //! compile-time module setting, `-Dnormalization-buffer-bytes`, so a combining
 //! sequence longer than the configured limit is rejected with
 //! `error.SequenceTooLong` rather than truncated, silently reordered, or
-//! quietly declared equal to something else.
+//! quietly declared equal to something else. This limit is unrelated to how
+//! far a single scalar's own decomposition can spread (four entries for a
+//! canonical form, at most `properties.max_compat_expansion` for a
+//! compatibility one): those are pulled into the run one entry at a time, so
+//! a long *decomposition* streams through the same limit a long run of
+//! *combining marks* does, rather than being rejected outright for its size.
 //!
 //! Unlike the rest of the package, normalization is **strict about malformed
 //! UTF-8**: an invalid encoding is `error.InvalidUtf8`, never a replacement
@@ -22,8 +33,8 @@ const build_options = @import("build_options");
 const utf8 = @import("encoding").utf8;
 const properties = @import("tables").normalization;
 
-pub const Form = enum { nfc, nfd };
-pub const Equivalence = enum { canonical };
+pub const Form = enum { nfc, nfd, nfkc, nfkd };
+pub const Equivalence = enum { canonical, compatibility };
 /// Defined once, by the table generator, and re-exported here and from
 /// `root.zig` so the tags are not written down twice.
 pub const QuickCheck = properties.QuickCheck;
@@ -35,8 +46,8 @@ pub const WriteError = Error || error{NoSpace};
 pub const buffer_bytes: usize = build_options.normalization_buffer_bytes;
 pub const buffer_entries: usize = buffer_bytes / @sizeOf(Entry);
 /// The longest run of non-starters this build accepts, counted after full
-/// canonical decomposition. Two entries are headroom: the starter that opens
-/// the run, and one spare.
+/// decomposition. Two entries are headroom: the starter that opens the run,
+/// and one spare.
 pub const max_nonstarters: usize = buffer_entries - 2;
 // Include the length as well as every index, at any supported buffer size.
 const RunLength = std.math.IntFittingRange(0, buffer_entries);
@@ -51,8 +62,8 @@ comptime {
 ///
 /// `base` and `composable` are the two halves of the composition question, so
 /// a pair that cannot possibly compose is rejected on two register bits
-/// instead of a search through 961 pairs. Both include Hangul, which composes
-/// arithmetically and appears in no table.
+/// instead of a search through hundreds of pairs. Both include Hangul, which
+/// composes arithmetically and appears in no table.
 const Entry = packed struct(u32) {
     scalar: u21,
     ccc: u8,
@@ -62,7 +73,7 @@ const Entry = packed struct(u32) {
 };
 
 // UAX #15 section 16. These are the only mappings zunic computes rather than
-// stores; the generated tables deliberately contain no Hangul.
+// stores; the generated tables deliberately contain no Hangul, for either form.
 const s_base = 0xAC00;
 const l_base = 0x1100;
 const v_base = 0x1161;
@@ -73,15 +84,43 @@ const t_count = 28;
 const n_count = v_count * t_count;
 const s_count = l_count * n_count;
 
-/// Full canonical decomposition of one scalar, into at most four entries.
+/// True for `.nfkc` and `.nfkd`: the two forms that also consult
+/// compatibility mappings, not just canonical ones.
+fn isCompat(comptime form: Form) bool {
+    return form == .nfkc or form == .nfkd;
+}
+
+/// True for `.nfc` and `.nfkc`: the two forms that canonically compose.
+fn isCompose(comptime form: Form) bool {
+    return form == .nfc or form == .nfkc;
+}
+
+/// The per-scalar scratch capacity a form needs: four for a canonical form
+/// (measured maximum over the pinned data, checked by
+/// `test-normalization-properties.py`), or `properties.max_compat_expansion`
+/// for a compatibility one (same proof, generated rather than copied by hand
+/// since 18 is a much less memorable number than four).
+fn scratchLen(comptime form: Form) usize {
+    return if (isCompat(form)) properties.max_compat_expansion else 4;
+}
+
+/// Full decomposition of one scalar into at most `scratchLen(compatibility
+/// form)` entries, canonical or compatibility depending on `compat`.
 ///
-/// Four is the measured maximum over the pinned data and is checked by
-/// `test-normalization-properties.py`, so the recursion below cannot overrun
-/// a caller's four-entry array.
-fn decomposeInto(out: []Entry, cp: u21) u8 {
+/// A compatibility mapping, where `compat` is true and one exists, is used
+/// *instead of* the canonical mapping, never alongside it: the two are
+/// mutually exclusive per code point in the source data, so there is no
+/// ordering question. Recursion still applies either way.
+fn decomposeInto(out: []Entry, cp: u21, comptime compat: bool) u8 {
     // One class lookup answers the common case outright. Before this, every
-    // character bisected the decomposition table to be told it has none.
+    // character bisected a decomposition table to be told it has none.
     const class = properties.classOf(cp);
+    if (compat and class.compat_decomposes) {
+        const mapping = properties.compatDecomposition(cp).?;
+        var len: u8 = 0;
+        for (mapping) |scalar| len += decomposeInto(out[len..], @intCast(scalar), compat);
+        return len;
+    }
     if (!class.decomposes) {
         out[0] = .{
             .scalar = cp,
@@ -101,7 +140,7 @@ fn decomposeInto(out: []Entry, cp: u21) u8 {
     }
     const mapping = properties.decomposition(cp).?;
     var len: u8 = 0;
-    for (mapping.scalars) |scalar| len += decomposeInto(out[len..], @intCast(scalar));
+    for (mapping.scalars) |scalar| len += decomposeInto(out[len..], @intCast(scalar), compat);
     return len;
 }
 
@@ -115,7 +154,8 @@ fn entryOf(cp: u21) Entry {
     };
 }
 
-/// The primary composite of two scalars, Hangul included.
+/// The primary composite of two scalars, Hangul included. Shared by NFC and
+/// NFKC: compatibility mappings are never recomposed.
 fn composePair(first: u21, second: u21) ?u21 {
     if (first >= l_base and first < l_base + l_count and
         second >= v_base and second < v_base + v_count)
@@ -183,22 +223,31 @@ pub fn normalize(bytes: []const u8, comptime form: Form) Iterator(form) {
     return .{ .bytes = bytes };
 }
 
-/// An upper bound on the UTF-8 length of either canonical form of `input_len`
-/// bytes. The factor is derived from the pinned data during generation.
+/// An upper bound on the UTF-8 length of `form` applied to `input_len` bytes.
+/// The factor is derived from the pinned data during generation.
 ///
 /// This depends only on a byte count, so it cannot detect malformed UTF-8 or
 /// an over-long combining sequence: a buffer of this size rules out
 /// `error.NoSpace` and nothing else.
 pub fn normalizedLenBound(input_len: usize, comptime form: Form) error{Overflow}!usize {
-    // Both forms reach 3x growth. NFC decomposes the excluded U+1D160 into
-    // three supplementary musical symbols: four UTF-8 bytes become twelve.
-    _ = form;
-    return std.math.mul(usize, input_len, properties.expansion_factor);
+    // NFD and NFC both reach 3x growth; NFD decomposes the excluded U+1D160
+    // into three supplementary musical symbols, four UTF-8 bytes into twelve.
+    // NFKD and NFKC both reach 11x, at an 18-scalar Arabic ligature; NFKC
+    // shares NFKD's bound rather than getting its own, the same way NFC
+    // shares NFD's -- composition only shrinks or holds byte length, proved
+    // once in the generator rather than for each composing form.
+    const factor = switch (form) {
+        .nfc, .nfd => properties.expansion_factor,
+        .nfkc, .nfkd => properties.compat_expansion_factor,
+    };
+    return std.math.mul(usize, input_len, factor);
 }
 
 pub fn Iterator(comptime form: Form) type {
     return struct {
         const Self = @This();
+        const compat = isCompat(form);
+        const compose = isCompose(form);
 
         bytes: []const u8,
         /// Next input byte to decode.
@@ -212,7 +261,7 @@ pub fn Iterator(comptime form: Form) type {
         closed: bool = false,
 
         /// Decomposition of the input scalar currently being distributed.
-        scratch: [4]Entry = undefined,
+        scratch: [scratchLen(form)]Entry = undefined,
         scratch_len: u8 = 0,
         scratch_pos: u8 = 0,
 
@@ -223,7 +272,7 @@ pub fn Iterator(comptime form: Form) type {
         has_held: bool = false,
 
         /// Consecutive non-starters, counted after decomposition and
-        /// independently of the buffer, so NFC composition cannot shrink a run
+        /// independently of the buffer, so composition cannot shrink a run
         /// past the limit and hide it.
         nonstarters: usize = 0,
 
@@ -238,11 +287,11 @@ pub fn Iterator(comptime form: Form) type {
         ///
         /// Normalization is inherently one combining run ahead of its output:
         /// a starter cannot be emitted until the following characters are
-        /// known, since they may reorder before it (NFD) or compose into it
-        /// (NFC). So a failure can preempt the run being accumulated, and
-        /// `"ab\xff"` reports `InvalidUtf8` after yielding only `a`. What has
-        /// been returned is always correct; it is not always everything that
-        /// could in principle have been returned.
+        /// known, since they may reorder before it (a decomposing form) or
+        /// compose into it (a composing form). So a failure can preempt the
+        /// run being accumulated, and `"ab\xff"` reports `InvalidUtf8` after
+        /// yielding only `a`. What has been returned is always correct; it is
+        /// not always everything that could in principle have been returned.
         pub fn next(self: *Self) Error!?u21 {
             if (self.failed) |failure| return failure;
             return self.step() catch |failure| {
@@ -298,11 +347,12 @@ pub fn Iterator(comptime form: Form) type {
                 }
 
                 // Otherwise it ends the run. Composition may still reach
-                // across: Hangul L+V and LV+T are both starter pairs, and 59
-                // further pairs in Unicode 16 have a starter as their second
-                // element, so a bare starter run stays open if it composes.
+                // across: Hangul L+V and LV+T are both starter pairs, and
+                // several further pairs in Unicode 16 have a starter as their
+                // second element, so a bare starter run stays open if it
+                // composes.
                 self.finishRun();
-                if (form == .nfc and self.len == 1 and self.buffer[0].base and entry.composable) {
+                if (compose and self.len == 1 and self.buffer[0].base and entry.composable) {
                     if (composePair(self.buffer[0].scalar, entry.scalar)) |composed| {
                         self.buffer[0].scalar = composed;
                         self.nonstarters = 0;
@@ -315,15 +365,15 @@ pub fn Iterator(comptime form: Form) type {
             }
         }
 
-        /// Canonically order the open run, and for NFC compose it.
+        /// Canonically order the open run, and for a composing form compose it.
         ///
         /// Safe to call more than once on the same run: the sort is stable and
-        /// idempotent, and NFC only keeps a run open when composition reduced
-        /// it to a bare starter, which resets the blocking context exactly as
-        /// composing the whole run at once would.
+        /// idempotent, and a composing form only keeps a run open when
+        /// composition reduced it to a bare starter, which resets the
+        /// blocking context exactly as composing the whole run at once would.
         fn finishRun(self: *Self) void {
             canonicalOrder(self.buffer[0..self.len]);
-            if (form == .nfc) self.len = composeRun(self.buffer[0..self.len]);
+            if (compose) self.len = composeRun(self.buffer[0..self.len]);
         }
 
         /// One fully decomposed scalar at a time, drawn from the input.
@@ -340,7 +390,7 @@ pub fn Iterator(comptime form: Form) type {
             // code point becomes an error instead of advancing.
             const cp = decoded.cp orelse return error.InvalidUtf8;
             self.pos += decoded.len;
-            self.scratch_len = decomposeInto(&self.scratch, cp);
+            self.scratch_len = decomposeInto(&self.scratch, cp, compat);
             self.scratch_pos = 1;
             return self.scratch[0];
         }
@@ -371,16 +421,20 @@ pub fn Iterator(comptime form: Form) type {
     };
 }
 
-/// Canonical equivalence: `NFD(a) == NFD(b)`, decided in lockstep without
-/// materializing either form.
+/// Equivalence, decided in lockstep without materializing either form.
 ///
-/// Form-independent, since `NFD(a) == NFD(b)` exactly when
-/// `NFC(a) == NFC(b)`, which is why the caller chooses an equivalence
+/// `.canonical` compares `NFD(a) == NFD(b)`; `.compatibility` compares
+/// `NFKD(a) == NFKD(b)`. Each is form-independent within its own kind --
+/// `NFD(a) == NFD(b)` exactly when `NFC(a) == NFC(b)`, and likewise for the
+/// compatibility pair -- which is why the caller chooses an equivalence
 /// relation and not a normalization form.
 pub fn eql(a: []const u8, b: []const u8, comptime how: Equivalence) Error!bool {
-    comptime std.debug.assert(how == .canonical);
-    var left = normalize(a, .nfd);
-    var right = normalize(b, .nfd);
+    const form: Form = switch (how) {
+        .canonical => .nfd,
+        .compatibility => .nfkd,
+    };
+    var left = normalize(a, form);
+    var right = normalize(b, form);
     while (true) {
         // Both operands are advanced before either result is examined, so a
         // malformed or over-long sequence in the second one is reported even
@@ -399,6 +453,8 @@ pub fn eql(a: []const u8, b: []const u8, comptime how: Equivalence) Error!bool {
 /// answer does mean the whole input was examined and accepted. Either result
 /// gives way to `InvalidUtf8` or `SequenceTooLong` once encountered.
 pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
+    const compat = comptime isCompat(form);
+    const compose = comptime isCompose(form);
     var pos: usize = 0;
     var nonstarters: usize = 0;
     // Combining class of the previous character *as written*, which is what
@@ -424,15 +480,18 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
         const class = properties.classOf(cp);
         const ccc = class.ccc;
 
-        // Marks out of canonical order are normalized in neither form, even
-        // when each of them quick-checks as Yes on its own.
+        // Marks out of canonical order are normalized in no form, even when
+        // each of them quick-checks as Yes on its own.
         if (ccc != 0 and written_previous_ccc > ccc) return false;
 
-        switch (form) {
-            // `decomposes` already covers Hangul, which decomposes
-            // arithmetically and is in no table.
-            .nfd => if (class.decomposes) return false,
-            .nfc => switch (class.quick_check) {
+        if (compose) {
+            // NFKC reads its own quick-check property, not NFC's: a code
+            // point can quick-check Yes under NFC while quick-checking No
+            // under NFKC, when its *canonical* decomposition target is
+            // itself compatibility-decomposable (sixteen such code points in
+            // Unicode 16.0.0; see the generator's `read_derived`).
+            const qc = if (form == .nfkc) class.nfkc_quick_check else class.quick_check;
+            switch (qc) {
                 .no => return false,
                 .yes => {},
                 // Maybe means "composes with the character before it, for some
@@ -448,7 +507,12 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
                 // But when nothing in the run outranks this character, no
                 // reordering can happen, and the only question left is whether
                 // it composes with the starter -- one lookup. That covers
-                // ordinary accented text; the rest falls back.
+                // ordinary accented text; the rest falls back. This reasoning
+                // is unaffected by which composing form is in use: the Maybe
+                // set is identical between NFC_QC and NFKC_QC, and a
+                // character that is its own composition question is never
+                // itself compatibility-decomposable (a compatibility-mapped
+                // code point's own NFKC_QC is always No, never Maybe).
                 .maybe => if (starter != null and decomposed_trailing <= ccc) {
                     // UAX #15 blocking: `cp` is blocked from the starter when
                     // something between them has a class at least as large.
@@ -459,16 +523,24 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
                     if (!blocked and starter_base and class.composable and
                         composePair(starter.?, cp) != null) return false;
                 } else {
-                    if (!try settled(bytes[region..], pos - region + decoded.len)) return false;
+                    if (!try settled(bytes[region..], pos - region + decoded.len, form)) return false;
                 },
-            },
+            }
+        } else {
+            // .nfd or .nfkd. NFKD_QC is No exactly when the code point
+            // decomposes canonically, compatibly, or (added by the engine,
+            // absent from the table) as Hangul; `classOf` already covers
+            // Hangul as part of `decomposes`.
+            if (class.decomposes or (compat and class.compat_decomposes)) return false;
         }
 
         // Fold the decomposed form in. The run limit and the decomposed
         // context above are both properties of the decomposed text -- but for
-        // a character that does not decompose, it *is* the decomposed text, so
-        // the common path needs no second lookup and no scratch buffer.
-        if (!class.decomposes) {
+        // a character that does not decompose under this form, it *is* the
+        // decomposed text, so the common path needs no second lookup and no
+        // scratch buffer.
+        const decomposes_here = class.decomposes or (compat and class.compat_decomposes);
+        if (!decomposes_here) {
             if (ccc == 0) {
                 nonstarters = 0;
                 decomposed_trailing = 0;
@@ -480,8 +552,8 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
                 decomposed_since_starter += 1;
             }
         } else {
-            var scratch: [4]Entry = undefined;
-            const len = decomposeInto(&scratch, cp);
+            var scratch: [scratchLen(form)]Entry = undefined;
+            const len = decomposeInto(&scratch, cp, compat);
             for (scratch[0..len]) |entry| {
                 if (entry.ccc == 0) {
                     nonstarters = 0;
@@ -507,11 +579,13 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
     return true;
 }
 
-/// Whether normalizing `region` to NFC leaves its first `prefix_len` bytes
-/// unchanged. The general way to settle a Maybe, used when the fast path above
-/// cannot rule out a reordering inside the run.
-fn settled(region: []const u8, prefix_len: usize) Error!bool {
-    var iterator = normalize(region[0..prefix_len], .nfc);
+/// Whether normalizing `region` to `form` leaves its first `prefix_len` bytes
+/// unchanged. The general way to settle a Maybe, used when the fast path
+/// above cannot rule out a reordering inside the run. `form` is always a
+/// composing form here (`.nfc` or `.nfkc`): only `isNormalized`'s composing
+/// branch calls this.
+fn settled(region: []const u8, prefix_len: usize, comptime form: Form) Error!bool {
+    var iterator = normalize(region[0..prefix_len], form);
     var pos: usize = 0;
     while (try iterator.next()) |cp| {
         var encoded: [4]u8 = undefined;
@@ -542,9 +616,12 @@ fn settled(region: []const u8, prefix_len: usize) Error!bool {
 /// - Empty input is `Yes`.
 /// - `No` overrides `Maybe`, and `Maybe` overrides `Yes`.
 ///
-/// NFD is two-valued here: a canonical decomposition, Hangul included, is a
-/// definite `No`, and nothing about NFD is conditional on later context.
+/// A decomposing form is two-valued here: a decomposition under that form,
+/// Hangul included, is a definite `No`, and nothing about it is conditional
+/// on later context.
 pub fn isNormalizedQuick(bytes: []const u8, comptime form: Form) error{InvalidUtf8}!QuickCheck {
+    const compat = comptime isCompat(form);
+    const compose = comptime isCompose(form);
     var pos: usize = 0;
     var previous_ccc: u8 = 0;
     var result: QuickCheck = .yes;
@@ -553,20 +630,20 @@ pub fn isNormalizedQuick(bytes: []const u8, comptime form: Form) error{InvalidUt
         const cp = decoded.cp orelse return error.InvalidUtf8;
         const class = properties.classOf(cp);
 
-        // Marks out of canonical order are normalized in neither form.
+        // Marks out of canonical order are normalized in no form.
         if (class.ccc != 0 and previous_ccc > class.ccc) {
             result = .no;
-        } else switch (form) {
-            .nfd => if (class.decomposes) {
-                result = .no;
-            },
-            .nfc => switch (class.quick_check) {
+        } else if (compose) {
+            const qc = if (form == .nfkc) class.nfkc_quick_check else class.quick_check;
+            switch (qc) {
                 .no => result = .no,
                 .maybe => if (result == .yes) {
                     result = .maybe;
                 },
                 .yes => {},
-            },
+            }
+        } else if (class.decomposes or (compat and class.compat_decomposes)) {
+            result = .no;
         }
         previous_ccc = class.ccc;
         pos += decoded.len;

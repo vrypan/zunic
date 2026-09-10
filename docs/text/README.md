@@ -75,7 +75,7 @@ and limits:
 | UAX #29: Unicode Text Segmentation | Graphemes and word boundaries; grapheme boundaries in width and wrap |
 | UAX #14: Unicode Line Breaking Algorithm | Wrapping and hard terminators |
 | UAX #11: East Asian Width | Width properties for display columns and wrapping |
-| UAX #15: Unicode Normalization Forms | NFC, NFD, canonical equality, and normalization checks |
+| UAX #15: Unicode Normalization Forms | NFC, NFD, NFKC, NFKD, canonical/compatibility equality, and normalization checks |
 | UAX #44: Unicode Character Database | The `White_Space` property used by trim and whitespace predicates |
 
 `validate()` checks UTF-8 encoding directly. It does not run a UAX algorithm.

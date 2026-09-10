@@ -139,7 +139,7 @@ Zunic uses **Unicode 16.0.0** data:
 | [UAX #29: Unicode Text Segmentation](https://www.unicode.org/reports/tr29/tr29-45.html) | Extended grapheme clusters and default word boundaries |
 | [UAX #14: Unicode Line Breaking Algorithm](https://www.unicode.org/reports/tr14/tr14-53.html) | Line-break opportunities and hard terminators |
 | [UAX #11: East Asian Width](https://www.unicode.org/reports/tr11/tr11-43.html) | Width properties used by Zunic's terminal-column policy |
-| [UAX #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/) | NFC, NFD, and canonical equality |
+| [UAX #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/) | NFC, NFD, NFKC, NFKD, and canonical/compatibility equality |
 | [UAX #44: Unicode Character Database](https://www.unicode.org/reports/tr44/tr44-36.html) | The `White_Space` property used by trimming |
 
 Terminal column counts and line fitting are Zunic policies built on these rules
