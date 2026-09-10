@@ -4,6 +4,14 @@ Compare the current Zunic working tree, including uncommitted changes, with
 pinned Rust libraries. Run from a source checkout with Zig 0.16.0 or later,
 Rust/Cargo, Python 3, curl, and Make installed.
 
+> [!NOTE]
+> Regardless of the shape of APIs, and language peculiarities, I needed
+> a measure to compare my implementation to more mature ones and get a
+> ballpark of "how fast can I do the same thing here and there".
+>
+> These tests are not always comparing apples-to-apples, and they may be
+> methodologically weak in some cases. But they provide the baseline I needed.
+
 | Suite | Rust library | Operations |
 | --- | --- | --- |
 | [Line breaking](rust-linebreak/README.md) | unicode-linebreak 0.1.5 | Line-break opportunities |
