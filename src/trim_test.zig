@@ -61,6 +61,17 @@ test "the property set has exactly 25 code points" {
     try std.testing.expectEqual(@as(usize, 25), count);
 }
 
+test "the exported predicate agrees with the pinned property data" {
+    // zunic.isWhitespace is the same function Text.trim() uses internally;
+    // this checks the public entry point directly rather than only through
+    // trim() output, since that's the one downstream code actually calls.
+    for (0..0x110000) |value| {
+        if (value >= 0xD800 and value <= 0xDFFF) continue;
+        const cp: u21 = @intCast(value);
+        try std.testing.expectEqual(expectedWhitespace(cp), zunic.isWhitespace(cp));
+    }
+}
+
 test "every scalar agrees with the pinned property data" {
     // Exhaustive rather than sampled: a predicate that shortcuts -- a missing
     // range, a stray one, a mask that catches a neighbour -- shows up here and
@@ -413,4 +424,83 @@ test "an already-trimmed large input is not scanned through its middle" {
     const padded = try concat(allocator, &.{ "  \u{3000}", body, "\u{00A0}\t" });
     defer allocator.free(padded);
     try std.testing.expectEqual(body.len, zunic.text(padded).trim().bytes.len);
+}
+
+test "isWhitespaceSlice requires the whole slice to be exactly one scalar" {
+    try std.testing.expect(zunic.isWhitespaceSlice(" "));
+    try std.testing.expect(zunic.isWhitespaceSlice("\u{3000}"));
+    try std.testing.expect(zunic.isWhitespaceSlice("\u{00A0}"));
+    try std.testing.expect(!zunic.isWhitespaceSlice(""));
+    try std.testing.expect(!zunic.isWhitespaceSlice("x"));
+    // Starts with whitespace but is not only whitespace: a leading space
+    // plus a combining mark is two scalars, matching Text.trim()'s
+    // code-points-not-graphemes contract.
+    try std.testing.expect(!zunic.isWhitespaceSlice(" \u{0301}"));
+    try std.testing.expect(!zunic.isWhitespaceSlice("  "));
+    // A whitespace scalar's bytes with a trailing byte appended: no longer
+    // exactly one scalar's worth of bytes.
+    try std.testing.expect(!zunic.isWhitespaceSlice("\u{3000}x"));
+    // Malformed and overlong encodings never qualify.
+    try std.testing.expect(!zunic.isWhitespaceSlice("\xff"));
+    try std.testing.expect(!zunic.isWhitespaceSlice("\xc0\xa0")); // overlong NBSP
+    try std.testing.expect(!zunic.isWhitespaceSlice("\xc2")); // truncated
+}
+
+test "Span.isWhitespace over real grapheme spans" {
+    const bytes = "a \u{3000}\u{0301}";
+    var it = zunic.text(bytes).graphemes().iterator();
+
+    const a = it.next().?;
+    try std.testing.expectEqualStrings("a", bytes[a.start.value..a.end.value]);
+    try std.testing.expect(!a.isWhitespace(bytes));
+
+    const space = it.next().?;
+    try std.testing.expectEqualStrings(" ", bytes[space.start.value..space.end.value]);
+    try std.testing.expect(space.isWhitespace(bytes));
+
+    // U+3000 followed by a combining mark is one grapheme cluster (the mark
+    // attaches to the ideographic space), so the whole span is two scalars
+    // and is correctly not reported as whitespace, matching isWhitespaceSlice.
+    const combined = it.next().?;
+    try std.testing.expectEqualStrings("\u{3000}\u{0301}", bytes[combined.start.value..combined.end.value]);
+    try std.testing.expect(!combined.isWhitespace(bytes));
+
+    try std.testing.expect(it.next() == null);
+}
+
+test "MeasuredSpan.isWhitespace agrees with Span.isWhitespace" {
+    const bytes = "x \u{00A0}y";
+    var plain = zunic.text(bytes).graphemes().iterator();
+    var measured = zunic.text(bytes).graphemes().measured().iterator();
+    while (plain.next()) |span| {
+        const measured_span = measured.next().?;
+        try std.testing.expectEqual(span.isWhitespace(bytes), measured_span.isWhitespace(bytes));
+    }
+    try std.testing.expect(measured.next() == null);
+}
+
+test "Span.isWhitespace on non-grapheme spans" {
+    // Every single-scalar UAX #14 hard terminator is also White_Space, so
+    // its Terminators span answers true -- except CRLF, the one terminator
+    // that is two scalars (CR then LF), which like any other two-scalar
+    // span answers false even though both scalars are individually
+    // White_Space.
+    const with_terms = "a\r\nb\u{2028}c\x0Cd";
+    var terms = zunic.text(with_terms).terminators().iterator();
+    const crlf = terms.next().?;
+    try std.testing.expectEqualStrings("\r\n", with_terms[crlf.start.value..crlf.end.value]);
+    try std.testing.expect(!crlf.isWhitespace(with_terms));
+    const ls = terms.next().?;
+    try std.testing.expect(ls.isWhitespace(with_terms));
+    const ff = terms.next().?;
+    try std.testing.expectEqualStrings("\x0C", with_terms[ff.start.value..ff.end.value]);
+    try std.testing.expect(ff.isWhitespace(with_terms));
+    try std.testing.expect(terms.next() == null);
+
+    // A TerminalToken's escape span starts with ESC, which is not
+    // White_Space, so it answers false.
+    const styled = "\x1b[31mx";
+    var tokens = zunic.terminal(styled).tokens().iterator();
+    const escape = (try tokens.next()).?.escape;
+    try std.testing.expect(!escape.span.isWhitespace(styled));
 }

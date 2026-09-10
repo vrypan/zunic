@@ -8,7 +8,7 @@ const width_engine = @import("layout").width;
 const normalization = @import("normalization");
 const word_engine = @import("segmentation").word;
 const wrap_engine = @import("layout").wrap;
-const text_trim = @import("text_trim.zig");
+const text_trim = @import("text_trim");
 
 const types = @import("types");
 pub const ByteOffset = types.ByteOffset;

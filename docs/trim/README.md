@@ -63,6 +63,55 @@ U+200B ZERO WIDTH SPACE, U+FEFF ZERO WIDTH NO-BREAK SPACE (BOM), U+180E
 MONGOLIAN VOWEL SEPARATOR, U+2060 WORD JOINER, U+0000 NUL, U+007F DEL, and
 every combining mark.
 
+### The predicate itself
+
+```zig
+pub fn isWhitespace(cp: u21) bool;
+pub fn isWhitespaceSlice(glyph: []const u8) bool;
+
+// Span { start: ByteOffset, end: ByteOffset }
+pub fn isWhitespace(self: Span, bytes: []const u8) bool;
+
+// MeasuredSpan { start, end, columns, renderable }
+pub fn isWhitespace(self: MeasuredSpan, bytes: []const u8) bool;
+```
+
+The scalar test behind all three trim methods is exported as
+`zunic.isWhitespace`, for code working with a decoded code point directly.
+Most span-shaped code should reach for `span.isWhitespace(bytes)` instead --
+available on both `Span` (returned by, among others, `Graphemes.iterator()`
+and `TerminalToken`'s `.grapheme` field) and `MeasuredSpan` (from
+`.measured().iterator()`). It slices `bytes[span.start.value..span.end.value]`
+and confirms that slice is exactly one whitespace scalar, not merely a span
+that starts with one:
+
+```zig
+var graphemes = zunic.text(bytes).graphemes().iterator();
+while (graphemes.next()) |span| {
+    if (span.isWhitespace(bytes)) continue;
+    std.debug.print("grapheme: {s}\n", .{bytes[span.start.value..span.end.value]});
+}
+```
+
+`bytes` must be the slice the span was produced from; `Span` itself carries
+no reference to it, which is also why the method takes it as an argument
+rather than needing none. This is a correct, if not always interesting,
+question for a span that was never grapheme content: every single-scalar
+UAX #14 hard terminator (LF, VT, FF, CR, NEL, LS, PS) is also `White_Space`,
+so its `Terminators` span answers `true` -- except CRLF, the one terminator
+that is two scalars, which like any other two-scalar span answers `false`.
+An escape sequence's leading `ESC` byte is not `White_Space`, so a
+`TerminalToken`'s `Escape.span` answers `false`.
+
+The motivating case for reaching past `Text.trim()` at all is styled terminal
+text: a trim over `Terminal.tokens()` has to decide, for each escape sequence
+it encounters, whether the space it wraps is padding or meaningful content (a
+background color used as a block character, say) -- a policy call this
+library does not make. `Span.isWhitespace` and `isWhitespace` let that
+decision use zunic's exact whitespace set without re-deriving `PropList.txt`.
+`isWhitespaceSlice` is the primitive both build on, exported directly for a
+byte slice that did not come from either `Span` type.
+
 ### Borrowed lifetime and offsets
 
 The result borrows the caller's storage, exactly as `text()` does. Keep it

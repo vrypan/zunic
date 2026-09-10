@@ -209,3 +209,55 @@ test "docs: trim then chain" {
     const wrapped = try zunic.text("  alpha beta gamma  ").trim().wrap(.{ .max_columns = 10 });
     try std.testing.expectEqual(@as(usize, 2), wrapped.count());
 }
+
+test "docs: Span.isWhitespace while iterating graphemes" {
+    const bytes = "Hello,   \u{4E16}\u{754C}! \t\n";
+    var graphemes = zunic.text(bytes).graphemes().iterator();
+    var whitespace_count: usize = 0;
+    var content_count: usize = 0;
+    while (graphemes.next()) |span| {
+        if (span.isWhitespace(bytes)) {
+            whitespace_count += 1;
+        } else {
+            content_count += 1;
+        }
+    }
+    // H, e, l, l, o, comma, 世, 界, ! -- nine content clusters.
+    try std.testing.expectEqual(@as(usize, 9), content_count);
+    // Three spaces after the comma, one after "!", one tab, one newline.
+    try std.testing.expectEqual(@as(usize, 6), whitespace_count);
+}
+
+test "docs: Span.isWhitespace composes with terminal tokens" {
+    // zunic does not ship a trim for styled text, because whether a space
+    // wrapped in escapes is padding or meaningful content (a colored block,
+    // say) is a policy call this library cannot make. Span.isWhitespace lets
+    // that policy be built from Terminal.tokens() using zunic's own
+    // whitespace definition instead of a re-derived one.
+    const styled = "\x1b[31m hello\x1b[41m \x1b[0m"; // fg red, space, "hello", bg red, space, reset
+    var it = zunic.terminal(styled).tokens().iterator();
+    var keep_from: usize = 0;
+    var found_content = false;
+    while (!found_content) {
+        const token = (try it.next()) orelse break;
+        switch (token) {
+            .escape => {},
+            .grapheme => |span| {
+                const on_default_background = switch (it.state.background) {
+                    .default => true,
+                    else => false,
+                };
+                const is_padding = span.isWhitespace(styled) and on_default_background;
+                if (is_padding) {
+                    keep_from = span.end.value;
+                } else {
+                    found_content = true;
+                }
+            },
+        }
+    }
+    // The leading plain space is padding and is skipped.
+    try std.testing.expectEqualStrings("hello", styled[keep_from..][0..5]);
+    // The trailing space sits on a red background, so it is content and stays.
+    try std.testing.expect(std.mem.indexOf(u8, styled[keep_from..], "\x1b[41m \x1b[0m") != null);
+}

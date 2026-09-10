@@ -1,9 +1,16 @@
 //! Edge scanning for Unicode whitespace trimming.
 //!
-//! Private helpers behind `Text.trim`, `Text.trimStart` and `Text.trimEnd`.
-//! They return retained byte indices into the slice they were given and touch
-//! only the bytes they remove plus a bounded look at the first retained
-//! scalar, so an already-trimmed input is never scanned through its middle.
+//! `startIndex` and `endIndex` are private helpers behind `Text.trim`,
+//! `Text.trimStart` and `Text.trimEnd`. They return retained byte indices
+//! into the slice they were given and touch only the bytes they remove plus
+//! a bounded look at the first retained scalar, so an already-trimmed input
+//! is never scanned through its middle.
+//!
+//! `isWhitespace` and `isWhitespaceSlice` are shared beyond this file: the
+//! former as `zunic.isWhitespace`, the latter backing `Span.isWhitespace` and
+//! `MeasuredSpan.isWhitespace` in `src/types.zig` as well as
+//! `zunic.isWhitespaceSlice` directly. See their doc comments at those call
+//! sites for what each is for.
 //!
 //! The only dependency is the tolerant UTF-8 decoder. Grapheme, word, width,
 //! normalization and line-break engines answer other questions, and the fused
@@ -40,6 +47,16 @@ pub fn isWhitespace(cp: u21) bool {
 /// decoding. Every other ASCII byte ends a scan.
 inline fn isAsciiWhitespace(byte: u8) bool {
     return byte == ' ' or (byte >= 0x09 and byte <= 0x0D);
+}
+
+/// Whether `glyph` is exactly one `White_Space` scalar -- not a slice that
+/// merely starts or ends with one. A grapheme cluster or other span can be
+/// more than one scalar (a space plus a combining mark, say), and this is
+/// what tells those apart from an actual whitespace-only span: the decode
+/// must consume the whole slice, not just its first scalar.
+pub fn isWhitespaceSlice(glyph: []const u8) bool {
+    const decoded = utf8.step(glyph);
+    return decoded.len == glyph.len and decoded.cp != null and isWhitespace(decoded.cp.?);
 }
 
 /// Index of the first byte to retain: the offset of the first scalar that is

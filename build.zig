@@ -27,7 +27,9 @@ pub fn build(b: *std.Build) void {
     // The internal module graph. A module reaches only what it is granted an
     // import for here, so an undeclared dependency is a compile error rather
     // than something a reviewer has to catch. It is acyclic by construction:
-    // `tables` and `types` are independent foundations with no module imports.
+    // `tables` is a fully independent foundation with no module imports, and
+    // `types` depends only on `encoding`, for the `Span.isWhitespace` and
+    // `MeasuredSpan.isWhitespace` methods to reach the UTF-8 decoder.
     //
     // `tables` stays one module on purpose. Its `Record` fuses grapheme,
     // width and line-break facts into a single `u32` so a scanner resolves a
@@ -42,6 +44,7 @@ pub fn build(b: *std.Build) void {
         types: *std.Build.Module,
         tables: *std.Build.Module,
         encoding: *std.Build.Module,
+        text_trim: *std.Build.Module,
         segmentation: *std.Build.Module,
         linebreak: *std.Build.Module,
         normalization: *std.Build.Module,
@@ -68,6 +71,13 @@ pub fn build(b: *std.Build) void {
 
             const encoding = owner.createModule(.{ .root_source_file = owner.path("src/encoding/encoding.zig") });
             encoding.addImport("tables", tables);
+
+            // Its own module, not a relative import from `types.zig` and
+            // `root.zig`/`text.zig` both: Zig requires a source file belong
+            // to exactly one module, and both sides need it.
+            const text_trim = owner.createModule(.{ .root_source_file = owner.path("src/text_trim.zig") });
+            text_trim.addImport("encoding", encoding);
+            types.addImport("text_trim", text_trim);
 
             const segmentation = owner.createModule(.{ .root_source_file = owner.path("src/segmentation/segmentation.zig") });
             segmentation.addImport("tables", tables);
@@ -98,6 +108,7 @@ pub fn build(b: *std.Build) void {
                 .types = types,
                 .tables = tables,
                 .encoding = encoding,
+                .text_trim = text_trim,
                 .segmentation = segmentation,
                 .linebreak = linebreak,
                 .normalization = normalization,

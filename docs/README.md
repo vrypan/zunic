@@ -152,6 +152,8 @@ Offsets describe `bytes[start.value..end.value]` in the original input.
 Columns follow Zunic's terminal width policy. `.grapheme` allows wrapping
 inside an otherwise unbreakable word; `.allow` lets it exceed the limit.
 Neither splits an individual grapheme cluster. A zero width is `InvalidWidth`.
+Both `Span` and `MeasuredSpan` also have `isWhitespace(bytes: []const u8) bool`;
+see [trim](trim/README.md#the-predicate-itself).
 
 NFKC/NFKD and stream-safe normalization are not available in the current API.
 
@@ -180,3 +182,9 @@ The runnable versions are in [examples.zig](examples.zig), covered by
 These pages cover the text-facing API. The separately exported `utf8`,
 `line_break`, and `testing` namespaces are lower-level facilities; see their
 source documentation when composing custom scanners or work-bound tests.
+
+`span.isWhitespace(bytes)` (also on `MeasuredSpan`) answers the same
+`White_Space` question `Text.trim()` uses, for any span you already have --
+for example, an escape-aware trim built over `Terminal.tokens()` that decides
+for itself whether a styled space is content or padding. See
+[trim](trim/README.md#the-predicate-itself).
