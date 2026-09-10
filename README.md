@@ -2,8 +2,9 @@
 
 Allocation-free Unicode primitives for Zig 0.16.0 or later.
 
-Measure width, iterate graphemes and words, wrap text, find line endings, and
-normalize Unicode. Strip ANSI escapes or track formatting as you iterate.
+Measure width, iterate graphemes and words, wrap text, find line endings, trim
+whitespace, and normalize Unicode. Strip ANSI escapes or track formatting as
+you iterate.
 
 > [!CAUTION] 
 >
@@ -139,6 +140,7 @@ Zunic uses **Unicode 16.0.0** data:
 | [UAX #14: Unicode Line Breaking Algorithm](https://www.unicode.org/reports/tr14/tr14-53.html) | Line-break opportunities and hard terminators |
 | [UAX #11: East Asian Width](https://www.unicode.org/reports/tr11/tr11-43.html) | Width properties used by Zunic's terminal-column policy |
 | [UAX #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/) | NFC, NFD, and canonical equality |
+| [UAX #44: Unicode Character Database](https://www.unicode.org/reports/tr44/tr44-36.html) | The `White_Space` property used by trimming |
 
 Terminal column counts and line fitting are Zunic policies built on these rules
 and properties. See the [known line-break limitation](docs/wrap/implementation.md#known-limitation).
@@ -158,6 +160,7 @@ implementation decisions:
 [Wrap](docs/wrap/README.md) ·
 [Terminators](docs/terminators/README.md) ·
 [Word boundaries](docs/word-bounds/README.md) ·
+[Trim](docs/trim/README.md) ·
 [Normalization](docs/normalization/README.md) ·
 [Terminal text](docs/terminal/README.md)
 

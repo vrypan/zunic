@@ -8,6 +8,7 @@ const width_engine = @import("layout").width;
 const normalization = @import("normalization");
 const word_engine = @import("segmentation").word;
 const wrap_engine = @import("layout").wrap;
+const text_trim = @import("text_trim.zig");
 
 const types = @import("types");
 pub const ByteOffset = types.ByteOffset;
@@ -202,6 +203,44 @@ pub const Text = struct {
     /// UTF-8 after a decisive `no` is still reported.
     pub fn isNormalizedQuick(self: Text, comptime form: normalization.Form) error{InvalidUtf8}!normalization.QuickCheck {
         return normalization.isNormalizedQuick(self.bytes, form);
+    }
+
+    /// This text without Unicode whitespace at either end.
+    ///
+    /// The result borrows the same storage, so keep it alive and unchanged.
+    /// Offsets from the returned view are relative to *its* bytes, not to the
+    /// untrimmed input.
+    ///
+    /// Whitespace is Unicode 16.0.0 `White_Space`, all 25 code points of it:
+    /// U+0009..U+000D, U+0020, U+0085, U+00A0, U+1680, U+2000..U+200A,
+    /// U+2028, U+2029, U+202F, U+205F and U+3000. No-break spaces are
+    /// trimmed; U+200B, U+FEFF, U+2060, NUL and DEL are not.
+    ///
+    /// Trimming works on code points, not graphemes: a leading space followed
+    /// by a combining mark loses the space and keeps the mark. Escape bytes
+    /// get no special treatment, so an `ESC` ends a scan like any other
+    /// content.
+    ///
+    /// Malformed UTF-8 ends a scan without an error, and the two ends are
+    /// independent, so `" \xff "` trims to `"\xff"`. Interior bytes are never
+    /// examined. Call `validate()` when strict input is required.
+    pub fn trim(self: Text) Text {
+        const rest = self.bytes[text_trim.startIndex(self.bytes)..];
+        if (rest.len == 0) return .{ .bytes = rest };
+        return .{ .bytes = rest[0..text_trim.endIndex(rest)] };
+    }
+
+    /// This text without leading Unicode whitespace. The far end is not
+    /// inspected. See `trim` for the whitespace set and the borrowing rules.
+    pub fn trimStart(self: Text) Text {
+        return .{ .bytes = self.bytes[text_trim.startIndex(self.bytes)..] };
+    }
+
+    /// This text without trailing Unicode whitespace. Scanning starts at the
+    /// end, never from the beginning. See `trim` for the whitespace set and
+    /// the borrowing rules.
+    pub fn trimEnd(self: Text) Text {
+        return .{ .bytes = self.bytes[0..text_trim.endIndex(self.bytes)] };
     }
 
     /// Greedy display lines within a finite column limit.

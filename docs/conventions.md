@@ -46,10 +46,12 @@ later content joins across an escape, `EscapeInsideGrapheme` is returned then;
 a grapheme prefix and intervening commands may already have been emitted.
 There is no rollback. Stripping does not perform that boundary check.
 
-Grapheme, word, width, and wrap operations tolerate malformed UTF-8, advancing
-one byte at a time on decoding errors. They retain original byte offsets and
-do not rewrite the input. A span can therefore contain malformed bytes.
-Terminators scan for exact byte sequences and are not a UTF-8 validator.
+Grapheme, word, width, wrap, and trim operations tolerate malformed UTF-8,
+advancing one byte at a time on decoding errors. They retain original byte
+offsets and do not rewrite the input. A span can therefore contain malformed
+bytes.
+Terminators scan for exact byte sequences and are not a UTF-8 validator. The
+trim methods stop at a malformed sequence at the edge they scan and retain it.
 
 Call `try text.validate()` when an operation should require valid UTF-8. It
 checks the complete slice directly, without grapheme iteration or Unicode
@@ -71,8 +73,10 @@ See [normalization error semantics](normalization/README.md#errors-and-partial-r
 
 Constructing grapheme, word, terminator, wrap, and normalization views does no
 input traversal. `wrap` checks the width option immediately. Creating a word
-iterator reads its first character to initialize its state. Further work happens
-on `next`, `count`, `width`, or a normalization query.
+iterator reads its first character to initialize its state. Further work
+happens on `next`, `count`, `width`, or a normalization query. The trim methods
+are the exception among `Text` methods that return a view: each one scans its
+edges when called and returns the narrowed slice.
 
 Lazy does not mean zero lookahead: grapheme boundaries need a following token,
 word rules may look past ignored marks, and normalization buffers a combining

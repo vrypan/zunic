@@ -173,3 +173,39 @@ test "terminal SGR effects expose affected fields and unhandled parameters" {
         .hyperlink, .other => unreachable,
     }
 }
+
+test "docs: trim and print" {
+    const input = "\u{00a0} Hello, 世界! \n";
+    const trimmed = zunic.text(input).trim();
+    // Print the retained bytes; the result borrows `input`.
+    try std.testing.expectEqualStrings("Hello, 世界!", trimmed.bytes);
+    try std.testing.expectEqual(@as(usize, 12), trimmed.width());
+
+    // Offsets from the trimmed view index the trimmed bytes.
+    var graphemes = trimmed.graphemes().iterator();
+    const first = graphemes.next().?;
+    try std.testing.expectEqualStrings("H", trimmed.bytes[first.start.value..first.end.value]);
+
+    // One end at a time.
+    try std.testing.expectEqualStrings("hi  ", zunic.text("  hi  ").trimStart().bytes);
+    try std.testing.expectEqualStrings("  hi", zunic.text("  hi  ").trimEnd().bytes);
+
+    // Whitespace is Unicode 16.0.0 White_Space: no-break spaces go, zero-width
+    // characters stay, and a malformed edge byte stops the scan.
+    try std.testing.expectEqualStrings("x", zunic.text("\u{202F}x\u{3000}").trim().bytes);
+    try std.testing.expectEqualStrings("\u{200B}x\u{FEFF}", zunic.text("\u{200B}x\u{FEFF}").trim().bytes);
+    try std.testing.expectEqualStrings("\xff", zunic.text(" \xff ").trim().bytes);
+}
+
+test "docs: trim then chain" {
+    const trimmed = zunic.text("  cafe\u{0301} \u{3000}").trim();
+    try std.testing.expectEqualStrings("cafe\u{0301}", trimmed.bytes);
+    try std.testing.expectEqual(@as(usize, 4), trimmed.width());
+    try std.testing.expect(try trimmed.eql("caf\u{00E9}", .canonical));
+
+    var buffer: [16]u8 = undefined;
+    try std.testing.expectEqualStrings("caf\u{00E9}", try trimmed.normalize(.nfc).writeTo(&buffer));
+
+    const wrapped = try zunic.text("  alpha beta gamma  ").trim().wrap(.{ .max_columns = 10 });
+    try std.testing.expectEqual(@as(usize, 2), wrapped.count());
+}

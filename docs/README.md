@@ -27,6 +27,9 @@ pub fn validate(self: Text) error{InvalidUtf8}!void;
 pub fn graphemes(self: Text) Graphemes;
 pub fn width(self: Text) usize;
 pub fn wrap(self: Text, options: WrapOptions) error{InvalidWidth}!Wrapped;
+pub fn trim(self: Text) Text;
+pub fn trimStart(self: Text) Text;
+pub fn trimEnd(self: Text) Text;
 pub fn terminators(self: Text) Terminators;
 pub fn wordBounds(self: Text) WordBounds;
 pub fn normalize(self: Text, comptime form: Form) NormalizationIterator(form);
@@ -41,10 +44,13 @@ pub fn stripAnsi(self: Terminal, buffer: []u8) error{NoSpace}![]u8;
 ```
 
 `text()` borrows the bytes without scanning or allocating. `validate()` checks
-the complete slice. Grapheme, word, width, and wrap operations tolerate invalid
-UTF-8; normalization rejects it when encountered. The quick normalization check
-always scans the whole input and can return `.maybe`; `isNormalized()` resolves
-the answer to a boolean and may stop early. See [conventions](conventions.md)
+the complete slice. Grapheme, word, width, wrap, and trim operations tolerate
+invalid UTF-8; normalization rejects it when encountered. The trim methods
+return another borrowed `Text` over the retained bytes, whose offsets are
+relative to that result rather than to the untrimmed input; see
+[trim](trim/README.md). The quick normalization check always scans the whole
+input and can return `.maybe`; `isNormalized()` resolves the answer to a
+boolean and may stop early. See [conventions](conventions.md)
 and [normalization](normalization/README.md) for the error and buffer contracts.
 
 `terminal()` also borrows without scanning. `tokens()` returns grapheme and
@@ -158,6 +164,7 @@ NFKC/NFKD and stream-safe normalization are not available in the current API.
 | Greedy display lines | [wrap](wrap/README.md) | [Fused scanning, bounded work, and fast paths](wrap/implementation.md) |
 | Hard line terminators | [terminators](terminators/README.md) | [Why byte scanning is sufficient](terminators/implementation.md) |
 | Default word boundaries | [wordBounds](word-bounds/README.md) | [Decision tables and selective lookahead](word-bounds/implementation.md) |
+| Unicode whitespace trimming | [trim](trim/README.md) | [ASCII shortcut and bounded backward decoding](trim/implementation.md) |
 | NFC/NFD and canonical equality | [normalization](normalization/README.md) | [Bounded runs and quick checks](normalization/implementation.md) |
 | Terminal tokens and escape removal (draft) | [terminal](terminal/README.md) | [Escape scanning and next steps](terminal/implementation.md) |
 

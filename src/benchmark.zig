@@ -25,7 +25,9 @@ const corpora = @import("corpora.zig");
 // Version 10 adds terminal tokens and byte-only ANSI stripping.
 // Version 11 adds state-consuming terminal traversal; existing rows are unchanged.
 // Version 12 consumes escape effects, including affected fields and unhandled.
-const harness_version = "12";
+// Version 13 adds the trim rows and their dedicated corpora. Every earlier row
+// name, corpus and checksum is untouched.
+const harness_version = "13";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
 const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
@@ -180,6 +182,53 @@ fn terminalStateErrorChecksum(bytes: []const u8) u64 {
     return tokenChecksum(bytes, true, true);
 }
 
+/// Trimming only. These rows are timed per *call*, not per byte: the cost is
+/// the whitespace removed plus one bounded look at the first retained scalar,
+/// so dividing by input size would describe nothing. They carry
+/// `traversal=edges`, `work_bytes` is the call count, and `mib_per_s` is
+/// therefore not a throughput -- compare `elapsed_ns` between rows.
+///
+/// Every case runs the same number of calls, which is what makes the `clean`
+/// pair a test rather than a datum: `trim-ascii-64-clean` and
+/// `trim-ascii-64k-clean` differ by a factor of 1024 in input size and must
+/// take the same time. A large `trim-ascii-64k-clean` would mean something is
+/// reading the middle of the input.
+const TrimCase = struct {
+    name: []const u8,
+    prefix: []const u8 = "",
+    seed: []const u8,
+    length: usize,
+    suffix: []const u8 = "",
+};
+
+const trim_cases = [_]TrimCase{
+    .{ .name = "trim-ascii-64-clean", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 64 },
+    .{ .name = "trim-ascii-64-padded", .prefix = "  \t", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 64, .suffix = " \n" },
+    .{ .name = "trim-ascii-64k-clean", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 65536 },
+    .{ .name = "trim-ascii-64k-padded", .prefix = "  \t", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 65536, .suffix = " \n" },
+    // The only rows whose cost really is proportional to the input.
+    .{ .name = "trim-all-space-4k", .seed = " ", .length = 4096 },
+    .{ .name = "trim-all-unicode-space-4k", .seed = "\u{3000}\u{00A0}\u{2003}\u{205F}", .length = 4096 },
+    // Mixed Unicode whitespace: one end, then both.
+    .{ .name = "trim-unicode-edge-start", .prefix = "\u{3000}\u{00A0}\u{2003}\u{202F}\u{205F}\u{1680}\u{2028} ", .seed = "\u{65E5}\u{672C}\u{8A9E}\u{306E}\u{6587}\u{7AE0} ", .length = 4096 },
+    .{ .name = "trim-unicode-edge-both", .prefix = "\u{3000}\u{00A0}\u{2003}\u{202F}\u{205F}\u{1680}\u{2028} ", .seed = "\u{65E5}\u{672C}\u{8A9E}\u{306E}\u{6587}\u{7AE0} ", .length = 4096, .suffix = " \u{2029}\u{200A}\u{0085}\u{3000}" },
+    // Whitespace, then a malformed sequence that has to stop the scan without
+    // searching backwards through the run of continuation bytes.
+    .{ .name = "trim-malformed-edges", .prefix = "  \xff\xc0\x80", .seed = "ok \xff \xc0\x80 text ", .length = 4096, .suffix = "\xf0\x9f\x98  " },
+};
+
+fn makeTrimCorpus(allocator: std.mem.Allocator, case: TrimCase) ![]u8 {
+    // Whole seed repetitions only, so a multi-byte scalar is never cut in half.
+    const repeats = @max(@as(usize, 1), case.length / case.seed.len);
+    const body = case.seed.len * repeats;
+    const text = try allocator.alloc(u8, case.prefix.len + body + case.suffix.len);
+    @memcpy(text[0..case.prefix.len], case.prefix);
+    for (0..repeats) |index|
+        @memcpy(text[case.prefix.len + index * case.seed.len ..][0..case.seed.len], case.seed);
+    @memcpy(text[case.prefix.len + body ..], case.suffix);
+    return text;
+}
+
 const wrap_cases = [_]WrapCase{
     .{ .name = "ascii-words-4k-grapheme-full", .corpus = .{ .name = "ascii-words", .seed = "alpha beta gamma delta epsilon zeta eta theta ", .length = 4096 }, .max_columns = 40, .overflow = .grapheme },
     .{ .name = "ascii-words-4k-allow-full", .corpus = .{ .name = "ascii-words", .seed = "alpha beta gamma delta epsilon zeta eta theta ", .length = 4096 }, .max_columns = 40, .overflow = .allow },
@@ -242,6 +291,15 @@ pub fn main(init: std.process.Init) !void {
         try printSamples(output, name, "nfc_quick", text, target_bytes, nfcQuickChecksum, io);
         try printSamples(output, name, "nfd_quick", text, target_bytes, nfdQuickChecksum, io);
         try printSamples(output, name, "eql", text, target_bytes, eqlChecksum, io);
+    }
+    // Scaled off target_bytes so `--smoke` stays quick; a byte budget would
+    // give the 64 KB rows too few calls to time.
+    const trim_calls = @max(@as(usize, 1024), target_bytes / 64);
+    for (trim_cases) |case| {
+        const text = try makeTrimCorpus(allocator, case);
+        try printTrimSamples(output, case.name, "trim", text, trim_calls, trimChecksum, io);
+        try printTrimSamples(output, case.name, "trim_start", text, trim_calls, trimStartChecksum, io);
+        try printTrimSamples(output, case.name, "trim_end", text, trim_calls, trimEndChecksum, io);
     }
     for (wrap_cases) |case| try printWrapSamples(output, case, try makeCorpus(allocator, case.corpus), target_bytes, io);
     try runDocumentCorpora(output, allocator, target_bytes, io);
@@ -394,6 +452,23 @@ fn printSamples(output: *std.Io.Writer, corpus: []const u8, operation: []const u
         std.mem.doNotOptimizeAway(checksum);
         const elapsed = start.durationTo(std.Io.Clock.Timestamp.now(io, .awake)).raw.toNanoseconds();
         try printSample(output, corpus, operation, "full", text.len, iterations, elapsed, checksum, text.len * iterations, null, null);
+    }
+}
+
+/// Fixed call count, so `elapsed_ns` is comparable across inputs of different
+/// sizes. See the `trim_cases` comment for why bytes are the wrong denominator.
+fn printTrimSamples(output: *std.Io.Writer, case: []const u8, operation: []const u8, text: []u8, calls: usize, comptime checksumFn: fn ([]const u8) u64, io: std.Io) !void {
+    std.mem.doNotOptimizeAway(checksumFn(text));
+    for (0..sample_count) |_| {
+        const start = std.Io.Clock.Timestamp.now(io, .awake);
+        var checksum: u64 = 0;
+        for (0..calls) |_| {
+            std.mem.doNotOptimizeAway(text);
+            checksum +%= checksumFn(text);
+        }
+        std.mem.doNotOptimizeAway(checksum);
+        const elapsed = start.durationTo(std.Io.Clock.Timestamp.now(io, .awake)).raw.toNanoseconds();
+        try printSample(output, case, operation, "edges", text.len, calls, elapsed, checksum, calls, null, null);
     }
 }
 
@@ -554,6 +629,22 @@ fn wordChecksum(text: []const u8) u64 {
         sum = mix(sum, @intFromBool(segment.is_word));
     }
     return sum;
+}
+/// The retained slice's offset and length, and nothing else. Hashing the
+/// retained body would add a full pass over bytes trimming never reads, hiding
+/// the edge-only cost these rows exist to show.
+inline fn retainedChecksum(result: zunic.Text, text: []const u8) u64 {
+    const start = @intFromPtr(result.bytes.ptr) - @intFromPtr(text.ptr);
+    return mix(mix(0xcbf29ce484222325, start), result.bytes.len);
+}
+fn trimChecksum(text: []const u8) u64 {
+    return retainedChecksum(zunic.text(text).trim(), text);
+}
+fn trimStartChecksum(text: []const u8) u64 {
+    return retainedChecksum(zunic.text(text).trimStart(), text);
+}
+fn trimEndChecksum(text: []const u8) u64 {
+    return retainedChecksum(zunic.text(text).trimEnd(), text);
 }
 const WrapResult = struct { checksum: u64, lines: usize, emitted_bytes: usize };
 fn wrapChecksum(text: []const u8, case: WrapCase) WrapResult {
