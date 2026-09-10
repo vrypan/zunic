@@ -1,0 +1,16 @@
+[package]
+name = "unicode-words-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "unicode-words-bench"
+path = "src/main.rs"
+
+[dependencies]
+unicode-segmentation = "=1.13.3"
+
+[profile.release]
+lto = true
+codegen-units = 1

@@ -162,3 +162,7 @@ implementation decisions:
 Run `zig build test` for the test suite or `zig build docs-test` for the
 documentation examples. Build options and verification details are in
 [the architecture notes](docs/internals/README.md).
+
+Rust comparison benchmarks live in [bench-vs-rust/](bench-vs-rust/README.md).
+Run `make -C bench-vs-rust build`, `test`, or `bench` from a source checkout.
+Cargo fetches the pinned Rust dependencies when needed.

@@ -1,0 +1,10 @@
+.{
+    .name = .zunic_graphemes,
+    .version = "0.0.0",
+    .fingerprint = 0xdc2c384446446709,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .zunic = .{ .path = "../.." },
+    },
+    .paths = .{""},
+}

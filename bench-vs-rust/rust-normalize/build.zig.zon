@@ -1,0 +1,8 @@
+.{
+    .name = .zunic_normalization_compare,
+    .version = "0.0.0",
+    .fingerprint = 0x3a1fed25d63db708,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{ .zunic = .{ .path = "../.." } },
+    .paths = .{ "build.zig", "build.zig.zon", "zunic-normalize.zig" },
+}

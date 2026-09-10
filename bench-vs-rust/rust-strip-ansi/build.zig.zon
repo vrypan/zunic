@@ -1,0 +1,10 @@
+.{
+    .name = .zunic_rust_strip_ansi,
+    .version = "0.0.0",
+    .fingerprint = 0xc1c41550bce8674e,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .zunic = .{ .path = "../.." },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "zunic-strip-ansi.zig", "texts" },
+}

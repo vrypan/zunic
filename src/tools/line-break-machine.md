@@ -102,7 +102,7 @@ check seeded longer streams and malformed byte tails, repeat queries, and
 consume copied state without querying. Run them independently with
 `zig build line-break-tests`.
 
-Private `rust-comparison/verify-semantic.zig` checks full ordered boundary
+`bench-vs-rust/rust-linebreak/verify-semantic.zig` checks full ordered boundary
 streams between Iterator and direct machine State on all eight real corpora.
 These and the exhaustive Zig protocol tests check integration consistency,
 not independent rule correctness. The pinned Unicode fixtures remain the

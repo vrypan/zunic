@@ -1,0 +1,8 @@
+target/
+.zig-cache/
+.zig-global-cache/
+zig-out/
+__pycache__/
+.ucd/
+/benchmarks/
+/texts/

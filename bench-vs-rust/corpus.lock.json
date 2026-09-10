@@ -1,0 +1,17 @@
+{
+  "repository": "unicode-rs/unicode-segmentation",
+  "revision": "048d51fe1d9bac5ca7c56226d3a4b42f21d70be2",
+  "directory": "benches/texts",
+  "files": {
+    "arabic.txt": "db8423b08db6c7ebaada28932301dd74c7a70f3d59868de0d23e81ebc108cc20",
+    "english.txt": "f64b2f1cde8ebd44fb750308f64ffd30a2050c1f8a98f8276c73989850539ead",
+    "hindi.txt": "66c59fc9db6cb0ab162b365cecf3a29be4013bfd21159bf6dc089dbb31876af7",
+    "japanese.txt": "d14163c2a547db8556a2b04a5af1696fadd9ce9bf1370eb17f07808fbd330cbf",
+    "korean.txt": "9cf9c4bae6bab1212c06f74b2ebef53a15d6326801d919c0d997d177c3b7a161",
+    "mandarin.txt": "91672f89bb105a248b66a16e5fa42817a37bc85599c368f5513952a828f99b19",
+    "russian.txt": "fd14624f0431ddf13ebaf7f77cf3551fa2eabdcec4e4fe29e94d515604fe915f",
+    "source_code.txt": "23d7e4142f90064f96d1b045f502aeb83891b4a9c7382beba577f6f6fa5b4eaa",
+    "README": "e66a8f397c886494c86293c94b926389946bbd38a09094d4a10e7e39123435ad",
+    "LICENSE": "3f941b3b89cf7b8370ceb83cc76d2120d471b58735d8ca60238a751a48d7f72f"
+  }
+}

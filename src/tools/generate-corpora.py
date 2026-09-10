@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Derive benchmark corpus profiles from reference documents.
 
-Reads the licensed reference documents under private/rust-comparison/texts and
+Reads the licensed reference documents under bench-vs-rust/texts and
 emits src/corpora.zig. Only *unigram* statistics leave this script: a code point
 frequency table, a word-length distribution and a line-length distribution. No
 n-gram, no ordering and no substring of the sources is retained, so the emitted
@@ -15,7 +15,7 @@ import sys
 import unicodedata
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SOURCES = ROOT.parent / "private" / "rust-comparison" / "texts"
+SOURCES = ROOT.parent / "bench-vs-rust" / "texts"
 OUT = ROOT / "corpora.zig"
 NAMES = ("arabic", "english", "hindi", "japanese", "korean", "mandarin", "russian", "source_code")
 # Quantise weights so the tables stay small and the file stays stable under

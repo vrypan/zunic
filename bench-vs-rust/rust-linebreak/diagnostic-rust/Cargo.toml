@@ -1,0 +1,15 @@
+[package]
+name = "zunic-line-break-diagnostic"
+version = "0.0.0"
+edition = "2021"
+
+[[bin]]
+name = "diagnostic"
+path = "../diagnostic.rs"
+
+[dependencies]
+unicode-linebreak = "=0.1.5"
+
+[profile.release]
+lto = true
+codegen-units = 1
