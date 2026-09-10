@@ -21,10 +21,8 @@ normalize Unicode. Strip ANSI escapes or track formatting as you iterate.
 
 ## Install
 
-This README describes the development API on the `dev` branch.
-
 ```sh
-zig fetch --save git+https://github.com/vrypan/zunic.git#dev
+zig fetch --save git+https://github.com/vrypan/zunic.git#v0.3.0
 ```
 
 In your application's `build.zig`:
