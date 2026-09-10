@@ -13,6 +13,7 @@ formatting in `it.state: zunic.TerminalState`.
 
 ```zig
 pub fn terminal(bytes: []const u8) Terminal;
+pub fn isAscii(self: Terminal) bool;
 pub fn tokens(self: Terminal) TerminalTokens;
 pub fn stripAnsi(self: Terminal, buffer: []u8) error{NoSpace}![]u8;
 ```
@@ -20,6 +21,14 @@ pub fn stripAnsi(self: Terminal, buffer: []u8) error{NoSpace}![]u8;
 Opening the view does not scan or allocate. `Terminal.bytes` borrows the input.
 Keep that storage alive and unchanged while iterating. This API is a first draft;
 there is no terminal-aware width or wrapping operation yet.
+
+`isAscii()` scans the raw bytes exactly as given -- no escape parsing, no
+state tracking, no restriction to visible content. An all-ASCII escape
+sequence counts as ASCII even if incomplete; a non-ASCII byte inside an OSC
+payload fails the check even though `stripAnsi()` would remove it. It is a
+byte-range test, not UTF-8 validation and not a check on what a terminal
+would render. Scans the whole slice every call, with no cache. Over the same
+raw bytes, it always agrees with `zunic.text(bytes).isAscii()`.
 
 ## Operations
 

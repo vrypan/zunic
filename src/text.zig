@@ -9,6 +9,7 @@ const normalization = @import("normalization");
 const word_engine = @import("segmentation").word;
 const wrap_engine = @import("layout").wrap;
 const text_trim = @import("text_trim.zig");
+const ascii_scan = @import("encoding").ascii;
 
 const types = @import("types");
 pub const ByteOffset = types.ByteOffset;
@@ -128,6 +129,15 @@ pub const Text = struct {
     /// input whether or not this method is called.
     pub fn validate(self: Text) error{InvalidUtf8}!void {
         if (!std.unicode.utf8ValidateSlice(self.bytes)) return error.InvalidUtf8;
+    }
+
+    /// Whether every byte is below 0x80. Empty input is ASCII, and so is any
+    /// ASCII control byte, including NUL, ESC, and DEL. A high byte fails
+    /// this whether it belongs to valid UTF-8 or to malformed input -- this
+    /// is a byte-range test, not UTF-8 validation. Scans the whole slice
+    /// every call; there is no cache.
+    pub fn isAscii(self: Text) bool {
+        return ascii_scan.isAscii(self.bytes);
     }
 
     /// Extended grapheme clusters. Call `.measured()` on the result for

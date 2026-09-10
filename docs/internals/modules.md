@@ -11,7 +11,7 @@ something a reviewer has to notice.
 | --- | --- | --- |
 | `tables` | generated Unicode data | nothing |
 | `types` | shared byte positions, spans, and display measurements | nothing |
-| `encoding` | UTF-8 stepping, scalar plus its record | `tables` |
+| `encoding` | UTF-8 stepping, scalar plus its record, whole-slice ASCII check | `tables` |
 | `segmentation` | grapheme clusters, word bounds | `tables`, `encoding` |
 | `linebreak` | UAX #14 opportunities and its machine | `tables`, `encoding` |
 | `normalization` | NFC and NFD | `tables`, `encoding` |

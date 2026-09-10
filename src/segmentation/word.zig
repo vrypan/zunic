@@ -10,6 +10,7 @@
 //! emitted as their own spans, flagged `is_word = false`.
 const std = @import("std");
 const utf8 = @import("encoding").utf8;
+const ascii_scan = @import("encoding").ascii;
 const word_properties = @import("tables").word;
 const ascii = @import("word_ascii.zig");
 
@@ -412,7 +413,7 @@ fn IteratorImpl(comptime tabled: bool, comptime instrumented: bool) type {
             // and punctuation lookahead can reach beyond an ASCII run.
             if (tabled and self.ascii_mode != .unicode) {
                 if (self.ascii_mode == .unknown) {
-                    self.ascii_mode = if (ascii.allAscii(self.bytes)) .ascii else .unicode;
+                    self.ascii_mode = if (ascii_scan.isAscii(self.bytes)) .ascii else .unicode;
                 }
                 if (self.ascii_mode == .ascii) {
                     const start = self.start;

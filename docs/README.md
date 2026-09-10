@@ -5,7 +5,7 @@ that matches the input:
 
 | View | Entry point | Operations |
 | --- | --- | --- |
-| [Text](text/README.md) | `zunic.text(bytes)` | Graphemes, width, wrapping, trimming, terminators, words, normalization, validation |
+| [Text](text/README.md) | `zunic.text(bytes)` | Graphemes, width, wrapping, trimming, terminators, words, normalization, validation, ASCII check |
 | [Terminal](terminal/README.md) | `zunic.terminal(bytes)` | Grapheme and escape tokens, formatting state, ANSI stripping |
 
 Both expose their borrowed input as `.bytes`. To use plain-text operations on
@@ -36,6 +36,7 @@ pub fn trim(self: Text) Text;
 pub fn trimStart(self: Text) Text;
 pub fn trimEnd(self: Text) Text;
 pub fn isWhitespace(self: Text, span: anytype) bool;
+pub fn isAscii(self: Text) bool;
 pub fn terminators(self: Text) Terminators;
 pub fn wordBounds(self: Text) WordBounds;
 pub fn normalize(self: Text, comptime form: Form) NormalizationIterator(form);
@@ -108,6 +109,8 @@ Columns follow Zunic's cell width policy. `.grapheme` allows wrapping
 inside an otherwise unbreakable word; `.allow` lets it exceed the limit.
 Neither splits an individual grapheme. A zero width is `InvalidWidth`.
 `isWhitespace(span)` accepts a `Span` or `MeasuredSpan` from the same Text slice.
+`isAscii()` scans the whole slice on every call, with no cache; it is a
+byte-range test, not UTF-8 validation.
 
 `isNormalizedQuick()` scans the whole input and can return `.maybe`;
 `isNormalized()` resolves the answer to a boolean and may stop early.
@@ -116,9 +119,16 @@ NFKC/NFKD and stream-safe normalization are not available.
 ### Terminal
 
 ```zig
+pub fn isAscii(self: Terminal) bool;
 pub fn tokens(self: Terminal) TerminalTokens;
 pub fn stripAnsi(self: Terminal, buffer: []u8) error{NoSpace}![]u8;
 ```
+
+`isAscii()` scans the raw bytes exactly as given: no escape parsing, no state
+tracking, no restriction to visible content. An all-ASCII escape sequence
+counts as ASCII even if incomplete; a non-ASCII byte inside an OSC payload
+fails the check even though stripping would remove it. Scans the whole slice
+every call, with no cache.
 
 #### Terminal iterator
 
@@ -181,10 +191,19 @@ pub const Span = struct { start: ByteOffset, end: ByteOffset };
 // Whitespace helpers for decoded scalars or byte slices.
 pub fn isWhitespace(cp: u21) bool;
 pub fn isWhitespaceSlice(glyph: []const u8) bool;
+
+// Whether every byte in a slice is below 0x80. `Text.isAscii()` and
+// `Terminal.isAscii()` are the same check on a view's own bytes.
+pub fn isAscii(bytes: []const u8) bool;
 ```
 
 Spans describe `bytes[start.value..end.value]` in the view's input slice.
-Offsets count bytes; columns count display cells.
+Offsets count bytes; columns count display cells. `isAscii` is a byte-range
+test: empty input and every ASCII control byte, including NUL, ESC, and DEL,
+count as ASCII; a high byte fails the check whether it belongs to valid UTF-8
+or to malformed input. It is not UTF-8 validation and not a printable-text
+check. `std.ascii.isAscii` checks one byte; this checks a whole slice with a
+vectorized scan (SIMD where the target supports it) and a scalar tail.
 
 ## Detailed documentation
 

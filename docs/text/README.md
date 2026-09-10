@@ -19,6 +19,11 @@ is malformed. It does not change the view or later operations. Grapheme, word,
 width, wrap, and trim operations tolerate malformed UTF-8; normalization reports
 it when encountered. Terminators scan exact byte sequences.
 
+`view.isAscii()` is a different, narrower question: a plain byte-range test
+(every byte below `0x80`), not a UAX algorithm and not UTF-8 validation. Empty
+input and every ASCII control byte, including NUL, ESC, and DEL, count as
+ASCII. It scans the whole slice on every call; there is no cache.
+
 ## Operations
 
 | Method | Result | API and examples | Implementation |
@@ -28,6 +33,7 @@ it when encountered. Terminators scan exact byte sequences.
 | `wrap(options)` | View of display lines | [Wrap](wrap/README.md) | [Decisions](wrap/implementation.md) |
 | `trim()`, `trimStart()`, `trimEnd()` | Text over the retained bytes | [Trim](trim/README.md) | [Decisions](trim/implementation.md) |
 | `isWhitespace(span)` | Whether a span contains exactly one whitespace scalar | [Whitespace predicate](trim/README.md#the-predicate-itself) | [Decisions](trim/implementation.md) |
+| `isAscii()` | Whether every byte is below 0x80 | [API overview](../README.md#shared-positions-and-helpers) | -- |
 | `terminators()` | View of hard line terminator spans | [Terminators](terminators/README.md) | [Decisions](terminators/implementation.md) |
 | `wordBounds()` | View of word and non-word spans | [Word boundaries](word-bounds/README.md) | [Decisions](word-bounds/implementation.md) |
 | `normalize(form)` | Normalization iterator with UTF-8 buffer output | [Normalization](normalization/README.md) | [Decisions](normalization/implementation.md) |

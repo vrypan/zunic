@@ -153,6 +153,7 @@ pub fn build(b: *std.Build) void {
         .{ .path = "src/root_test.zig", .group = "api", .grants = &.{ .api, .tables, .layout } },
         .{ .path = "src/terminal_test.zig", .group = "terminal", .grants = &.{.api} },
         .{ .path = "src/trim_test.zig", .group = "trim", .grants = &.{.api} },
+        .{ .path = "src/ascii_test.zig", .group = "ascii", .grants = &.{.api} },
         // The stripping root deliberately has no Unicode-engine imports.
         .{ .path = "src/terminal/strip_test.zig", .group = "terminal", .grants = &.{.none} },
         .{ .path = "docs/examples.zig", .group = "api", .grants = &.{.api} },

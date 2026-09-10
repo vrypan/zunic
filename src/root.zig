@@ -99,6 +99,17 @@ pub const isWhitespace = text_trim.isWhitespace;
 /// definition.
 pub const isWhitespaceSlice = text_trim.isWhitespaceSlice;
 
+/// Whether every byte in `bytes` is below 0x80. Empty input is ASCII, and so
+/// is any ASCII control byte, including NUL, ESC, and DEL.
+///
+/// A plain byte-range test, not UTF-8 validation and not a printable-text
+/// check: a high byte fails this whether it belongs to valid UTF-8 or to
+/// malformed input. `std.ascii.isAscii` checks one byte; this checks a whole
+/// slice with a vectorized scan (SIMD where the target supports it) and a
+/// scalar tail. `Text.isAscii()` and `Terminal.isAscii()` are the same check
+/// on a view's own bytes.
+pub const isAscii = @import("encoding").ascii.isAscii;
+
 /// Instrumented wrapping is retained solely for zunic's work-bound tests.
 pub const testing = struct {
     pub const instrumentedIterator = wrap_engine.instrumentedIterator;

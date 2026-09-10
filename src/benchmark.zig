@@ -27,7 +27,9 @@ const corpora = @import("corpora.zig");
 // Version 12 consumes escape effects, including affected fields and unhandled.
 // Version 13 adds the trim rows and their dedicated corpora. Every earlier row
 // name, corpus and checksum is untouched.
-const harness_version = "13";
+// Version 14 adds the is_ascii rows and their dedicated corpora. Every
+// earlier row name, corpus and checksum is untouched.
+const harness_version = "14";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
 const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
@@ -292,6 +294,7 @@ pub fn main(init: std.process.Init) !void {
         try printSamples(output, name, "nfd_quick", text, target_bytes, nfdQuickChecksum, io);
         try printSamples(output, name, "eql", text, target_bytes, eqlChecksum, io);
     }
+    try runAsciiCases(output, allocator, target_bytes, io);
     // Scaled off target_bytes so `--smoke` stays quick; a byte budget would
     // give the 64 KB rows too few calls to time.
     const trim_calls = @max(@as(usize, 1024), target_bytes / 64);
@@ -620,6 +623,35 @@ fn eqlChecksum(text: []const u8) u64 {
 
 /// All three item fields, so a boundary shift and a flag error are both
 /// visible in the checksum.
+/// A false answer can stop at the first high byte; a true answer must scan
+/// every byte. `ascii-high-byte-start` and `ascii-high-byte-end` bracket
+/// that: one exits after the first vector chunk, the other only after
+/// scanning the whole slice, so a regression that lost the early exit shows
+/// up as `ascii-high-byte-start` drifting toward `ascii-long`'s rate rather
+/// than `ascii-high-byte-end`'s.
+fn runAsciiCases(output: *std.Io.Writer, allocator: std.mem.Allocator, target_bytes: usize, io: std.Io) !void {
+    const short = try makeCorpus(allocator, .{ .name = "ascii-short", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 96 });
+    try printSamples(output, "ascii-short", "is_ascii", short, target_bytes, asciiChecksum, io);
+
+    const long = try makeCorpus(allocator, .{ .name = "ascii-long", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 65536 });
+    try printSamples(output, "ascii-long", "is_ascii", long, target_bytes, asciiChecksum, io);
+
+    const high_start = try allocator.alloc(u8, 65536);
+    @memset(high_start, 'a');
+    high_start[0] = 0x80;
+    try printSamples(output, "ascii-high-byte-start", "is_ascii", high_start, target_bytes, asciiChecksum, io);
+
+    const high_end = try allocator.alloc(u8, 65536);
+    @memset(high_end, 'a');
+    high_end[high_end.len - 1] = 0x80;
+    try printSamples(output, "ascii-high-byte-end", "is_ascii", high_end, target_bytes, asciiChecksum, io);
+}
+
+/// The public entry point, same as any real caller reaches for.
+fn asciiChecksum(text: []const u8) u64 {
+    return mix(0xcbf29ce484222325, @intFromBool(zunic.text(text).isAscii()));
+}
+
 fn wordChecksum(text: []const u8) u64 {
     var it = zunic.text(text).wordBounds().iterator();
     var sum: u64 = 0xcbf29ce484222325;

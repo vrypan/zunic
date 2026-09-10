@@ -7,10 +7,22 @@ const formatting = @import("state.zig");
 pub const State = formatting.State;
 pub const StyleFields = formatting.StyleFields;
 const scalar = @import("encoding").scalar;
+const ascii_scan = @import("encoding").ascii;
 const grapheme = @import("segmentation").grapheme;
 
 pub const Terminal = struct {
     bytes: []const u8,
+
+    /// Whether every byte is below 0x80. Scans the raw bytes exactly as
+    /// given: no escape parsing, no state tracking, no restriction to
+    /// visible content. An all-ASCII escape sequence still counts, complete
+    /// or not; a non-ASCII byte inside an OSC payload still fails the check
+    /// even though stripping would remove it. A byte-range test, not UTF-8
+    /// validation, and not a check on what a terminal would render. Scans
+    /// the whole slice every call; there is no cache.
+    pub fn isAscii(self: Terminal) bool {
+        return ascii_scan.isAscii(self.bytes);
+    }
 
     /// Content and recognized escape commands in their original order.
     pub fn tokens(self: Terminal) Tokens {

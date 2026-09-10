@@ -263,3 +263,27 @@ test "docs: Text.isWhitespace composes with terminal tokens" {
     // The trailing space sits on a red background, so it is content and stays.
     try std.testing.expect(std.mem.indexOf(u8, styled[keep_from..], "\x1b[41m \x1b[0m") != null);
 }
+
+test "docs: isAscii on bytes, Text, and Terminal" {
+    // Same check, three entry points: a free function over raw bytes, and a
+    // method on each view over its own bytes.
+    try std.testing.expect(zunic.isAscii("Hello, world!"));
+    try std.testing.expect(zunic.text("Hello, world!").isAscii());
+    try std.testing.expect(zunic.terminal("Hello, world!").isAscii());
+
+    // A byte-range test, not UTF-8 validation: any byte 0x80 or above fails
+    // it, whether it is part of valid UTF-8 or malformed input.
+    try std.testing.expect(!zunic.isAscii("caf\u{00E9}"));
+    try std.testing.expect(!zunic.isAscii("\xff"));
+
+    // ASCII controls, including ESC, count as ASCII.
+    try std.testing.expect(zunic.isAscii("\x00\x1b\x7f"));
+
+    // Terminal.isAscii() scans raw bytes: it does not parse escapes, so an
+    // all-ASCII, incomplete escape sequence is still ASCII, but a non-ASCII
+    // byte inside an OSC payload fails the check even though stripAnsi()
+    // would remove it.
+    try std.testing.expect(zunic.terminal("\x1b[31mhi\x1b[0m").isAscii());
+    try std.testing.expect(zunic.terminal("\x1b[31").isAscii());
+    try std.testing.expect(!zunic.terminal("\x1b]0;caf\u{00E9}\x07").isAscii());
+}

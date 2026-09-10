@@ -2,18 +2,6 @@
 //! ASCII has no ignored marks, Hebrew letters, Katakana, or regional indicators.
 const std = @import("std");
 
-// Called once per traversal; keep the vector scan out of the per-segment code.
-pub noinline fn allAscii(bytes: []const u8) bool {
-    const width = std.simd.suggestVectorLength(u8) orelse 16;
-    var pos: usize = 0;
-    while (bytes.len - pos >= width) : (pos += width) {
-        const chunk: @Vector(width, u8) = bytes[pos..][0..width].*;
-        if (@reduce(.Or, chunk > @as(@Vector(width, u8), @splat(0x7f)))) return false;
-    }
-    for (bytes[pos..]) |byte| if (byte >= 0x80) return false;
-    return true;
-}
-
 pub const End = struct { offset: usize, is_word: bool };
 
 inline fn wordByte(byte: u8) bool {
