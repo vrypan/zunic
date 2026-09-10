@@ -5,6 +5,12 @@ Allocation-free Unicode primitives for Zig 0.16.0 or later.
 Measure width, iterate graphemes and words, wrap text, find line endings, and
 normalize Unicode. Strip ANSI escapes or track formatting as you iterate.
 
+> [!CAUTION] 
+>
+> If you are against using AI-generated code, **DO NOT** use this library in your projects.
+>
+> zunic development makes extensive use of AI tools, and AI-generated code can be found throughout the codebase.
+
 ## Why zunic
 
 - **Fast.** On par with corresponding Rust libraries in our benchmarks,
