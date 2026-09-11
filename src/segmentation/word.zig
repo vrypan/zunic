@@ -1,7 +1,7 @@
 //! Default UAX #29 word boundaries.
 //!
-//! Rules and property values are pinned to Unicode 16.0.0 and
-//! [UAX #29 revision 45](https://www.unicode.org/reports/tr29/tr29-45.html#Word_Boundary_Rules).
+//! Rules and property values are pinned to Unicode 17.0.0 and
+//! [UAX #29 revision 47](https://www.unicode.org/reports/tr29/tr29-47.html#Word_Boundary_Rules).
 //! These are the *default*, locale-independent boundaries: they do not perform
 //! dictionary segmentation, so they do not find words in Thai, Lao, Khmer,
 //! Myanmar, Chinese or Japanese text.

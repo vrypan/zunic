@@ -5,10 +5,10 @@
 ## Unicode standards
 
 `graphemes()` uses the default extended grapheme cluster rules from
-[UAX #29: Unicode Text Segmentation, revision 45](https://www.unicode.org/reports/tr29/tr29-45.html),
-for Unicode 16.0.0. Both plain and measured iterators use those boundaries.
+[UAX #29: Unicode Text Segmentation, revision 47](https://www.unicode.org/reports/tr29/tr29-47.html),
+for Unicode 17.0.0. Both plain and measured iterators use those boundaries.
 Measured columns also use East Asian Width data from
-[UAX #11, revision 43](https://www.unicode.org/reports/tr11/tr11-43.html),
+[UAX #11, revision 45](https://www.unicode.org/reports/tr11/tr11-45.html),
 with [Zunic's width policy](../width/README.md#display-policy).
 UAX #29 does not define terminal column counts.
 
@@ -29,7 +29,7 @@ pub fn next(self: *@This()) ?Span;
 pub fn next(self: *@This()) ?MeasuredSpan;
 ```
 
-Segments default extended grapheme clusters using Unicode 16 UAX #29 rules.
+Segments default extended grapheme clusters using Unicode 17 UAX #29 rules.
 A cluster can contain several scalars: an accented letter, a flag, or an emoji
 ZWJ sequence can each be one result. This is useful for cursor movement and
 grapheme-safe slicing; it is not a promise about how a font renders the text.

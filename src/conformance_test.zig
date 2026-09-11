@@ -4,12 +4,12 @@ const grapheme = @import("segmentation").grapheme;
 const word = @import("segmentation").word;
 const normalization = @import("normalization");
 
-const fixture = @embedFile("data/GraphemeBreakTest-16.0.0.txt");
-const line_break_fixture = @embedFile("data/LineBreakTest-16.0.0.txt");
-const word_fixture = @embedFile("data/WordBreakTest-16.0.0.txt");
-const normalization_fixture = @embedFile("data/NormalizationTest-16.0.0.txt");
+const fixture = @embedFile("data/GraphemeBreakTest-17.0.0.txt");
+const line_break_fixture = @embedFile("data/LineBreakTest-17.0.0.txt");
+const word_fixture = @embedFile("data/WordBreakTest-17.0.0.txt");
+const normalization_fixture = @embedFile("data/NormalizationTest-17.0.0.txt");
 
-test "Unicode 16.0.0 GraphemeBreakTest" {
+test "Unicode 17.0.0 GraphemeBreakTest" {
     var lines = std.mem.splitScalar(u8, fixture, '\n');
     while (lines.next()) |raw_line| {
         const line = raw_line[0 .. std.mem.indexOfScalar(u8, raw_line, '#') orelse raw_line.len];
@@ -44,7 +44,7 @@ test "Unicode 16.0.0 GraphemeBreakTest" {
     }
 }
 
-test "Unicode 16.0.0 LineBreakTest" {
+test "Unicode 17.0.0 LineBreakTest" {
     var lines = std.mem.splitScalar(u8, line_break_fixture, '\n');
     while (lines.next()) |raw_line| {
         const line = raw_line[0 .. std.mem.indexOfScalar(u8, raw_line, '#') orelse raw_line.len];
@@ -132,7 +132,7 @@ test "interior hard breaks are mandatory" {
     }
 }
 
-test "Unicode 16 reduced peer differences" {
+test "Unicode 17 reduced peer differences" {
     const P = unicode.line_break.Opportunity.prohibited;
     const A = unicode.line_break.Opportunity.allowed;
     const M = unicode.line_break.Opportunity.mandatory;
@@ -208,7 +208,7 @@ test "Unicode 16 reduced peer differences" {
     try expectLineBreaks("-V", &.{ .{ .offset = 0, .opportunity = P }, .{ .offset = 1, .opportunity = P }, .{ .offset = 2, .opportunity = M } });
 }
 
-test "Unicode 16.0.0 WordBreakTest" {
+test "Unicode 17.0.0 WordBreakTest" {
     var lines = std.mem.splitScalar(u8, word_fixture, '\n');
     var cases: usize = 0;
     while (lines.next()) |raw_line| {
@@ -251,7 +251,7 @@ test "Unicode 16.0.0 WordBreakTest" {
         };
         cases += 1;
     }
-    try std.testing.expectEqual(@as(usize, 1826), cases);
+    try std.testing.expectEqual(@as(usize, 1944), cases);
 }
 
 /// One `;`-separated column of a NormalizationTest case, encoded as UTF-8.
@@ -298,7 +298,7 @@ fn expectNormalizes(input: []const u8, comptime form: normalization.Form, expect
     try std.testing.expect(produced.len <= try normalization.normalizedLenBound(input.len, form));
 }
 
-test "Unicode 16.0.0 NormalizationTest" {
+test "Unicode 17.0.0 NormalizationTest" {
     var lines = std.mem.splitScalar(u8, normalization_fixture, '\n');
     var cases: usize = 0;
     var assertions: usize = 0;
@@ -359,7 +359,7 @@ test "Unicode 16.0.0 NormalizationTest" {
             assertions += 1;
         }
     }
-    try std.testing.expectEqual(@as(usize, 19965), cases);
+    try std.testing.expectEqual(@as(usize, 20034), cases);
 
     // The fixture header's own invariant: any scalar missing from Part 1 is
     // its own NFC, NFD, NFKC, and NFKD.

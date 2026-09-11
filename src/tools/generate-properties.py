@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Unicode 16.0.0 fused property records and ASCII lookup arrays.
+"""Generate Unicode 17.0.0 fused property records and ASCII lookup arrays.
 
 Run from the repository root:
     python3 src/tools/generate-properties.py
@@ -19,12 +19,12 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 OUT = ROOT / "tables/properties.zig"
 FILES = {
-    "gcb": DATA / "GraphemeBreakProperty-16.0.0.txt",
-    "ep": DATA / "emoji-data-16.0.0.txt",
-    "lb": DATA / "LineBreak-16.0.0.txt",
-    "incb": DATA / "DerivedCoreProperties-16.0.0.txt",
-    "eaw": DATA / "EastAsianWidth-16.0.0.txt",
-    "ud": DATA / "UnicodeData-16.0.0.txt",
+    "gcb": DATA / "GraphemeBreakProperty-17.0.0.txt",
+    "ep": DATA / "emoji-data-17.0.0.txt",
+    "lb": DATA / "LineBreak-17.0.0.txt",
+    "incb": DATA / "DerivedCoreProperties-17.0.0.txt",
+    "eaw": DATA / "EastAsianWidth-17.0.0.txt",
+    "ud": DATA / "UnicodeData-17.0.0.txt",
 }
 
 
@@ -90,7 +90,7 @@ def emit_line_break_api(out, values):
 MAXCP = 0x110000
 
 # East_Asian_Width defaults for UNASSIGNED code points, from the header of
-# EastAsianWidth-16.0.0.txt: everything unlisted is "N" except unassigned code
+# EastAsianWidth-17.0.0.txt: everything unlisted is "N" except unassigned code
 # points in these blocks, which default to "W".
 EAW_DEFAULT_W = (
     (0x3400, 0x4DBF),    # CJK Unified Ideographs Extension A
@@ -291,7 +291,7 @@ def main():
     lb_names = sorted(lb)
     records, malformed_category, default_category = build_records(gcb, incb, ep, lb, eaw, dense_categories(FILES["ud"]), lb_names)
     with OUT.open("w", encoding="utf-8") as out:
-        out.write("//! Generated from pinned Unicode 16.0.0 UCD files. Do not edit.\n")
+        out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
         out.write("//! Run src/tools/generate-properties.py to regenerate.\n\n")
         emit_grapheme_api(out, gcb, incb, ep)
         emit_line_break_api(out, lb)

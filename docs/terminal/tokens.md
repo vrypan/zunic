@@ -142,6 +142,6 @@ check waits until content is encountered. Leading and trailing escapes are allow
 
 ## Standards used
 
-Grapheme boundaries use Unicode 16.0.0 UAX #29. Rejecting escapes inside a
+Grapheme boundaries use Unicode 17.0.0 UAX #29. Rejecting escapes inside a
 grapheme is a Zunic restriction. Escape recognition and effects use the
 [terminal standards and subset](README.md#standards-used).

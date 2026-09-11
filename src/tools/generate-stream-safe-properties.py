@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Unicode 16.0.0 stream-safe non-starter counts.
+"""Generate Unicode 17.0.0 stream-safe non-starter counts.
 
 Run from the repository root:
     python3 src/tools/generate-stream-safe-properties.py
@@ -30,7 +30,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 OUT = ROOT / "tables/stream_safe_properties.zig"
-UNICODE_DATA = DATA / "UnicodeData-16.0.0.txt"
+UNICODE_DATA = DATA / "UnicodeData-17.0.0.txt"
 
 MAXCP = 0x110000
 LIMIT = 0x30000          # every scalar above this is trivial; asserted below
@@ -118,7 +118,7 @@ def build(ccc, nfkd):
     assert all(lead < 8 and trail < 8 for lead, trail, _ in order), "a count needs more than three bits"
     # Insertion happens only *before* a scalar, so a scalar whose own NFKD held
     # more than 30 consecutive non-starters could not be made stream safe at
-    # all. Unicode 16 has no such scalar; assert it rather than assume it.
+    # all. Unicode 17 has no such scalar; assert it rather than assume it.
     assert worst_run <= STREAM_SAFE_LIMIT, \
         f"a single scalar's NFKD has {worst_run} consecutive non-starters, over the limit"
     # ASCII is uniform, so the runtime can answer it without touching memory.
@@ -142,7 +142,7 @@ def build(ccc, nfkd):
 
 
 def emit(out, order, stage1, stage2, stage3, above):
-    out.write("//! Generated from pinned Unicode 16.0.0 UCD files. Do not edit.\n")
+    out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
     out.write("//! Run src/tools/generate-stream-safe-properties.py to regenerate.\n")
     out.write("//!\n")
     out.write("//! Stream-Safe Text Format counts, from UAX #15 section 13. The standard\n")

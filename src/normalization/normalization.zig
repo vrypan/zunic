@@ -1,4 +1,4 @@
-//! All four Unicode 16.0 normalization forms (UAX #15): NFC, NFD, NFKC, NFKD.
+//! All four Unicode 17.0 normalization forms (UAX #15): NFC, NFD, NFKC, NFKD.
 //!
 //! Canonical and compatibility decomposition are read from separate generated
 //! tables (see `src/tables/normalization_properties.zig`): canonical mappings
@@ -348,7 +348,7 @@ pub fn Iterator(comptime form: Form) type {
 
                 // Otherwise it ends the run. Composition may still reach
                 // across: Hangul L+V and LV+T are both starter pairs, and
-                // several further pairs in Unicode 16 have a starter as their
+                // several further pairs in Unicode 17 have a starter as their
                 // second element, so a bare starter run stays open if it
                 // composes.
                 self.finishRun();
@@ -489,7 +489,7 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
             // point can quick-check Yes under NFC while quick-checking No
             // under NFKC, when its *canonical* decomposition target is
             // itself compatibility-decomposable (sixteen such code points in
-            // Unicode 16.0.0; see the generator's `read_derived`).
+            // Unicode 17.0.0; see the generator's `read_derived`).
             const qc = if (form == .nfkc) class.nfkc_quick_check else class.quick_check;
             switch (qc) {
                 .no => return false,

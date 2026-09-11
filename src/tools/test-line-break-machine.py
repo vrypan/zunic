@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check reproducibility and Unicode 16 semantic/compiler invariants."""
+"""Check reproducibility and Unicode 17 semantic/compiler invariants."""
 from pathlib import Path
 import subprocess
 import sys

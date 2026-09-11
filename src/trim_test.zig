@@ -1,14 +1,14 @@
 //! Public-API tests for `Text.trim`, `trimStart` and `trimEnd`.
 //!
 //! The expected whitespace set below is transcribed independently of the
-//! implementation from Unicode 16.0.0 `PropList.txt`, the `White_Space`
+//! implementation from Unicode 17.0.0 `PropList.txt`, the `White_Space`
 //! property. No host-language trim or `isspace` is used as an oracle: their
 //! definitions and Unicode versions differ from this one.
 const std = @import("std");
 const zunic = @import("zunic");
 
-/// `White_Space=Yes`, Unicode 16.0.0 UCD `PropList.txt`.
-/// https://www.unicode.org/Public/16.0.0/ucd/PropList.txt
+/// `White_Space=Yes`, Unicode 17.0.0 UCD `PropList.txt`.
+/// https://www.unicode.org/Public/17.0.0/ucd/PropList.txt
 const white_space_ranges = [_][2]u21{
     .{ 0x0009, 0x000D }, // <control-0009>..<control-000D>
     .{ 0x0020, 0x0020 }, // SPACE
@@ -40,7 +40,7 @@ const all_whitespace = blk: {
             count += 1;
         }
     }
-    if (count != list.len) @compileError("White_Space is 25 code points in Unicode 16.0.0");
+    if (count != list.len) @compileError("White_Space is 25 code points in Unicode 17.0.0");
     break :blk list;
 };
 

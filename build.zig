@@ -151,6 +151,9 @@ pub fn build(b: *std.Build) void {
         .{ .path = "src/normalization_test.zig", .group = "normalization", .grants = &.{ .api, .tables, .encoding, .normalization } },
         .{ .path = "src/conformance_test.zig", .group = "conformance", .grants = &.{ .api, .segmentation, .normalization } },
         .{ .path = "src/root_test.zig", .group = "api", .grants = &.{ .api, .tables, .layout } },
+        .{ .path = "src/unicode_properties_test.zig", .group = "unicode-properties", .grants = &.{.api} },
+        .{ .path = "src/case_folding_test.zig", .group = "case-folding", .grants = &.{.api} },
+        .{ .path = "src/grapheme_stream_test.zig", .group = "grapheme-stream", .grants = &.{.api} },
         .{ .path = "src/terminal_test.zig", .group = "terminal", .grants = &.{.api} },
         .{ .path = "src/trim_test.zig", .group = "trim", .grants = &.{.api} },
         .{ .path = "src/ascii_test.zig", .group = "ascii", .grants = &.{.api} },
@@ -191,6 +194,14 @@ pub fn build(b: *std.Build) void {
         if (std.mem.eql(u8, root.path, "docs/examples.zig")) docs_step.dependOn(&run_test.step);
         if (std.mem.eql(u8, root.path, "src/linebreak/linebreak.zig")) transition_step.dependOn(&run_test.step);
     }
+
+    // These focused gates also decode the generated tables independently from
+    // the vendored Unicode inputs. Keep them off the aggregate test step so
+    // the normal Zig-only suite does not acquire a Python runtime dependency.
+    const verify_terminal_properties = b.addSystemCommand(&.{ "python3", "src/tools/test-terminal-properties.py" });
+    group_steps.get("unicode-properties").?.dependOn(&verify_terminal_properties.step);
+    const verify_case_folding = b.addSystemCommand(&.{ "python3", "src/tools/test-case-folding.py" });
+    group_steps.get("case-folding").?.dependOn(&verify_case_folding.step);
 
     // Keep the >u16 counter regression in the normal gate without running
     // the small-buffer stress fixtures with a quarter-megabyte run limit.

@@ -5,8 +5,8 @@
 ## Unicode standards
 
 `terminators()`, `count()`, and the iterator recognize the hard-break characters
-in Unicode 16.0.0
-[UAX #14: Unicode Line Breaking Algorithm, revision 53](https://www.unicode.org/reports/tr14/tr14-53.html):
+in Unicode 17.0.0
+[UAX #14: Unicode Line Breaking Algorithm, revision 55](https://www.unicode.org/reports/tr14/tr14-55.html):
 the `BK`, `CR`, `LF`, and `NL` classes, with CRLF treated as one terminator.
 This is only hard-terminator detection, not the full line-breaking algorithm.
 It reports neither soft break opportunities nor a synthetic end-of-text break.

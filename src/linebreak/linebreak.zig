@@ -1,4 +1,4 @@
-//! Default Unicode 16.0 line-break boundaries (UAX #14 revision 53).
+//! Default Unicode 17.0 line-break boundaries (UAX #14 revision 55).
 //!
 //! This iterator reports the default, locale-independent opportunities only.
 //! It does not select lines by terminal width, tailor rules with CLDR data, or
@@ -199,7 +199,8 @@ test "generated machine keeps glue before alphabetics prohibited" {
 test "semantic machine exhaustive category triples and malformed tails" {
     // Select witnesses independently from the generated table: retain every
     // predicate observed by the standard, but not unrelated width/GB fields.
-    var seen = [_]bool{false} ** (48 * 512);
+    const line_break_classes = @typeInfo(properties.LineBreak).@"enum".fields.len;
+    var seen = [_]bool{false} ** (line_break_classes * 512);
     var witnesses: [128]u21 = undefined;
     var count: usize = 0;
     for (0..0x110000) |value| {
@@ -219,7 +220,7 @@ test "semantic machine exhaustive category triples and malformed tails" {
         witnesses[count] = cp;
         count += 1;
     }
-    try std.testing.expectEqual(@as(usize, 68), count);
+    try std.testing.expectEqual(@as(usize, 69), count);
     var bytes: [12]u8 = undefined;
     for (witnesses[0..count]) |a| {
         const first_end: usize = try std.unicode.utf8Encode(a, &bytes);

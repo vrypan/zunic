@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Unicode 16.0.0 word-segmentation property data.
+"""Generate Unicode 17.0.0 word-segmentation property data.
 
 Run from the repository root:
     python3 src/tools/generate-word-properties.py
@@ -29,17 +29,17 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 OUT = ROOT / "tables/word_properties.zig"
 FILES = {
-    "wb": DATA / "WordBreakProperty-16.0.0.txt",
-    "alpha": DATA / "DerivedCoreProperties-16.0.0.txt",
-    "ep": DATA / "emoji-data-16.0.0.txt",
-    "ud": DATA / "UnicodeData-16.0.0.txt",
+    "wb": DATA / "WordBreakProperty-17.0.0.txt",
+    "alpha": DATA / "DerivedCoreProperties-17.0.0.txt",
+    "ep": DATA / "emoji-data-17.0.0.txt",
+    "ud": DATA / "UnicodeData-17.0.0.txt",
 }
 
 MAXCP = 0x110000
 BLOCK_SHIFT = 8
 BLOCK_SIZE = 1 << BLOCK_SHIFT
 
-# WordBreakProperty-16.0.0.txt carries "@missing: 0000..10FFFF; Other", so the
+# WordBreakProperty-17.0.0.txt carries "@missing: 0000..10FFFF; Other", so the
 # default is Other and it is not listed. Every other value is read from the
 # file rather than hardcoded, and the total is asserted below.
 DEFAULT_WB = "Other"
@@ -122,14 +122,14 @@ def emit(out, names, values):
         index.append(blocks.setdefault(key, len(blocks)))
     assert len(blocks) < 65536
 
-    out.write("//! Generated from pinned Unicode 16.0.0 UCD files. Do not edit.\n")
+    out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
     out.write("//! Run src/tools/generate-word-properties.py to regenerate.\n")
     out.write("//!\n")
     out.write("//! Word segmentation keeps its own table rather than reading `properties.Record`:\n")
     out.write("//! the fused record cannot distinguish `\"` from `'`, or `,` from `.`, yet UAX #29\n")
     out.write("//! gives each of those pairs different Word_Break classes.\n\n")
 
-    out.write("/// UAX #29 Word_Break property values occurring in Unicode 16.0.0.\n")
+    out.write("/// UAX #29 Word_Break property values occurring in Unicode 17.0.0.\n")
     out.write("pub const WordBreak = enum(u5) {\n")
     for name in names:
         out.write(f"    {zig_name(name)},\n")

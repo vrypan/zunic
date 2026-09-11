@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Unicode 16.0.0 General_Category and derived boolean properties.
+"""Generate Unicode 17.0.0 General_Category and derived boolean properties.
 
 Run from the repository root:
     python3 src/tools/generate-general-category.py
@@ -138,7 +138,7 @@ def build(categories, booleans):
 
 
 def emit(out, order, stage1, stage2, stage3, default_id):
-    out.write("//! Generated from pinned Unicode 16.0.0 UCD files. Do not edit.\n")
+    out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
     out.write("//! Run src/tools/generate-general-category.py to regenerate.\n")
     out.write("//!\n")
     out.write("//! Independent of `properties.Record`: see this file's generator for why.\n\n")
@@ -205,8 +205,8 @@ def emit(out, order, stage1, stage2, stage3, default_id):
 
 
 def main():
-    categories = dense_categories(DATA / "UnicodeData-16.0.0.txt")
-    booleans = dense_booleans(DATA / "DerivedCoreProperties-16.0.0.txt", {name for name, _ in BOOLEANS})
+    categories = dense_categories(DATA / "UnicodeData-17.0.0.txt")
+    booleans = dense_booleans(DATA / "DerivedCoreProperties-17.0.0.txt", {name for name, _ in BOOLEANS})
     order, stage1, stage2, stage3, default_id = build(categories, booleans)
     with OUT.open("w", encoding="utf-8") as out:
         emit(out, order, stage1, stage2, stage3, default_id)

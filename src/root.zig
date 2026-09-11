@@ -61,7 +61,10 @@ pub const NormalizationWriteError = normalization.WriteError;
 /// has nothing to do with the Zig version in use. The generators' verifiers
 /// assert it against the vendored UCD filenames, so an upgrade cannot leave
 /// it stale.
-pub const unicode_version: std.SemanticVersion = .{ .major = 16, .minor = 0, .patch = 0 };
+pub const unicode_version: std.SemanticVersion = .{ .major = 17, .minor = 0, .patch = 0 };
+/// Largest code point in the Unicode codespace. `u21` can represent larger
+/// integers, so callers accepting arbitrary `u21` values can guard with this.
+pub const max_codepoint: u21 = 0x10ffff;
 pub const MeasuredGraphemes = text_view.MeasuredGraphemes;
 
 /// Open a text view. Borrowed and zero-cost: no scanning happens until a
@@ -76,7 +79,7 @@ pub fn terminal(bytes: []const u8) Terminal {
     return .{ .bytes = bytes };
 }
 
-/// Unicode 16.0.0 `White_Space=Yes`: the predicate `Text.trim()`, `trimStart()`
+/// Unicode 17.0.0 `White_Space=Yes`: the predicate `Text.trim()`, `trimStart()`
 /// and `trimEnd()` apply at each edge, and `Text.isWhitespace(span)` applies
 /// to a whole span. Not general category `Zs`, not `Pattern_White_Space`, and
 /// not the zero-width set; see [trim](../docs/text/trim/README.md) for the full
@@ -162,6 +165,39 @@ pub const graphemeProperties = @import("tables").properties.graphemeProperties;
 /// that want it directly rather than folded into a width decision.
 pub const isEastAsianWide = @import("tables").properties.isEastAsianWide;
 
+/// The six values of Unicode's `East_Asian_Width` property.
+pub const EastAsianWidth = @import("tables").terminal_properties.EastAsianWidth;
+pub const eastAsianWidth = @import("tables").terminal_properties.eastAsianWidth;
+
+/// Whether a scalar has the Unicode `Emoji_Presentation` property.
+pub const isEmojiPresentation = @import("tables").terminal_properties.isEmojiPresentation;
+/// Whether a scalar is a valid base for VS15/VS16 in the standardized emoji
+/// variation-sequence data.
+pub const isEmojiVariationBase = @import("tables").terminal_properties.isEmojiVariationBase;
+/// Whether a scalar has the Unicode `Emoji_Modifier` property.
+pub const isEmojiModifier = @import("tables").terminal_properties.isEmojiModifier;
+/// Whether a scalar has the Unicode `Emoji_Modifier_Base` property.
+pub const isEmojiModifierBase = @import("tables").terminal_properties.isEmojiModifierBase;
+
+/// Terminal width facts matching the pinned uucode derivation. `standalone`
+/// is that terminal convention rather than a normative Unicode property and
+/// may be 3 (U+2E3B). `zero_in_grapheme` is a separate continuation fact. For
+/// values above `max_codepoint`, the result is standalone width 1, zero in a
+/// grapheme, and not an emoji modifier; guard first when composing a different
+/// wider-input fallback policy.
+pub const WidthProperties = @import("tables").terminal_properties.WidthProperties;
+pub const widthProperties = @import("tables").terminal_properties.widthProperties;
+
+pub const CaseFold = @import("case_folding.zig").CaseFold;
+pub const fullCaseFold = @import("case_folding.zig").fullCaseFold;
+
+/// Copyable state for incremental default UAX #29 grapheme decisions.
+pub const GraphemeState = @import("grapheme_stream.zig").GraphemeState;
+/// Report whether a grapheme boundary occurs before `current` and advance the
+/// incremental state. See `GraphemeState` and the API documentation for the
+/// adjacent-pair calling protocol.
+pub const graphemeBreak = @import("grapheme_stream.zig").graphemeBreak;
+
 /// One code point's Unicode `General_Category`: `Lu`, `Ll`, `Nd`, `Po`, and
 /// so on, spelled in lowercase (`no` becomes `no_` to dodge the keyword).
 pub const GeneralCategory = @import("tables").general_category.GeneralCategory;
@@ -203,8 +239,8 @@ pub const isCased = @import("tables").general_category.is_cased;
 
 /// `Case_Ignorable`: code points a case-insensitive comparison should skip
 /// over rather than compare directly, such as combining marks and some
-/// punctuation. Zunic does not implement case folding; this is the raw
-/// property alone.
+/// punctuation. This remains a raw property; `fullCaseFold` performs the
+/// actual default fold and does not treat this predicate as a mapping.
 pub const isCaseIgnorable = @import("tables").general_category.is_case_ignorable;
 
 /// `Math`: mathematical symbols and operators. Broader than
@@ -246,7 +282,7 @@ pub const isGraphemeBase = @import("tables").general_category.is_grapheme_base;
 /// `Grapheme_Extend`, the `DerivedCoreProperties` property, not the
 /// `Grapheme_Cluster_Break=Extend` class `graphemeProperties(cp).gcb` reads.
 /// The two agree almost everywhere but not quite: five code points in
-/// Unicode 16.0.0 differ between them. `Text.graphemes()` is built on
+/// Unicode 17.0.0 differ between them. `Text.graphemes()` is built on
 /// `Grapheme_Cluster_Break`, not this property.
 pub const isGraphemeExtend = @import("tables").general_category.is_grapheme_extend;
 

@@ -84,7 +84,7 @@ OSC payloads are recognized as bytes and are not UTF-8-validated.
 
 ## Standards used
 
-Token grapheme boundaries use Unicode 16.0.0
+Token grapheme boundaries use Unicode 17.0.0
 [UAX #29: Unicode Text Segmentation](https://www.unicode.org/reports/tr29/),
 applied to each uninterrupted text segment. Boundary checks across escapes
 reject input that would split a grapheme, including combining sequences, flags,

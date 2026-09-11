@@ -2,9 +2,9 @@
 
 Allocation-free Unicode primitives for Zig 0.16.0 or later.
 
-Measure width, iterate graphemes and words, wrap text, find line endings, trim
-whitespace, and normalize Unicode. Strip ANSI escapes or track formatting as
-you iterate.
+Measure width, iterate graphemes and words, stream grapheme decisions, fold
+case, query Unicode properties, wrap text, find line endings, trim whitespace,
+and normalize Unicode. Strip ANSI escapes or track formatting as you iterate.
 
 > [!CAUTION] 
 >
@@ -132,15 +132,15 @@ especially on command-heavy input; the Rust comparison above covers text operati
 
 ## Standards
 
-Zunic uses **Unicode 16.0.0** data:
+Zunic uses **Unicode 17.0.0** data:
 
 | Standard | Used for |
 | --- | --- |
-| [UAX #29: Unicode Text Segmentation](https://www.unicode.org/reports/tr29/tr29-45.html) | Extended grapheme clusters and default word boundaries |
-| [UAX #14: Unicode Line Breaking Algorithm](https://www.unicode.org/reports/tr14/tr14-53.html) | Line-break opportunities and hard terminators |
-| [UAX #11: East Asian Width](https://www.unicode.org/reports/tr11/tr11-43.html) | Width properties used by Zunic's terminal-column policy |
+| [UAX #29: Unicode Text Segmentation](https://www.unicode.org/reports/tr29/tr29-47.html) | Extended grapheme clusters and default word boundaries |
+| [UAX #14: Unicode Line Breaking Algorithm](https://www.unicode.org/reports/tr14/tr14-55.html) | Line-break opportunities and hard terminators |
+| [UAX #11: East Asian Width](https://www.unicode.org/reports/tr11/tr11-45.html) | Width properties used by Zunic's terminal-column policy |
 | [UAX #15: Unicode Normalization Forms](https://www.unicode.org/reports/tr15/) | NFC, NFD, NFKC, NFKD, and canonical/compatibility equality |
-| [UAX #44: Unicode Character Database](https://www.unicode.org/reports/tr44/tr44-36.html) | The `White_Space` property used by trimming |
+| [UAX #44: Unicode Character Database](https://www.unicode.org/reports/tr44/tr44-37.html) | Scalar properties and the `White_Space` property used by trimming |
 
 Terminal column counts and line fitting are Zunic policies built on these rules
 and properties. See the [known line-break limitation](docs/text/wrap/implementation.md#known-limitation).

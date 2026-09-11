@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Unicode 16.0.0 normalization tables: canonical and compatibility.
+"""Generate Unicode 17.0.0 normalization tables: canonical and compatibility.
 
 Run from the repository root:
     python3 src/tools/generate-normalization-properties.py
@@ -43,9 +43,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 OUT = ROOT / "tables/normalization_properties.zig"
 FILES = {
-    "ud": DATA / "UnicodeData-16.0.0.txt",
-    "dnp": DATA / "DerivedNormalizationProps-16.0.0.txt",
-    "exclusions": DATA / "CompositionExclusions-16.0.0.txt",
+    "ud": DATA / "UnicodeData-17.0.0.txt",
+    "dnp": DATA / "DerivedNormalizationProps-17.0.0.txt",
+    "exclusions": DATA / "CompositionExclusions-17.0.0.txt",
 }
 
 MAXCP = 0x110000
@@ -97,7 +97,7 @@ def read_derived():
     canonically to U+00A8 U+0301, and U+00A8 DIAERESIS has a compatibility
     mapping to U+0020 U+0308 -- so NFKC(U+0385) is three separate characters,
     not U+0385 back again, even though NFC leaves U+0385 alone. Sixteen
-    Unicode 16.0.0 code points have this property; it is read directly rather
+    Unicode 17.0.0 code points have this property; it is read directly rather
     than reconstructed from first principles.
     """
     full, nfc_qc, nfkc_qc = set(), {}, {}
@@ -353,7 +353,7 @@ def build_compat(compat):
 
 def emit(out, combining, sources, canonical, flat, offsets, full, composition, maybe,
          factor, compat_factor, compat_max_len, classes, compat_sources, compat_flat, compat_offsets):
-    out.write("//! Generated from pinned Unicode 16.0.0 UCD files. Do not edit.\n")
+    out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
     out.write("//! Run src/tools/generate-normalization-properties.py to regenerate.\n")
     out.write("//!\n")
     out.write("//! Canonical (NFC/NFD) and compatibility (NFKC/NFKD) normalization.\n")

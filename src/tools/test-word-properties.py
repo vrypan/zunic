@@ -51,7 +51,7 @@ def read_property(filename, default, wanted=None):
 def read_categories():
     values = ["Cn"] * MAXCP
     first_cp = None
-    for raw in (DATA / "UnicodeData-16.0.0.txt").read_text(encoding="utf-8").splitlines():
+    for raw in (DATA / "UnicodeData-17.0.0.txt").read_text(encoding="utf-8").splitlines():
         cp_text, name, category = raw.split(";")[:3]
         cp = int(cp_text, 16)
         if name.endswith(", First>"):
@@ -68,10 +68,10 @@ def read_categories():
 
 def check_missing_default():
     """The Other default is read from the file, not assumed."""
-    text = (DATA / "WordBreakProperty-16.0.0.txt").read_text(encoding="utf-8")
+    text = (DATA / "WordBreakProperty-17.0.0.txt").read_text(encoding="utf-8")
     match = re.search(r"#\s*@missing:\s*0000\.\.10FFFF;\s*(\w+)", text)
     if not match:
-        sys.exit("WordBreakProperty-16.0.0.txt has no @missing line")
+        sys.exit("WordBreakProperty-17.0.0.txt has no @missing line")
     if match.group(1) != "Other":
         sys.exit(f"unexpected @missing default {match.group(1)}")
 
@@ -114,15 +114,15 @@ def check_regeneration():
 
 
 def main():
-    check_unicode_version("WordBreakProperty-16.0.0.txt", "DerivedCoreProperties-16.0.0.txt",
-              "UnicodeData-16.0.0.txt", "emoji-data-16.0.0.txt")
+    check_unicode_version("WordBreakProperty-17.0.0.txt", "DerivedCoreProperties-17.0.0.txt",
+              "UnicodeData-17.0.0.txt", "emoji-data-17.0.0.txt")
 
     check_missing_default()
     check_regeneration()
 
-    wb = read_property("WordBreakProperty-16.0.0.txt", "Other")
-    alphabetic = read_property("DerivedCoreProperties-16.0.0.txt", "", {"Alphabetic"})
-    ep = read_property("emoji-data-16.0.0.txt", "", {"Extended_Pictographic"})
+    wb = read_property("WordBreakProperty-17.0.0.txt", "Other")
+    alphabetic = read_property("DerivedCoreProperties-17.0.0.txt", "", {"Alphabetic"})
+    ep = read_property("emoji-data-17.0.0.txt", "", {"Extended_Pictographic"})
     category = read_categories()
 
     names, layout, shift, index, data = parse_zig()

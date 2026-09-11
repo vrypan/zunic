@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate or verify the complete Unicode 16 semantic transition machine."""
+"""Generate or verify the complete Unicode 17 semantic transition machine."""
 import sys
 from line_break_semantics import ROOT, render
 

@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-NORMALIZATION_TEST = DATA / "NormalizationTest-16.0.0.txt"
+NORMALIZATION_TEST = DATA / "NormalizationTest-17.0.0.txt"
 
 S_BASE, L_BASE, V_BASE, T_BASE = 0xAC00, 0x1100, 0x1161, 0x11A7
 L_COUNT, V_COUNT, T_COUNT = 19, 21, 28
@@ -27,7 +27,7 @@ S_COUNT = L_COUNT * N_COUNT
 def read_canonical_mappings():
     """Canonical decompositions only -- the tagged ones are compatibility."""
     canonical = {}
-    for raw in (DATA / "UnicodeData-16.0.0.txt").read_text(encoding="utf-8").splitlines():
+    for raw in (DATA / "UnicodeData-17.0.0.txt").read_text(encoding="utf-8").splitlines():
         parts = raw.split(";")
         text = parts[5].strip()
         if text and not text.startswith("<"):
@@ -38,7 +38,7 @@ def read_canonical_mappings():
 def read_full_composition_exclusion():
     """The derived property NFC uses to refuse to rebuild a character."""
     excluded = set()
-    for raw in (DATA / "DerivedNormalizationProps-16.0.0.txt").read_text(encoding="utf-8").splitlines():
+    for raw in (DATA / "DerivedNormalizationProps-17.0.0.txt").read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue

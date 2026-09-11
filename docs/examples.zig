@@ -135,9 +135,35 @@ test "docs: normalization capacity and iterator position" {
 test "docs: the pinned Unicode data version" {
     // The version of the Unicode data every table is generated from. Not the
     // package version, and unrelated to the Zig version in use.
-    try std.testing.expectEqual(@as(u64, 16), zunic.unicode_version.major);
+    try std.testing.expectEqual(@as(u64, 17), zunic.unicode_version.major);
     try std.testing.expectEqual(@as(u64, 0), zunic.unicode_version.minor);
     try std.testing.expectEqual(@as(u64, 0), zunic.unicode_version.patch);
+}
+
+test "docs: terminal properties, case folding, and streaming graphemes" {
+    try std.testing.expectEqual(zunic.EastAsianWidth.wide, zunic.eastAsianWidth(0x754c));
+    try std.testing.expect(zunic.isEmojiPresentation(0x1f600));
+    try std.testing.expect(zunic.isEmojiVariationBase(0x231b));
+
+    const width = zunic.widthProperties(0x1f3fb);
+    try std.testing.expectEqual(@as(u2, 2), width.standalone);
+    try std.testing.expect(width.zero_in_grapheme);
+
+    const folded = zunic.fullCaseFold(0x00df);
+    try std.testing.expectEqualSlices(u21, &.{ 's', 's' }, folded.slice());
+
+    // Each retained result owns a [3]u21 buffer, so scalar keys can be folded
+    // and compared without allocating.
+    const kelvin = zunic.fullCaseFold(0x212a);
+    const ascii_k = zunic.fullCaseFold('K');
+    try std.testing.expect(std.mem.eql(u21, kelvin.slice(), ascii_k.slice()));
+
+    var state: zunic.GraphemeState = .{};
+    try std.testing.expect(!zunic.graphemeBreak('e', 0x0301, &state));
+    const checkpoint = state;
+    try std.testing.expect(zunic.graphemeBreak(0x0301, 'x', &state));
+    state = checkpoint;
+    try std.testing.expect(!zunic.graphemeBreak(0x0301, 0x0308, &state));
 }
 
 test "docs: normalize from the text view" {
@@ -214,7 +240,7 @@ test "docs: trim and print" {
     try std.testing.expectEqualStrings("hi  ", zunic.text("  hi  ").trimStart().bytes);
     try std.testing.expectEqualStrings("  hi", zunic.text("  hi  ").trimEnd().bytes);
 
-    // Whitespace is Unicode 16.0.0 White_Space: no-break spaces go, zero-width
+    // Whitespace is Unicode 17.0.0 White_Space: no-break spaces go, zero-width
     // characters stay, and a malformed edge byte stops the scan.
     try std.testing.expectEqualStrings("x", zunic.text("\u{202F}x\u{3000}").trim().bytes);
     try std.testing.expectEqualStrings("\u{200B}x\u{FEFF}", zunic.text("\u{200B}x\u{FEFF}").trim().bytes);

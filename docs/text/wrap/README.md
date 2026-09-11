@@ -4,11 +4,11 @@
 
 ## Unicode standards
 
-`wrap()` combines three sources, using Unicode 16.0.0 data:
+`wrap()` combines three sources, using Unicode 17.0.0 data:
 
-- [UAX #14: Unicode Line Breaking Algorithm, revision 53](https://www.unicode.org/reports/tr14/tr14-53.html) supplies line-break opportunities, subject to the [known limitation](implementation.md#known-limitation).
-- [UAX #29: Unicode Text Segmentation, revision 45](https://www.unicode.org/reports/tr29/tr29-45.html) supplies extended grapheme boundaries so clusters stay intact.
-- [UAX #11: East Asian Width, revision 43](https://www.unicode.org/reports/tr11/tr11-43.html) supplies width properties used by [Zunic's column policy](../width/README.md#display-policy).
+- [UAX #14: Unicode Line Breaking Algorithm, revision 55](https://www.unicode.org/reports/tr14/tr14-55.html) supplies line-break opportunities, subject to the [known limitation](implementation.md#known-limitation).
+- [UAX #29: Unicode Text Segmentation, revision 47](https://www.unicode.org/reports/tr29/tr29-47.html) supplies extended grapheme boundaries so clusters stay intact.
+- [UAX #11: East Asian Width, revision 45](https://www.unicode.org/reports/tr11/tr11-45.html) supplies width properties used by [Zunic's column policy](../width/README.md#display-policy).
 
 Choosing a fitting opportunity and handling overflow are Zunic's layout policy.
 UAX #14 identifies opportunities; it does not choose display lines for a given width.
@@ -94,7 +94,7 @@ try std.testing.expectEqual(@as(usize, 1), wide.count());
 
 ## Limits
 
-The line-break rules use Unicode 16 data. They do not include dictionary-based
+The line-break rules use Unicode 17 data. They do not include dictionary-based
 breaking for scripts that need it. The current line-break engine also has a
 known combining-mark issue described on the [implementation page](implementation.md#known-limitation).
 ANSI escapes are ordinary input bytes, so strip them before wrapping styled text.

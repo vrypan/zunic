@@ -236,7 +236,7 @@ pub const Text = struct {
     /// Offsets from the returned view are relative to *its* bytes, not to the
     /// untrimmed input.
     ///
-    /// Whitespace is Unicode 16.0.0 `White_Space`, all 25 code points of it:
+    /// Whitespace is Unicode 17.0.0 `White_Space`, all 25 code points of it:
     /// U+0009..U+000D, U+0020, U+0085, U+00A0, U+1680, U+2000..U+200A,
     /// U+2028, U+2029, U+202F, U+205F and U+3000. No-break spaces are
     /// trimmed; U+200B, U+FEFF, U+2060, NUL and DEL are not.
@@ -269,7 +269,7 @@ pub const Text = struct {
     }
 
     /// Whether `span` (a `Span`, `MeasuredSpan`, or anything else with
-    /// `start`/`end` byte offsets) is exactly one Unicode 16.0.0
+    /// `start`/`end` byte offsets) is exactly one Unicode 17.0.0
     /// `White_Space` scalar within this text -- not a span that merely
     /// starts with one. `span` is assumed to index `self.bytes`; a span from
     /// a different byte slice gives a meaningless answer rather than an
@@ -389,8 +389,8 @@ pub const WordBound = struct {
 };
 
 /// The default, locale-independent word boundaries of
-/// [UAX #29 revision 45](https://www.unicode.org/reports/tr29/tr29-45.html#Word_Boundaries),
-/// pinned to Unicode 16.0.0.
+/// [UAX #29 revision 47](https://www.unicode.org/reports/tr29/tr29-47.html#Word_Boundaries),
+/// pinned to Unicode 17.0.0.
 ///
 /// The segments partition the input: the first starts at zero, each one starts
 /// where the previous ended, and the last ends at `bytes.len`. Punctuation and

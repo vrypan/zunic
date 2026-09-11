@@ -377,7 +377,7 @@ test "both engines agree over every witness pair, triple and quadruple" {
 }
 
 test "both engines agree over the fixture and over random bytes" {
-    const fixture = @embedFile("data/WordBreakTest-16.0.0.txt");
+    const fixture = @embedFile("data/WordBreakTest-17.0.0.txt");
     var lines = std.mem.splitScalar(u8, fixture, '\n');
     while (lines.next()) |raw_line| {
         const line = raw_line[0 .. std.mem.indexOfScalar(u8, raw_line, '#') orelse raw_line.len];

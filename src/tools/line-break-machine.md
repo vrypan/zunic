@@ -1,10 +1,10 @@
-# Unicode 16 line-break machine
+# Unicode 17 line-break machine
 
 Regenerate with `python3 src/tools/generate-line-break-machine.py --write`.
 Check reproducibility and the standard fixtures with
 `python3 src/tools/test-line-break-machine.py`. No generator runs during a
 normal Zig build; the package uses checked-in data and has no Python runtime
-dependency. The implementation is authored from Zunic's Unicode 16 rules,
+dependency. The implementation is authored from Zunic's Unicode 17 rules,
 not copied Unicode 15 Rust table bytes.
 
 ## Construction and state identity
@@ -17,7 +17,7 @@ Unicode code point; the machine generator also rejects any ID/order mismatch.
 The semantic compiler reads those records and enumerates actual scalar
 categories. It retains raw class and East Asian width, relevant quote/
 parenthesis predicates, SA-mark and EP-unassigned predicates, and the
-U+2010/U+25CC exceptions. There are 68 categories. Embedding the category
+U+2010/U+25CC exceptions. There are 69 categories. Embedding the category
 does not increase the 32-bit property record or its 168 deduplicated blocks.
 
 Starting at SOT, breadth-first reachability follows `consume` for every
@@ -33,7 +33,7 @@ output rows. Successor-partition refinement continues until stable: states
 are merged only when both outputs and future successor equivalence agree.
 The resulting 103-state machine uses a one-byte state ID and u16 entries:
 low byte is successor, high byte is decision opcode. SOT is state zero.
-The transition table occupies 14,008 bytes; the budget is 32 KiB.
+The transition table occupies 14,214 bytes; the budget is 32 KiB.
 
 ## Rule mapping and precedence
 
@@ -97,7 +97,7 @@ scanner's inlining cost changed. Measurements remain under `private/benchmarks`.
 The Python verifier checks all 16,672 pinned LineBreakTest cases (52,389
 scalar boundaries), mandatory hard-break precedence separately, reachability
 witnesses and total successor/action ranges. Zig transition tests independently
-select all 68 categories from real records, enumerate all pairs/triples,
+select all 69 categories from real records, enumerate all pairs/triples,
 check seeded longer streams and malformed byte tails, repeat queries, and
 consume copied state without querying. Run them independently with
 `zig build line-break-tests`.
@@ -107,7 +107,7 @@ streams between Iterator and direct machine State on all eight real corpora.
 These and the exhaustive Zig protocol tests check integration consistency,
 not independent rule correctness. The pinned Unicode fixtures remain the
 standard-based checks; generator tests also validate compilation/minimization.
-Rust remains a throughput peer, not the Unicode 16 correctness oracle.
+Rust remains a throughput peer, not the Unicode 17 correctness oracle.
 
 Known inherited limitation: SA Mn/Mc characters resolve to CM, but the current
 LB9/base-inheritance checks still use raw CM/ZWJ classes. For example,

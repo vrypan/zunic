@@ -6,7 +6,7 @@ from line_break_semantics import Category, History, categories, compile_machine,
 
 
 def main():
-    fixture = Path(__file__).resolve().parents[1] / "data/LineBreakTest-16.0.0.txt"
+    fixture = Path(__file__).resolve().parents[1] / "data/LineBreakTest-17.0.0.txt"
     cases, points = [], set()
     for number, line in enumerate(fixture.read_text().splitlines(), 1):
         tokens = line.split("#", 1)[0].split()
@@ -54,7 +54,7 @@ def main():
     assert all(len(row) == len(inputs) for row in rows)
     assert all(0 <= target < len(rows) and 0 <= action < len(signatures)
                for row in rows for target, action in row)
-    print(f"Unicode 16: {len(cases)} cases, {boundaries_checked} scalar boundaries passed")
+    print(f"Unicode 17: {len(cases)} cases, {boundaries_checked} scalar boundaries passed")
     print(f"Reachability/minimization: {len(states)} histories -> {len(rows)} states; {len(inputs)} categories; {len(signatures)} actions")
 
 

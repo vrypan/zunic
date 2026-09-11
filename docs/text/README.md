@@ -69,7 +69,7 @@ fixed policy; it does not measure a font or reconstruct a terminal screen.
 
 ## Standards used
 
-Unicode data is pinned to **16.0.0**. Each operation page describes its support
+Unicode data is pinned to **17.0.0**. Each operation page describes its support
 and limits:
 
 | Standard | Used by |

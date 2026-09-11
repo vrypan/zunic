@@ -41,7 +41,7 @@ BOOLEANS = [
 def read_categories():
     values = ["Cn"] * MAXCP
     pending = None
-    for raw in (DATA / "UnicodeData-16.0.0.txt").read_text(encoding="utf-8").splitlines():
+    for raw in (DATA / "UnicodeData-17.0.0.txt").read_text(encoding="utf-8").splitlines():
         cp_text, name, category = raw.split(";")[:3]
         cp = int(cp_text, 16)
         if name.endswith(", First>"):
@@ -59,7 +59,7 @@ def read_categories():
 def read_booleans():
     out = {name: bytearray(MAXCP) for name, _ in BOOLEANS}
     wanted = {name for name, _ in BOOLEANS}
-    for raw in (DATA / "DerivedCoreProperties-16.0.0.txt").read_text(encoding="utf-8").splitlines():
+    for raw in (DATA / "DerivedCoreProperties-17.0.0.txt").read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
@@ -127,7 +127,7 @@ def lookup(table, cp):
 
 
 def main():
-    check_unicode_version("UnicodeData-16.0.0.txt", "DerivedCoreProperties-16.0.0.txt")
+    check_unicode_version("UnicodeData-17.0.0.txt", "DerivedCoreProperties-17.0.0.txt")
 
     categories = read_categories()
     booleans = read_booleans()

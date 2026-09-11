@@ -231,7 +231,7 @@ pub const machine = struct {
         return .{ .property = property, .incb = @enumFromInt(@intFromEnum(g.incb)) };
     }
 
-    /// Property keys that actually occur in Unicode 16. Enumerating all 128
+    /// Property keys that actually occur in Unicode 17. Enumerating all 128
     /// encodable keys yields 60 categories; only a fraction are real.
     const occurring = blk: {
         @setEvalBranchQuota(2000000);
@@ -385,6 +385,12 @@ pub const machine = struct {
 /// `scalar.at` unpacked, plus one 128-byte lookup.
 pub inline fn categoryOf(token: scalar.Token) u8 {
     return machine.category_of[@as(u7, @bitCast(token.grapheme))];
+}
+
+/// Internal bridge for public streaming callers that already have a decoded
+/// code point instead of a scalar token.
+pub inline fn categoryForCodepoint(cp: u21) u8 {
+    return machine.category_of[@as(u7, @bitCast(properties.graphemeProperties(cp)))];
 }
 
 /// Table-driven cluster state. One read per scalar yields the boundary

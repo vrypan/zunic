@@ -1,4 +1,4 @@
-//! Unicode 16 semantic machine: each consume is a generated state transition.
+//! Unicode 17 semantic machine: each consume is a generated state transition.
 //! Decisions are pure queries; only LB15b/c, LB19a, LB25 and LB28a look ahead.
 const properties = @import("tables").properties;
 const data = @import("tables").line_break_machine_data;

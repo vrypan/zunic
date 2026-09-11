@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 SOURCE = ROOT / "tables/normalization_properties.zig"
 GENERATOR = ROOT / "tools" / "generate-normalization-properties.py"
-FIXTURE = DATA / "NormalizationTest-16.0.0.txt"
+FIXTURE = DATA / "NormalizationTest-17.0.0.txt"
 MAXCP = 0x110000
 
 S_BASE, L_BASE, V_BASE, T_BASE = 0xAC00, 0x1100, 0x1161, 0x11A7
@@ -38,7 +38,7 @@ S_COUNT = L_COUNT * N_COUNT
 
 def read_unicode_data():
     ccc, mapping, compat = {}, {}, {}
-    for raw in (DATA / "UnicodeData-16.0.0.txt").read_text(encoding="utf-8").splitlines():
+    for raw in (DATA / "UnicodeData-17.0.0.txt").read_text(encoding="utf-8").splitlines():
         parts = raw.split(";")
         cp = int(parts[0], 16)
         if int(parts[3]):
@@ -55,7 +55,7 @@ def read_unicode_data():
 
 def read_derived(name):
     values = {}
-    for raw in (DATA / "DerivedNormalizationProps-16.0.0.txt").read_text(encoding="utf-8").splitlines():
+    for raw in (DATA / "DerivedNormalizationProps-17.0.0.txt").read_text(encoding="utf-8").splitlines():
         body = raw.split("#", 1)[0].strip()
         if not body:
             continue
@@ -71,7 +71,7 @@ def read_derived(name):
 def read_exclusions_file():
     """The explicit list, which is a strict subset of Full_Composition_Exclusion."""
     values = set()
-    for raw in (DATA / "CompositionExclusions-16.0.0.txt").read_text(encoding="utf-8").splitlines():
+    for raw in (DATA / "CompositionExclusions-17.0.0.txt").read_text(encoding="utf-8").splitlines():
         body = raw.split("#", 1)[0].strip()
         if body:
             values.add(int(body.split()[0], 16))
@@ -148,8 +148,8 @@ def hangul_decompose(cp):
 
 
 def main():
-    check_unicode_version("UnicodeData-16.0.0.txt", "DerivedNormalizationProps-16.0.0.txt",
-              "CompositionExclusions-16.0.0.txt", "NormalizationTest-16.0.0.txt")
+    check_unicode_version("UnicodeData-17.0.0.txt", "DerivedNormalizationProps-17.0.0.txt",
+              "CompositionExclusions-17.0.0.txt", "NormalizationTest-17.0.0.txt")
 
     check_regeneration()
     check_stale_source_is_preserved()

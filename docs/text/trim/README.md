@@ -5,9 +5,9 @@
 ## Unicode standards
 
 `trim()`, `trimStart()`, and `trimEnd()` remove the code points with the
-Unicode 16.0.0 `White_Space` property, as published in the UCD data file
-[PropList.txt](https://www.unicode.org/Public/16.0.0/ucd/PropList.txt) and
-described by [UAX #44](https://www.unicode.org/reports/tr44/tr44-36.html).
+Unicode 17.0.0 `White_Space` property, as published in the UCD data file
+[PropList.txt](https://www.unicode.org/Public/17.0.0/ucd/PropList.txt) and
+described by [UAX #44](https://www.unicode.org/reports/tr44/tr44-37.html).
 
 Trimming is a Zunic operation over that property. It is not a segmentation or
 line-breaking algorithm, and neither UAX #29 nor UAX #14 prescribes it. The

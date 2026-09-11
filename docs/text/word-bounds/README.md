@@ -5,8 +5,8 @@
 ## Unicode standards
 
 `wordBounds()` and its iterator use the default word-boundary rules from
-[UAX #29: Unicode Text Segmentation, revision 45](https://www.unicode.org/reports/tr29/tr29-45.html),
-for Unicode 16.0.0. They do not add dictionary or locale-specific segmentation.
+[UAX #29: Unicode Text Segmentation, revision 47](https://www.unicode.org/reports/tr29/tr29-47.html),
+for Unicode 17.0.0. They do not add dictionary or locale-specific segmentation.
 The `is_word` flag is Zunic's convenience flag; UAX #29 defines the boundaries,
 not that flag.
 
@@ -28,7 +28,7 @@ pub const WordBound = struct {
 };
 ```
 
-Returns the default, locale-independent UAX #29 word segments for Unicode 16.
+Returns the default, locale-independent UAX #29 word segments for Unicode 17.
 The segments cover the complete input in order, with no gaps or overlap.
 Punctuation and whitespace are returned too. Adjacent non-word segments are
 not merged just because they share `is_word = false`.

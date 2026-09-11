@@ -120,8 +120,8 @@ test "terminal iterators borrow substrings and copy their traversal state" {
     try std.testing.expectEqualDeep(first, (try fresh.next()).?);
 }
 
-test "Unicode 16 fixture accepts escapes only at grapheme boundaries" {
-    const fixture = @embedFile("data/GraphemeBreakTest-16.0.0.txt");
+test "Unicode 17 fixture accepts escapes only at grapheme boundaries" {
+    const fixture = @embedFile("data/GraphemeBreakTest-17.0.0.txt");
     var lines = std.mem.splitScalar(u8, fixture, '\n');
     while (lines.next()) |raw| {
         const line = raw[0 .. std.mem.indexOfScalar(u8, raw, '#') orelse raw.len];

@@ -235,7 +235,7 @@ test "codepoints partition the view one scalar at a time and name their own type
 }
 
 test "the pinned Unicode data version is published" {
-    try std.testing.expectEqual(@as(u64, 16), unicode.unicode_version.major);
+    try std.testing.expectEqual(@as(u64, 17), unicode.unicode_version.major);
     try std.testing.expectEqual(@as(u64, 0), unicode.unicode_version.minor);
     try std.testing.expectEqual(@as(u64, 0), unicode.unicode_version.patch);
     // This is the data version, not the package version; the three verifiers
@@ -324,8 +324,8 @@ test "generalCategory and its derived booleans agree with the pinned UCD" {
         grapheme_base: bool,
         grapheme_extend: bool,
     };
-    // Every row transcribed directly from UnicodeData-16.0.0.txt and
-    // DerivedCoreProperties-16.0.0.txt, not from general Unicode knowledge:
+    // Every row transcribed directly from UnicodeData-17.0.0.txt and
+    // DerivedCoreProperties-17.0.0.txt, not from general Unicode knowledge:
     // several of these (Uppercase excluding Lt, Math spanning far more than
     // Sm) are easy to get wrong by assumption.
     const cases = [_]Want{
@@ -347,7 +347,7 @@ test "generalCategory and its derived booleans agree with the pinned UCD" {
         .{ .cp = 0x0301, .category = .mn, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = true, .math = false, .id_start = false, .id_continue = true, .xid_start = false, .xid_continue = true, .default_ignorable = false, .grapheme_base = false, .grapheme_extend = true },
         // U+00AD SOFT HYPHEN: Cf, Default_Ignorable_Code_Point.
         .{ .cp = 0x00AD, .category = .cf, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = true, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = true, .grapheme_base = false, .grapheme_extend = false },
-        // U+0378: unassigned in Unicode 16.0.0, so Cn and every boolean false.
+        // U+0378: unassigned in Unicode 17.0.0, so Cn and every boolean false.
         .{ .cp = 0x0378, .category = .cn, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = false, .grapheme_base = false, .grapheme_extend = false },
     };
     for (cases) |want| {

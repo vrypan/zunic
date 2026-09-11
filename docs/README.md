@@ -16,10 +16,10 @@ returned bytes. See [shared conventions](conventions.md) for lifetimes and offse
 
 The signatures use names exported by `zunic`, grouped by their owning view.
 They are an overview, not a standalone Zig file. `form` and `how` are compile-time
-arguments. Unicode data is pinned to **16.0.0**.
+arguments. Unicode data is pinned to **17.0.0**.
 
 ```zig
-pub const unicode_version: std.SemanticVersion; // 16.0.0
+pub const unicode_version: std.SemanticVersion; // 17.0.0
 pub fn text(bytes: []const u8) Text;
 pub fn terminal(bytes: []const u8) Terminal;
 ```
@@ -137,8 +137,9 @@ composing form (`.nfc`/`.nfkc`); a decomposing form (`.nfd`/`.nfkd`) never
 does. `isNormalized()` resolves the answer to a boolean and may stop early.
 `.nfkc`/`.nfkd` also decompose compatibility mappings (ligatures, fullwidth
 forms, and similar) that `.nfc`/`.nfd` leave untouched; `eql(..., .compatibility)`
-is the matching broader equivalence. Case folding and stream-safe
-normalization are not available.
+is the matching broader equivalence. Full default case folding is available
+through `fullCaseFold()` as a separate scalar operation; it is not folded into
+normalization or equality. Stream-safe normalization is not available.
 
 ### Terminal
 
@@ -234,6 +235,28 @@ pub const GraphemeProperties = struct {
 };
 pub fn graphemeProperties(cp: u21) GraphemeProperties;
 
+pub const max_codepoint: u21 = 0x10FFFF;
+pub const EastAsianWidth = enum(u3) { neutral, fullwidth, halfwidth, wide, narrow, ambiguous };
+pub const WidthProperties = struct {
+    standalone: u2,
+    zero_in_grapheme: bool,
+    emoji_modifier: bool,
+};
+pub const CaseFold = struct {
+    codepoints: [3]u21,
+    len: u2,
+    pub fn slice(self: *const CaseFold) []const u21;
+};
+pub const GraphemeState = struct { /* copyable checkpoint state */ };
+pub fn eastAsianWidth(cp: u21) EastAsianWidth;
+pub fn isEmojiPresentation(cp: u21) bool;
+pub fn isEmojiVariationBase(cp: u21) bool;
+pub fn isEmojiModifier(cp: u21) bool;
+pub fn isEmojiModifierBase(cp: u21) bool;
+pub fn widthProperties(cp: u21) WidthProperties;
+pub fn fullCaseFold(cp: u21) CaseFold;
+pub fn graphemeBreak(previous: u21, current: u21, state: *GraphemeState) bool;
+
 // Whether a code point has East_Asian_Width Wide, Fullwidth, or Halfwidth.
 pub fn isEastAsianWide(cp: u21) bool;
 
@@ -296,11 +319,27 @@ with -- not a boundary decision by itself, since a real decision also needs
 the state carried between code points. Reach for it to build a different
 segmentation on code points that did not come from `Text`; use
 `Text.graphemes()` for the common case, which already applies the full rules.
+For codepoint-at-a-time input, initialize `GraphemeState` with `.{};` and call
+`graphemeBreak(previous, current, &state)` for each adjacent pair. The first
+call seeds `previous`; later calls pass the prior `current` again, and the state
+does not consume it twice. A `true` result means a boundary occurs before
+`current` and leaves the state ready for that new cluster. Copy the state to
+checkpoint speculative input and restore the copy to undo it. Controls retain
+default UAX #29 behavior; values above `max_codepoint` form independent
+boundaries and clear carried context.
+
 `isEastAsianWide` answers a different question than `codepointWidth`: a
 combining mark measures zero columns even when this is `true`, and a
 Halfwidth scalar (which this also counts as wide) measures one column
 despite it, since `codepointWidth` only treats Wide and Fullwidth as two
 columns.
+
+`fullCaseFold` folds one code point using Unicode's full default C/F mapping.
+The returned `CaseFold` owns its fixed `[3]u21` storage and allocates nothing;
+retain the value while using `slice()`. Full mappings take precedence over
+common mappings, Turkic alternatives are excluded, and unmapped or
+out-of-range `u21` values return themselves. Folding is separate from
+normalization and locale-sensitive casing.
 
 `generalCategory` and the fourteen functions after it are General_Category
 and `DerivedCoreProperties` booleans, generated solely to expose them -- no
@@ -310,7 +349,7 @@ no context. Several read as narrower or broader than their name suggests:
 `isUppercase` also covers some `Nl`/`So` code points but not `Lt`;
 `isGraphemeExtend` is the `DerivedCoreProperties` property, not
 `graphemeProperties(cp).gcb == .extend` (they disagree on five code points
-in Unicode 16.0.0). See each function's doc comment in `root.zig` for the
+in Unicode 17.0.0). See each function's doc comment in `root.zig` for the
 verified category list it actually spans. `generalCategoryProperties` is one
 lookup for all fourteen facts; each `isXxx` function reads one field of it.
 

@@ -4,10 +4,10 @@
 
 ## Unicode standards
 
-`width()` uses Unicode 16.0.0 East Asian Width data described in
-[UAX #11: East Asian Width, revision 43](https://www.unicode.org/reports/tr11/tr11-43.html)
+`width()` uses Unicode 17.0.0 East Asian Width data described in
+[UAX #11: East Asian Width, revision 45](https://www.unicode.org/reports/tr11/tr11-45.html)
 and groups characters using the extended grapheme rules from
-[UAX #29, revision 45](https://www.unicode.org/reports/tr29/tr29-45.html).
+[UAX #29, revision 47](https://www.unicode.org/reports/tr29/tr29-47.html).
 The final column count follows Zunic's policy below. UAX #11 supplies width
 properties; it does not prescribe a complete terminal-width algorithm.
 

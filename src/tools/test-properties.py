@@ -23,7 +23,7 @@ DATA = ROOT / "data"
 SOURCE = ROOT / "tables/properties.zig"
 MAXCP = 0x110000
 
-# EastAsianWidth-16.0.0.txt header: unlisted code points are "N", except
+# EastAsianWidth-17.0.0.txt header: unlisted code points are "N", except
 # unassigned ones in these blocks, which default to "W".
 EAW_DEFAULT_W = (
     (0x3400, 0x4DBF), (0x4E00, 0x9FFF), (0xF900, 0xFAFF),
@@ -52,7 +52,7 @@ def read_property(filename, default, wanted=None):
 def read_categories():
     values = ["Cn"] * MAXCP
     first_cp = None
-    for raw in (DATA / "UnicodeData-16.0.0.txt").read_text(encoding="utf-8").splitlines():
+    for raw in (DATA / "UnicodeData-17.0.0.txt").read_text(encoding="utf-8").splitlines():
         cp_text, name, category = raw.split(";")[:3]
         cp = int(cp_text, 16)
         if name.endswith(", First>"):
@@ -114,15 +114,15 @@ def zig_name(value):
 
 
 def main():
-    check_unicode_version("UnicodeData-16.0.0.txt", "LineBreak-16.0.0.txt", "GraphemeBreakProperty-16.0.0.txt",
-              "EastAsianWidth-16.0.0.txt", "emoji-data-16.0.0.txt", "DerivedCoreProperties-16.0.0.txt")
+    check_unicode_version("UnicodeData-17.0.0.txt", "LineBreak-17.0.0.txt", "GraphemeBreakProperty-17.0.0.txt",
+              "EastAsianWidth-17.0.0.txt", "emoji-data-17.0.0.txt", "DerivedCoreProperties-17.0.0.txt")
 
-    gcb = read_property("GraphemeBreakProperty-16.0.0.txt", "Other")
-    incb = read_property("DerivedCoreProperties-16.0.0.txt", "None",
+    gcb = read_property("GraphemeBreakProperty-17.0.0.txt", "Other")
+    incb = read_property("DerivedCoreProperties-17.0.0.txt", "None",
                          {"InCB; Consonant", "InCB; Extend", "InCB; Linker"})
-    ep = read_property("emoji-data-16.0.0.txt", "", {"Extended_Pictographic"})
-    lb = read_property("LineBreak-16.0.0.txt", "XX")
-    eaw = read_property("EastAsianWidth-16.0.0.txt", "N")
+    ep = read_property("emoji-data-17.0.0.txt", "", {"Extended_Pictographic"})
+    lb = read_property("LineBreak-17.0.0.txt", "XX")
+    eaw = read_property("EastAsianWidth-17.0.0.txt", "N")
     category = read_categories()
 
     for lo, hi in EAW_DEFAULT_W:

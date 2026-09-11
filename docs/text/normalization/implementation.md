@@ -137,6 +137,6 @@ ordering, composition, malformed input, buffer limits, partial results, and
 query shortcuts, for all four forms. Property-generator tests check the
 scratch-size and expansion bounds against the pinned data, canonical and
 compatibility alike, and the conformance suite
-(`zig build test-conformance`) checks NFKC and NFKD against all 19,965 cases
-of the pinned `NormalizationTest-16.0.0.txt`, the same fixture NFC and NFD
+(`zig build test-conformance`) checks NFKC and NFKD against all 20,034 cases
+of the pinned `NormalizationTest-17.0.0.txt`, the same fixture NFC and NFD
 are checked against.

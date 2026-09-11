@@ -17,7 +17,7 @@
 //! cheaper to test directly than to look up.
 const utf8 = @import("encoding").utf8;
 
-/// Unicode 16.0.0 `White_Space=Yes`, as published in UCD `PropList.txt`.
+/// Unicode 17.0.0 `White_Space=Yes`, as published in UCD `PropList.txt`.
 ///
 /// Exactly 25 code points. This is not general category `Zs`, not
 /// `Pattern_White_Space`, not the zero-width set, and not the UAX #14 hard
