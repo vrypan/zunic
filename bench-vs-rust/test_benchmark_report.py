@@ -14,7 +14,7 @@ def row(ns, units=2):
 
 class BenchmarkReportTests(unittest.TestCase):
     def summary(self, suite):
-        operation = {"normalize": "nfc", "words": "bounds", "wrap": "full", "linebreak": "opportunities", "strip_ansi": "strip"}[suite]
+        operation = {"normalize": "nfc", "words": "bounds", "wrap": "full", "linebreak": "opportunities", "strip_ansi": "strip", "width": "width"}[suite]
         pair = {"name": "a", "order": ("zunic", "rust"),
                 "zunic": {"sample": {operation: row(100)}},
                 "rust": {"sample": {operation: row(120)}}}
@@ -29,7 +29,7 @@ class BenchmarkReportTests(unittest.TestCase):
             notes=[], environment={}, provenance={})
 
     def test_all_suites_share_one_schema_and_reporters(self):
-        for suite in ("normalize", "words", "wrap", "linebreak", "strip_ansi"):
+        for suite in ("normalize", "words", "wrap", "linebreak", "strip_ansi", "width"):
             with self.subTest(suite=suite):
                 summary = json.loads(json.dumps(self.summary(suite)))
                 self.assertEqual(summary["schema"], SCHEMA)

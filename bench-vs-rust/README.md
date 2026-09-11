@@ -15,10 +15,11 @@ Rust/Cargo, Python 3, curl, and Make installed.
 | Suite | Rust library | Operations |
 | --- | --- | --- |
 | [Line breaking](rust-linebreak/README.md) | unicode-linebreak 0.1.5 | Line-break opportunities |
-| [Normalization](rust-normalize/README.md) | unicode-normalization 0.1.24 | NFC and NFD iteration |
+| [Normalization](rust-normalize/README.md) | unicode-normalization 0.1.24 | NFC, NFD, NFKC, and NFKD iteration |
 | [Words](rust-words/README.md) | unicode-segmentation 1.13.3 | Word boundaries and word-like segments |
 | [Wrapping](rust-wrap/README.md) | textwrap 0.16.2 | Full wrapping and first 24 lines |
 | [ANSI stripping](rust-strip-ansi/README.md) | strip-ansi-escapes 0.2.1 | Reused and allocated output buffers |
+| [Display width](rust-width/README.md) | unicode-width 0.2.2 | Whole-text display width |
 
 <!-- recorded-results:start -->
 ## Recorded results: 870043a on MacBook Pro M4

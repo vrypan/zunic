@@ -10,6 +10,7 @@ SUITES = {
     'rust-words': ('zunic-words-bench', 'target/release/unicode-words-bench'),
     'rust-wrap': ('zunic-wrap-bench', 'target/release/cellwidth-wrap-bench'),
     'rust-strip-ansi': ('zunic-strip-ansi-bench', 'target/release/rust-strip-ansi-bench'),
+    'rust-width': ('zunic-width-bench', 'target/release/unicode-width-bench'),
 }
 
 

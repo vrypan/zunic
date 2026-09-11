@@ -9,6 +9,7 @@ CONTRACTS = {
     "words": "range_checksum_v1",
     "wrap": "line_bytes_fnv1",
     "linebreak": "offset_status_checksum_v1",
+    "width": "width_sum_v1",
 }
 
 
