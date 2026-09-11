@@ -10,6 +10,7 @@ const word_engine = @import("segmentation").word;
 const wrap_engine = @import("layout").wrap;
 const text_trim = @import("text_trim.zig");
 const ascii_scan = @import("encoding").ascii;
+const scalar_engine = @import("encoding").scalar;
 
 const types = @import("types");
 pub const ByteOffset = types.ByteOffset;
@@ -143,6 +144,12 @@ pub const Text = struct {
     /// Extended grapheme clusters. Call `.measured()` on the result for
     /// per-cluster terminal columns.
     pub fn graphemes(self: Text) Graphemes {
+        return .{ .bytes = self.bytes };
+    }
+
+    /// Individual Unicode scalars, one at a time. See `Codepoints` for how
+    /// this differs from `graphemes()` and how malformed UTF-8 is reported.
+    pub fn codepoints(self: Text) Codepoints {
         return .{ .bytes = self.bytes };
     }
 
@@ -414,6 +421,55 @@ pub const WordBoundIterator = struct {
             .start = .{ .value = span.start },
             .end = .{ .value = span.end },
             .is_word = span.is_word,
+        };
+    }
+};
+
+/// One decoded Unicode scalar, or one byte of malformed input.
+pub const Codepoint = struct {
+    start: ByteOffset,
+    end: ByteOffset,
+    /// Null for a byte that could not begin or continue valid UTF-8; `end`
+    /// still advances by exactly one byte in that case, the same recovery
+    /// `graphemes()` and `width()` use, so scanning always finishes.
+    value: ?u21,
+    /// This scalar's own terminal-cell width, `0`, `1`, or `2` -- the same
+    /// flat lookup as the top-level `codepointWidth()`, not folded into a
+    /// cluster. Malformed input (`value == null`) is `0`, matching
+    /// `Text.width()`'s own treatment of undecodable bytes. Summing this
+    /// field over every item is not the same question as `Text.width()`;
+    /// see `codepointWidth()`'s docs for why.
+    width: u2,
+};
+
+/// The individual Unicode scalars of this text, as a lazy iterator.
+///
+/// Unlike `graphemes()`, this does not group combining marks or multi-scalar
+/// sequences with their base -- each scalar is its own item. Malformed UTF-8
+/// is never an error here: see `Codepoint.value`.
+///
+/// ```zig
+/// var it = zunic.text(bytes).codepoints().iterator();
+/// while (it.next()) |cp| if (cp.value) |scalar| use(scalar);
+/// ```
+pub const Codepoints = struct {
+    bytes: []const u8,
+
+    pub fn iterator(self: Codepoints) CodepointIterator {
+        return .{ .inner = scalar_engine.iterator(self.bytes) };
+    }
+};
+
+pub const CodepointIterator = struct {
+    inner: scalar_engine.Iterator,
+
+    pub fn next(self: *CodepointIterator) ?Codepoint {
+        const token = self.inner.next() orelse return null;
+        return .{
+            .start = .{ .value = token.start },
+            .end = .{ .value = token.end },
+            .value = token.codepoint,
+            .width = token.cell_width,
         };
     }
 };

@@ -162,6 +162,49 @@ test "word bounds partition the view and name their own types" {
     try std.testing.expectEqual(@as(?unicode.WordBound, null), empty.next());
 }
 
+test "codepoints partition the view one scalar at a time and name their own types" {
+    const text = "a\xff\u{754c}\xc0\x80";
+
+    const points: unicode.Codepoints = unicode.text(text).codepoints();
+    var it: unicode.CodepointIterator = points.iterator();
+    var first: unicode.Codepoint = undefined;
+
+    var scalars: usize = 0;
+    var malformed: usize = 0;
+    var cursor: usize = 0;
+    var count: usize = 0;
+    while (it.next()) |cp| : (count += 1) {
+        if (count == 0) first = cp;
+        try std.testing.expectEqual(cursor, cp.start.value);
+        cursor = cp.end.value;
+        if (cp.value) |value| {
+            scalars += 1;
+            // The per-scalar width the iterator carries always agrees with
+            // the standalone lookup for the same code point.
+            try std.testing.expectEqual(unicode.codepointWidth(value), cp.width);
+        } else {
+            malformed += 1;
+            try std.testing.expectEqual(@as(u2, 0), cp.width);
+        }
+    }
+    try std.testing.expectEqual(text.len, cursor);
+    try std.testing.expectEqual(@as(usize, 2), scalars); // 'a', U+754C
+    // A stray 0xff byte and an overlong two-byte encoding of NUL each
+    // consume exactly one byte, per `graphemes()`/`width()`'s own recovery.
+    try std.testing.expectEqual(@as(usize, 3), malformed);
+    try std.testing.expectEqual(@as(usize, 1), first.end.value - first.start.value);
+    try std.testing.expectEqual(@as(?u21, 'a'), first.value);
+    try std.testing.expectEqual(@as(u2, 1), first.width);
+    try std.testing.expectEqual(@as(u2, 1), unicode.codepointWidth('a'));
+    try std.testing.expectEqual(@as(u2, 2), unicode.codepointWidth(0x754c)); // 界, wide
+    try std.testing.expectEqual(@as(u2, 0), unicode.codepointWidth(0x0301)); // combining acute, zero
+
+    // Opening the view scans nothing, and an exhausted iterator stays null.
+    try std.testing.expectEqual(@as(?unicode.Codepoint, null), it.next());
+    var empty = unicode.text("").codepoints().iterator();
+    try std.testing.expectEqual(@as(?unicode.Codepoint, null), empty.next());
+}
+
 test "the pinned Unicode data version is published" {
     try std.testing.expectEqual(@as(u64, 16), unicode.unicode_version.major);
     try std.testing.expectEqual(@as(u64, 0), unicode.unicode_version.minor);

@@ -30,6 +30,7 @@ pub fn terminal(bytes: []const u8) Terminal;
 // Text methods
 pub fn validate(self: Text) error{InvalidUtf8}!void;
 pub fn graphemes(self: Text) Graphemes;
+pub fn codepoints(self: Text) Codepoints;
 pub fn width(self: Text) usize;
 pub fn wrap(self: Text, options: WrapOptions) error{InvalidWidth}!Wrapped;
 pub fn trim(self: Text) Text;
@@ -61,6 +62,7 @@ exported. `Self` below means the corresponding iterator.
 | --- | --- | --- |
 | `Graphemes` | `.iterator()`, `.measured() → MeasuredGraphemes` | `next(self: *Self) ?Span` |
 | `MeasuredGraphemes` | `.iterator()` | `next(self: *Self) ?MeasuredSpan` |
+| `Codepoints` | `.iterator() → CodepointIterator` | `next(self: *Self) ?Codepoint` |
 | `Wrapped` | `.iterator()`, `.count() → usize` | `next(self: *Self) ?Line` |
 | `Terminators` | `.iterator() → TerminatorIterator`, `.count() → usize` | `next(self: *Self) ?Span` |
 | `WordBounds` | `.iterator() → WordBoundIterator` | `next(self: *Self) ?WordBound` |
@@ -103,6 +105,7 @@ pub const MeasuredSpan = struct {
 };
 pub const Line = struct { start: ByteOffset, end: ByteOffset, columns: Column };
 pub const WordBound = struct { start: ByteOffset, end: ByteOffset, is_word: bool };
+pub const Codepoint = struct { start: ByteOffset, end: ByteOffset, value: ?u21, width: u2 };
 ```
 
 Columns follow Zunic's cell width policy. `.grapheme` allows wrapping
@@ -111,6 +114,13 @@ Neither splits an individual grapheme. A zero width is `InvalidWidth`.
 `isWhitespace(span)` accepts a `Span` or `MeasuredSpan` from the same Text slice.
 `isAscii()` scans the whole slice on every call, with no cache; it is a
 byte-range test, not UTF-8 validation.
+
+`codepoints()` yields one `Codepoint` per scalar, unlike `graphemes()`, which
+groups combining marks and multi-scalar sequences with their base. A malformed
+byte is never an error: it yields a `Codepoint` with `value = null` and
+`end - start == 1`, the same one-byte recovery `graphemes()` and `width()` use.
+`Codepoint.width` is the same flat lookup as `codepointWidth()`, `0` for
+malformed input; see that function's docs for how it differs from `Text.width()`.
 
 `isNormalizedQuick()` scans the whole input and can return `.maybe` for a
 composing form (`.nfc`/`.nfkc`); a decomposing form (`.nfd`/`.nfkd`) never
@@ -199,6 +209,9 @@ pub fn isWhitespaceSlice(glyph: []const u8) bool;
 // Whether every byte in a slice is below 0x80. `Text.isAscii()` and
 // `Terminal.isAscii()` are the same check on a view's own bytes.
 pub fn isAscii(bytes: []const u8) bool;
+
+// The terminal-cell width of one code point in isolation: 0, 1, or 2.
+pub fn codepointWidth(cp: u21) u2;
 ```
 
 Spans describe `bytes[start.value..end.value]` in the view's input slice.
@@ -208,6 +221,16 @@ count as ASCII; a high byte fails the check whether it belongs to valid UTF-8
 or to malformed input. It is not UTF-8 validation and not a printable-text
 check. `std.ascii.isAscii` checks one byte; this checks a whole slice with a
 vectorized scan (SIMD where the target supports it) and a scalar tail.
+
+`codepointWidth` is a flat, per-scalar lookup: it does not group combining
+marks or multi-scalar sequences with a base. Summing it over a string's
+scalars is a different, narrower question than `Text.width()` and disagrees
+with it on exactly the inputs that motivate grapheme clustering -- a
+combining mark or a conjunct's vowel sign reports its own nonzero width here,
+while `Text.width()` folds it into the cluster it belongs to. Prefer
+`text(bytes).width()` for text; reach for `codepointWidth` when working with
+a code point that did not come from `Text`, or read it directly off
+`Codepoint.width` while iterating `codepoints()`.
 
 ## Detailed documentation
 

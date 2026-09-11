@@ -15,9 +15,10 @@ pub fn validate(self: Text) error{InvalidUtf8}!void;
 ```
 
 `try view.validate()` checks the complete slice and returns `InvalidUtf8` if it
-is malformed. It does not change the view or later operations. Grapheme, word,
-width, wrap, and trim operations tolerate malformed UTF-8; normalization reports
-it when encountered. Terminators scan exact byte sequences.
+is malformed. It does not change the view or later operations. Grapheme,
+codepoint, word, width, wrap, and trim operations tolerate malformed UTF-8;
+normalization reports it when encountered. Terminators scan exact byte
+sequences.
 
 `view.isAscii()` is a different, narrower question: a plain byte-range test
 (every byte below `0x80`), not a UAX algorithm and not UTF-8 validation. Empty
@@ -29,6 +30,7 @@ ASCII. It scans the whole slice on every call; there is no cache.
 | Method | Result | API and examples | Implementation |
 | --- | --- | --- | --- |
 | `graphemes()` | View of extended grapheme spans | [Graphemes](graphemes/README.md) | [Decisions](graphemes/implementation.md) |
+| `codepoints()` | View of individual Unicode scalars | [API overview](../README.md#text) | -- |
 | `width()` | Total display columns | [Width](width/README.md) | [Decisions](width/implementation.md) |
 | `wrap(options)` | View of display lines | [Wrap](wrap/README.md) | [Decisions](wrap/implementation.md) |
 | `trim()`, `trimStart()`, `trimEnd()` | Text over the retained bytes | [Trim](trim/README.md) | [Decisions](trim/implementation.md) |

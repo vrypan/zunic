@@ -45,6 +45,9 @@ pub const Graphemes = text_view.Graphemes;
 pub const WordBound = text_view.WordBound;
 pub const WordBounds = text_view.WordBounds;
 pub const WordBoundIterator = text_view.WordBoundIterator;
+pub const Codepoint = text_view.Codepoint;
+pub const Codepoints = text_view.Codepoints;
+pub const CodepointIterator = text_view.CodepointIterator;
 pub const Form = normalization.Form;
 pub const Equivalence = normalization.Equivalence;
 pub const NormalizationIterator = normalization.Iterator;
@@ -109,6 +112,19 @@ pub const isWhitespaceSlice = text_trim.isWhitespaceSlice;
 /// scalar tail. `Text.isAscii()` and `Terminal.isAscii()` are the same check
 /// on a view's own bytes.
 pub const isAscii = @import("encoding").ascii.isAscii;
+
+/// The terminal-cell width of one code point in isolation: `0`, `1`, or `2`.
+///
+/// This is a flat, per-scalar lookup -- it does not group combining marks or
+/// multi-scalar sequences with a base, so summing it over a string's scalars
+/// is a different, narrower question than `Text.width()` and disagrees with
+/// it on exactly the inputs that motivate grapheme clustering: a combining
+/// mark or a conjunct's vowel sign reports its own nonzero width here, while
+/// `Text.width()` folds it into the cluster it belongs to. Reach for this
+/// when working with a code point that did not come from `Text`, such as one
+/// produced elsewhere in a caller's own pipeline; prefer
+/// `text(bytes).width()` or `text(bytes).graphemes().measured()` for text.
+pub const codepointWidth = @import("tables").properties.codepointWidth;
 
 /// Instrumented wrapping is retained solely for zunic's work-bound tests.
 pub const testing = struct {
