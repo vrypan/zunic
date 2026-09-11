@@ -522,10 +522,36 @@ fn checkIsNormalized(input: []const u8, comptime form: Form, buffer: []u8) !void
     };
 }
 
+test "isNormalized distinguishes absorbed and retained blocking marks" {
+    const cases = [_]struct { input: []const u8, normalized: []const u8 }{
+        .{ .input = "\u{00FC}\u{0301}", .normalized = "\u{01D8}" },
+        .{ .input = "\u{00C5}\u{0301}", .normalized = "\u{01FA}" },
+        .{ .input = "\u{03CA}\u{0301}", .normalized = "\u{0390}" },
+        // An unabsorbed class-230 mark really does block the acute.
+        .{ .input = "\u{00FC}\u{0305}\u{0301}", .normalized = "\u{00FC}\u{0305}\u{0301}" },
+        // A lower-class retained mark does not block it.
+        .{ .input = "\u{00FC}\u{0316}\u{0301}", .normalized = "\u{01D8}\u{0316}" },
+        // The hidden diaeresis still outranks both retained marks; checking
+        // the cedilla must not lose that context before the dot below.
+        .{ .input = "\u{00FC}\u{0327}\u{0323}", .normalized = "\u{1EE5}\u{0327}\u{0308}" },
+        // A decomposable Maybe can compose through its expansion even when
+        // there is no direct composition pair for the two written scalars.
+        .{ .input = "\u{1611E}\u{16123}", .normalized = "\u{16126}" },
+    };
+    var buffer: [64]u8 = undefined;
+    for (cases) |case| {
+        inline for (.{ Form.nfc, Form.nfkc }) |form| {
+            try std.testing.expectEqualStrings(case.normalized, try normalization.normalize(case.input, form).writeTo(&buffer));
+            try std.testing.expectEqual(std.mem.eql(u8, case.input, case.normalized), try normalization.isNormalized(case.input, form));
+            try std.testing.expect(try normalization.isNormalized(case.normalized, form));
+        }
+    }
+}
+
 test "isNormalized agrees with normalizing over random streams" {
     var prng = std.Random.DefaultPrng.init(0x023_15_b0bcafe);
     const random = prng.random();
-    const alphabet = [_]u21{ 'a', 0x0300, 0x0301, 0x0327, 0x00E9, 0x1E69, 0x0323, 0x0307, 0xAC00, 0x1100, 0x1161, 0x11A8, 0x212A, 0x0344, 0x0F73, 0x0958 };
+    const alphabet = [_]u21{ 'a', 0x0300, 0x0301, 0x0327, 0x00E9, 0x1E69, 0x0323, 0x0307, 0xAC00, 0x1100, 0x1161, 0x11A8, 0x212A, 0x0344, 0x0F73, 0x0958, 0x00FC, 0x00C5, 0x03CA, 0x0305, 0x0316, 0xFB01 };
     var input: [256]u8 = undefined;
     var buffer: [1024]u8 = undefined;
     for (0..20_000) |_| {
@@ -534,6 +560,8 @@ test "isNormalized agrees with normalizing over random streams" {
             len += std.unicode.utf8Encode(alphabet[random.uintLessThan(usize, alphabet.len)], input[len..]) catch unreachable;
         try checkIsNormalized(input[0..len], .nfc, &buffer);
         try checkIsNormalized(input[0..len], .nfd, &buffer);
+        try checkIsNormalized(input[0..len], .nfkc, &buffer);
+        try checkIsNormalized(input[0..len], .nfkd, &buffer);
     }
 }
 

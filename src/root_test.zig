@@ -35,6 +35,35 @@ test "grapheme traversal retains byte spans and optional terminal measure" {
     }
 }
 
+test "GB11 permits Extend before one ZWJ but not repeated ZWJs" {
+    const emoji = "\u{1F600}";
+    for ([_][]const u8{ emoji ++ "\u{200D}\u{200D}", emoji ++ "\u{200D}\u{0301}\u{200D}" }) |prefix| {
+        var buffer: [32]u8 = undefined;
+        @memcpy(buffer[0..prefix.len], prefix);
+        @memcpy(buffer[prefix.len..][0..emoji.len], emoji);
+        const bytes = buffer[0 .. prefix.len + emoji.len];
+        var it = unicode.text(bytes).graphemes().measured().iterator();
+        for ([_][2]usize{ .{ 0, prefix.len }, .{ prefix.len, bytes.len } }) |expected| {
+            const span = it.next() orelse return error.TestUnexpectedResult;
+            try std.testing.expectEqual(expected[0], span.start.value);
+            try std.testing.expectEqual(expected[1], span.end.value);
+            try std.testing.expectEqual(@as(u2, 2), span.columns);
+        }
+        try std.testing.expect(it.next() == null);
+        try std.testing.expectEqual(@as(usize, 4), unicode.text(bytes).width());
+        var lines = (try unicode.text(bytes).wrap(.{ .max_columns = 2 })).iterator();
+        try std.testing.expectEqual(prefix.len, lines.next().?.end.value);
+        try std.testing.expectEqual(bytes.len, lines.next().?.end.value);
+        try std.testing.expect(lines.next() == null);
+    }
+    // Legitimate Extend* ZWJ sequences must remain a single cluster.
+    const valid = emoji ++ "\u{0301}\u{200D}" ++ emoji;
+    var it = unicode.text(valid).graphemes().iterator();
+    try std.testing.expectEqual(valid.len, it.next().?.end.value);
+    try std.testing.expect(it.next() == null);
+    try std.testing.expectEqual(@as(usize, 2), unicode.text(valid).width());
+}
+
 test "measured spans carry column and renderability" {
     const text = "\xcc\x81a\u{754c}b";
     try std.testing.expectEqual(@as(usize, 4), unicode.text(text).width());

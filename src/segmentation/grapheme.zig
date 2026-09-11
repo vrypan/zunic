@@ -70,6 +70,8 @@ pub const ClusterState = struct {
         if (current == .ri) self.ri_count += 1 else if (current != .extend) self.ri_count = 0;
         if (current == .zwj) {
             self.zwj_after_ep = self.ep_before_zwj;
+            // GB11 permits Extend* before one ZWJ, not a chain of ZWJs.
+            self.ep_before_zwj = false;
         } else if (current == .ep) {
             self.ep_before_zwj = true;
             self.zwj_after_ep = false;

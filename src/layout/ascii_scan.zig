@@ -171,7 +171,9 @@ pub const AsciiLine = struct {
 };
 
 /// Measure the run at `start` up to the next hard terminator, or null when a
-/// byte outside `0x00..0x7E` appears before one.
+/// byte outside `0x00..0x7E` appears before one, or the width exceeds
+/// `max_columns`. Stop an overlong probe promptly so wrapping cannot scan
+/// the entire remaining physical line again after every soft break.
 ///
 /// The null is the caller's signal to fall back: DEL and everything above it
 /// need the general path, DEL because it is zero-width and the rest because
@@ -181,7 +183,13 @@ pub const AsciiLine = struct {
 /// break". A line that fits needs no break opportunity, so it needs none of
 /// the alphabet restrictions `isSimple` imposes -- which is what lets source
 /// code take this path when it cannot take `paragraph`'s.
-pub fn asciiLine(bytes: []const u8, start: usize) ?AsciiLine {
+pub fn asciiLine(bytes: []const u8, start: usize, max_columns: usize) ?AsciiLine {
+    return asciiLineCounted(false, bytes, start, max_columns, {});
+}
+
+/// Counts bytes examined by the probe, including vector loads repeated by
+/// the scalar tail. The counter and its updates disappear in production.
+pub fn asciiLineCounted(comptime instrumented: bool, bytes: []const u8, start: usize, max_columns: usize, examined: if (instrumented) *usize else void) ?AsciiLine {
     var pos = start;
     var columns: usize = 0;
     if (selectedBackend() != .off and simdSupported()) {
@@ -189,6 +197,7 @@ pub fn asciiLine(bytes: []const u8, start: usize) ?AsciiLine {
         const Mask = std.meta.Int(.unsigned, simd_width);
         while (pos + simd_width <= bytes.len) : (pos += simd_width) {
             const chunk: V = bytes[pos..][0..simd_width].*;
+            if (instrumented) examined.* += simd_width;
             // Anything that ends the run, in one mask: a byte the policy
             // cannot answer (`> 0x7E` covers DEL and non-ASCII alike) or a
             // hard terminator (the contiguous 0x0A..0x0D).
@@ -202,16 +211,20 @@ pub fn asciiLine(bytes: []const u8, start: usize) ?AsciiLine {
             if (@reduce(.Or, ends_run)) break;
             const printable = chunk >= @as(V, @splat(0x20));
             columns += @popCount(@as(Mask, @bitCast(printable)));
+            if (columns > max_columns) return null;
         }
     }
     while (pos < bytes.len) : (pos += 1) {
         const byte = bytes[pos];
+        if (instrumented) examined.* += 1;
         if (byte > 0x7E) return null;
         if (byte >= 0x0A and byte <= 0x0D) {
+            if (instrumented and byte == '\r' and pos + 1 < bytes.len) examined.* += 1;
             const crlf = byte == '\r' and pos + 1 < bytes.len and bytes[pos + 1] == '\n';
             return .{ .end = pos, .columns = columns, .terminator_len = if (crlf) 2 else 1 };
         }
         if (byte >= 0x20) columns += 1;
+        if (columns > max_columns) return null;
     }
     return .{ .end = bytes.len, .columns = columns, .terminator_len = 0 };
 }

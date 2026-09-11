@@ -174,7 +174,7 @@ fn expectTableMatchesReference(bytes: []const u8) !void {
 
 test "grapheme table agrees with the reference transition" {
     try std.testing.expect(grapheme.machine.category_count == 18);
-    try std.testing.expect(grapheme.machine.reachable_states == 25);
+    try std.testing.expectEqual(@as(usize, 25), grapheme.machine.reachable_states);
     try std.testing.expect(grapheme.machine.data_bytes <= 16 * 1024);
 
     const cases = [_][]const u8{
@@ -564,8 +564,11 @@ test "asciiLine agrees with a scalar reference at every alignment" {
         var start: usize = 0;
         while (start <= len) : (start += 1) {
             const want = referenceAsciiLine(bytes[0..len], start);
-            const got = scan.ascii.asciiLine(bytes[0..len], start);
+            const got = scan.ascii.asciiLine(bytes[0..len], start, std.math.maxInt(usize));
             try std.testing.expectEqualDeep(want, got);
+            const limit = random.uintLessThan(usize, 32);
+            const bounded = if (want) |line| (if (line.columns <= limit) want else null) else null;
+            try std.testing.expectEqualDeep(bounded, scan.ascii.asciiLine(bytes[0..len], start, limit));
         }
     }
 }
@@ -581,7 +584,7 @@ test "asciiLine column count matches the width engine" {
         "a\r\nb",
     };
     for (cases) |bytes| {
-        const line = scan.ascii.asciiLine(bytes, 0) orelse continue;
+        const line = scan.ascii.asciiLine(bytes, 0, std.math.maxInt(usize)) orelse continue;
         try std.testing.expectEqual(width.textWidth(bytes[0..line.end]), line.columns);
     }
 }

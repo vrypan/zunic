@@ -37,6 +37,12 @@ test "terminal graphemes skip complete CSI and OSC" {
     try expectSpans("\x1b]0;only a title\x07", &.{});
 }
 
+test "escape after repeated ZWJs precedes a new emoji grapheme" {
+    const prefix = "\u{1F600}\u{200D}\u{200D}";
+    const emoji = "\u{1F600}";
+    try expectSpans(prefix ++ "\x1b[31m" ++ emoji, &.{ prefix, emoji });
+}
+
 test "escapes inside graphemes fail when the joining content is reached" {
     const inputs = [_][]const u8{
         "e\x1b[31m\u{0301}",

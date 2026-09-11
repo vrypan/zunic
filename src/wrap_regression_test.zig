@@ -110,6 +110,29 @@ test "wrapping decodes each scalar once at all scales and widths" {
     }
 }
 
+test "overlong ASCII wrapping bounds whole-line probe work" {
+    const seed = "abcdefghij- "; // Hyphen selects the mixed path.
+    var buffer: [seed.len * 1024]u8 = undefined;
+    for (0..1024) |i| @memcpy(buffer[i * seed.len ..][0..seed.len], seed);
+    for ([_]usize{ 128, 256, 512, 1024 }) |count| {
+        const bytes = buffer[0 .. count * seed.len];
+        var it = try unicode.testing.instrumentedIterator(bytes, .{ .max_columns = 1, .overflow = .allow });
+        var lines: usize = 0;
+        while (it.next()) |line| {
+            try std.testing.expectEqual(lines * seed.len, line.start);
+            try std.testing.expectEqual((lines + 1) * seed.len, line.end);
+            try std.testing.expectEqual(seed.len, line.columns);
+            lines += 1;
+        }
+        try std.testing.expectEqual(count, lines);
+        // At most one vector (16 bytes) per overflowing line, or two
+        // scalar bytes. The old suffix scans exceed this by orders of magnitude.
+        try std.testing.expect(it.ascii_probe_bytes > 0);
+        try std.testing.expect(it.ascii_probe_bytes <= 16 * count);
+        try std.testing.expectEqual(bytes.len, it.scanner.counters.decoded_scalars);
+    }
+}
+
 test "viewport wrapping stays lazy" {
     var buffer: [4096]u8 = undefined;
     const seed = "wörter über zwölf lange tage hinweg ";

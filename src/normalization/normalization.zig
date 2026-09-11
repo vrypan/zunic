@@ -460,13 +460,13 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
     // Combining class of the previous character *as written*, which is what
     // the UAX #15 quick check compares.
     var written_previous_ccc: u8 = 0;
-    // The same, over the *decomposed* text, plus how many decomposed
-    // non-starters have followed the last decomposed starter. A precomposed
-    // character contributes marks here that are invisible in the input:
+    // Highest combining class since the last *decomposed* starter. Keep
+    // the maximum: later written marks may have lower classes than marks
+    // hidden inside a precomposed character, without changing its NFC form.
+    // A precomposed character contributes marks invisible in the input:
     // `U+00E9` is one written starter but decomposes to `e` and a class-230
     // mark.
-    var decomposed_trailing: u8 = 0;
-    var decomposed_since_starter: usize = 0;
+    var decomposed_max_ccc: u8 = 0;
     // The last starter as written -- what a composition would attach to --
     // and where it begins, for the general fallback below.
     var starter: ?u21 = null;
@@ -513,13 +513,17 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
                 // character that is its own composition question is never
                 // itself compatibility-decomposable (a compatibility-mapped
                 // code point's own NFKC_QC is always No, never Maybe).
-                .maybe => if (starter != null and decomposed_trailing <= ccc) {
+                // A Maybe with its own canonical decomposition can compose
+                // through that decomposition even when the written pair has
+                // no mapping (for example U+1611E U+16123). Settle it fully.
+                .maybe => if (starter != null and !class.decomposes and decomposed_max_ccc <= ccc) {
                     // UAX #15 blocking: `cp` is blocked from the starter when
                     // something between them has a class at least as large.
-                    // The run is in canonical order, so only the last matters;
-                    // and a starter is blocked by anything at all, every
-                    // non-starter's class being greater than zero.
-                    const blocked = decomposed_since_starter > 0 and decomposed_trailing >= ccc;
+                    // Only marks retained after the written starter block it.
+                    // Marks inside its decomposition are already absorbed:
+                    // the diaeresis in ü does not block ü + acute -> ǘ.
+                    // Decomposed context above still guards against reordering.
+                    const blocked = written_previous_ccc != 0 and written_previous_ccc >= ccc;
                     if (!blocked and starter_base and class.composable and
                         composePair(starter.?, cp) != null) return false;
                 } else {
@@ -543,13 +547,11 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
         if (!decomposes_here) {
             if (ccc == 0) {
                 nonstarters = 0;
-                decomposed_trailing = 0;
-                decomposed_since_starter = 0;
+                decomposed_max_ccc = 0;
             } else {
                 if (nonstarters == max_nonstarters) return error.SequenceTooLong;
                 nonstarters += 1;
-                decomposed_trailing = ccc;
-                decomposed_since_starter += 1;
+                decomposed_max_ccc = @max(decomposed_max_ccc, ccc);
             }
         } else {
             var scratch: [scratchLen(form)]Entry = undefined;
@@ -557,14 +559,12 @@ pub fn isNormalized(bytes: []const u8, comptime form: Form) Error!bool {
             for (scratch[0..len]) |entry| {
                 if (entry.ccc == 0) {
                     nonstarters = 0;
-                    decomposed_trailing = 0;
-                    decomposed_since_starter = 0;
+                    decomposed_max_ccc = 0;
                     continue;
                 }
                 if (nonstarters == max_nonstarters) return error.SequenceTooLong;
                 nonstarters += 1;
-                decomposed_trailing = entry.ccc;
-                decomposed_since_starter += 1;
+                decomposed_max_ccc = @max(decomposed_max_ccc, entry.ccc);
             }
         }
 

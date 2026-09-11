@@ -281,6 +281,10 @@ fn expectNormalizes(input: []const u8, comptime form: normalization.Form, expect
         return err;
     };
     try std.testing.expectEqualSlices(u8, expected, produced);
+    std.testing.expectEqual(std.mem.eql(u8, input, expected), try normalization.isNormalized(input, form)) catch |err| {
+        std.debug.print("isNormalized .{s} on \"{f}\"\n", .{ @tagName(form), std.ascii.hexEscape(input, .lower) });
+        return err;
+    };
 
     // Scalar iteration and writeTo must agree; the fixture is the only place
     // that exercises both over twenty thousand real cases.

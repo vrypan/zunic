@@ -3,9 +3,9 @@
 //! The general path is driven by `scan.Scanner`, which decodes each scalar
 //! once. The wrapper itself never rewinds it: the most recent fitting break
 //! is kept as a plain `Line` plus the column count accumulated since it, and
-//! an overflow step emits at most one extra buffered line. Total work is
-//! therefore bounded by the scanner's per-scalar bound, independent of
-//! `max_columns` and of how many lines are consumed.
+//! an overflow step emits at most one extra buffered line. The general path
+//! obeys the scanner's per-scalar bound. Whole-line ASCII probes stop once
+//! their width exceeds the limit; tests count those byte reads separately.
 const scan = @import("scan.zig");
 const ascii_scan = @import("ascii_scan.zig");
 const grapheme = @import("segmentation").grapheme;
@@ -18,8 +18,8 @@ pub const Options = struct {
 pub const Line = struct { start: usize, end: usize, columns: usize };
 
 pub const Iterator = IteratorImpl(false);
-/// Test-only variant whose scanner counts decoded scalars and buffered
-/// tokens so the work bound can be asserted; identical behavior otherwise.
+/// Test-only variant counting ASCII probe bytes, decoded scalars and buffered
+/// tokens so work bounds can be asserted; identical behavior otherwise.
 pub const InstrumentedIterator = IteratorImpl(true);
 
 fn IteratorImpl(comptime instrumented: bool) type {
@@ -27,6 +27,7 @@ fn IteratorImpl(comptime instrumented: bool) type {
         bytes: []const u8,
         options: Options,
         scanner: scan.Scanner(instrumented),
+        ascii_probe_bytes: if (instrumented) usize else void = if (instrumented) 0 else {},
         line_start: usize = 0,
         columns: usize = 0,
         candidate: ?Line = null,
@@ -64,16 +65,14 @@ fn IteratorImpl(comptime instrumented: bool) type {
                 self.columns == 0 and self.candidate == null and
                 self.line_start < self.bytes.len)
             {
-                if (ascii_scan.asciiLine(self.bytes, self.line_start)) |line| {
-                    if (line.columns <= self.options.max_columns) {
-                        const result: Line = .{ .start = self.line_start, .end = line.end, .columns = line.columns };
-                        self.line_start = line.end + line.terminator_len;
-                        // The scanner did not move, so it no longer describes
-                        // `line_start`; the next fallback repositions it.
-                        self.scanner_stale = true;
-                        if (self.line_start == self.bytes.len and line.terminator_len == 0) self.finished = true;
-                        return result;
-                    }
+                if (ascii_scan.asciiLineCounted(instrumented, self.bytes, self.line_start, self.options.max_columns, if (instrumented) &self.ascii_probe_bytes else {})) |line| {
+                    const result: Line = .{ .start = self.line_start, .end = line.end, .columns = line.columns };
+                    self.line_start = line.end + line.terminator_len;
+                    // The scanner did not move, so it no longer describes
+                    // `line_start`; the next fallback repositions it.
+                    self.scanner_stale = true;
+                    if (self.line_start == self.bytes.len and line.terminator_len == 0) self.finished = true;
+                    return result;
                 }
             }
             if (self.scanner_stale) {

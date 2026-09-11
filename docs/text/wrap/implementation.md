@@ -56,7 +56,11 @@ This check is used only when no candidate break, carried columns, or pending
 line must be preserved. After returning a complete line, the scanner is marked
 stale. If a later line needs the general path, the scanner restarts at that
 hard-break boundary, where earlier line-break context no longer applies.
-An overlong line falls back to the full rules. With `wrap-fast-path=off`,
+The check stops as soon as the measured width exceeds the limit and falls
+back to the full rules. This bounds repeated probes when overflowing words
+produce several wrapped lines within one physical line. Tests count the probe's
+byte reads separately from the general scanner's decodes.
+With `wrap-fast-path=off`,
 the whole-line check still runs scalarly; only its vector scan is disabled.
 
 ## Compile the line-break rules into a table

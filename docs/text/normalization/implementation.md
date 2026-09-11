@@ -103,14 +103,16 @@ context decides whether composition changes it. NFKC reads `NFKC_QC`, a
 separate stored property from `NFC_QC`, not derived from it (see
 [Avoid searches that cannot succeed](#avoid-searches-that-cannot-succeed)).
 
-When decomposed marks cannot reorder around the current character, a local
-composition check settles that `Maybe` -- decomposing compatibility-aware
-first when the form is NFKC, so the decomposed context this check reasons
-about reflects what NFKD would actually produce, not just NFD's narrower one.
-If reordering might matter, the code normalizes and compares the relevant
-prefix using the real algorithm, in the same form. It does not treat `Maybe`
-as `Yes`. This saves work on common already-normalized input while retaining
-the full check where it is needed.
+When the current character has no decomposition and earlier decomposed marks
+cannot reorder around it, a local composition check settles that `Maybe`.
+The check retains the highest decomposed combining class, including marks
+hidden in a precomposed starter. Only marks retained after the written starter
+block composition; marks already absorbed into it do not. NFKC tracks this
+context using compatibility decomposition.
+If reordering might matter, or the current character itself decomposes, the
+code normalizes and compares the relevant prefix using the real algorithm,
+in the same form. This saves work on common already-normalized input while
+retaining the full check where it is needed.
 
 `isNormalizedQuick()` exposes the three-valued check without settling Maybe.
 It checks written combining order and per-character quick-check properties,
