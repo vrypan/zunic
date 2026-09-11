@@ -276,3 +276,78 @@ test "graphemeProperties matches Codepoint.grapheme from the same iterator" {
     try std.testing.expectEqual(unicode.GraphemeClass.zwj, unicode.graphemeProperties(0x200D).gcb);
     try std.testing.expectEqual(unicode.GraphemeClass.regional_indicator, unicode.graphemeProperties(0x1F1FA).gcb);
 }
+
+test "generalCategory and its derived booleans agree with the pinned UCD" {
+    const Want = struct {
+        cp: u21,
+        category: unicode.GeneralCategory,
+        alphabetic: bool,
+        lowercase: bool,
+        uppercase: bool,
+        cased: bool,
+        case_ignorable: bool,
+        math: bool,
+        id_start: bool,
+        id_continue: bool,
+        xid_start: bool,
+        xid_continue: bool,
+        default_ignorable: bool,
+        grapheme_base: bool,
+        grapheme_extend: bool,
+    };
+    // Every row transcribed directly from UnicodeData-16.0.0.txt and
+    // DerivedCoreProperties-16.0.0.txt, not from general Unicode knowledge:
+    // several of these (Uppercase excluding Lt, Math spanning far more than
+    // Sm) are easy to get wrong by assumption.
+    const cases = [_]Want{
+        // 'A': Lu, cased and identifier-capable both ways.
+        .{ .cp = 'A', .category = .lu, .alphabetic = true, .lowercase = false, .uppercase = true, .cased = true, .case_ignorable = false, .math = false, .id_start = true, .id_continue = true, .xid_start = true, .xid_continue = true, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        // 'a': Ll, the Lowercase counterpart.
+        .{ .cp = 'a', .category = .ll, .alphabetic = true, .lowercase = true, .uppercase = false, .cased = true, .case_ignorable = false, .math = false, .id_start = true, .id_continue = true, .xid_start = true, .xid_continue = true, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        // '0': Nd. ID_Continue but not ID_Start -- a digit cannot begin an
+        // identifier under Unicode's default lexical rules.
+        .{ .cp = '0', .category = .nd, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .math = false, .id_start = false, .id_continue = true, .xid_start = false, .xid_continue = true, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        // '+': Sm, and Math -- but not every Math code point is Sm; see
+        // isMath's doc comment for the categories that also carry it.
+        .{ .cp = '+', .category = .sm, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .math = true, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        // U+0020 SPACE: Zs, no derived boolean here is true.
+        .{ .cp = 0x0020, .category = .zs, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        // U+0301 COMBINING ACUTE ACCENT: Mn, Case_Ignorable and
+        // Grapheme_Extend, not Grapheme_Base -- the opposite shape from the
+        // letters above.
+        .{ .cp = 0x0301, .category = .mn, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = true, .math = false, .id_start = false, .id_continue = true, .xid_start = false, .xid_continue = true, .default_ignorable = false, .grapheme_base = false, .grapheme_extend = true },
+        // U+00AD SOFT HYPHEN: Cf, Default_Ignorable_Code_Point.
+        .{ .cp = 0x00AD, .category = .cf, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = true, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = true, .grapheme_base = false, .grapheme_extend = false },
+        // U+0378: unassigned in Unicode 16.0.0, so Cn and every boolean false.
+        .{ .cp = 0x0378, .category = .cn, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = false, .grapheme_base = false, .grapheme_extend = false },
+    };
+    for (cases) |want| {
+        try std.testing.expectEqual(want.category, unicode.generalCategory(want.cp));
+        try std.testing.expectEqual(want.alphabetic, unicode.isAlphabetic(want.cp));
+        try std.testing.expectEqual(want.lowercase, unicode.isLowercase(want.cp));
+        try std.testing.expectEqual(want.uppercase, unicode.isUppercase(want.cp));
+        try std.testing.expectEqual(want.cased, unicode.isCased(want.cp));
+        try std.testing.expectEqual(want.case_ignorable, unicode.isCaseIgnorable(want.cp));
+        try std.testing.expectEqual(want.math, unicode.isMath(want.cp));
+        try std.testing.expectEqual(want.id_start, unicode.isIdStart(want.cp));
+        try std.testing.expectEqual(want.id_continue, unicode.isIdContinue(want.cp));
+        try std.testing.expectEqual(want.xid_start, unicode.isXidStart(want.cp));
+        try std.testing.expectEqual(want.xid_continue, unicode.isXidContinue(want.cp));
+        try std.testing.expectEqual(want.default_ignorable, unicode.isDefaultIgnorable(want.cp));
+        try std.testing.expectEqual(want.grapheme_base, unicode.isGraphemeBase(want.cp));
+        try std.testing.expectEqual(want.grapheme_extend, unicode.isGraphemeExtend(want.cp));
+
+        // generalCategoryProperties() is the one-lookup form every isXxx
+        // function reads a field from; it must agree with all of them.
+        const props = unicode.generalCategoryProperties(want.cp);
+        try std.testing.expectEqual(want.category, props.category);
+        try std.testing.expectEqual(want.alphabetic, props.is_alphabetic);
+        try std.testing.expectEqual(want.grapheme_extend, props.is_grapheme_extend);
+    }
+
+    // Every Lu/Ll/Lt code point is Cased, by the property's own definition
+    // (verified exhaustively by src/tools/test-general-category.py; this is
+    // a second, narrower consistency signal from inside the test suite).
+    try std.testing.expect(unicode.isCased('A'));
+    try std.testing.expect(unicode.generalCategory('A') == .lu);
+}

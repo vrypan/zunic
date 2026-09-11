@@ -162,6 +162,94 @@ pub const graphemeProperties = @import("tables").properties.graphemeProperties;
 /// that want it directly rather than folded into a width decision.
 pub const isEastAsianWide = @import("tables").properties.isEastAsianWide;
 
+/// One code point's Unicode `General_Category`: `Lu`, `Ll`, `Nd`, `Po`, and
+/// so on, spelled in lowercase (`no` becomes `no_` to dodge the keyword).
+pub const GeneralCategory = @import("tables").general_category.GeneralCategory;
+
+/// `generalCategory()` plus a fixed set of `DerivedCoreProperties` booleans,
+/// fetched together in one lookup. The individual `isXxx` functions below
+/// each read one field of this; call this directly to avoid repeating the
+/// lookup for more than one fact about the same code point.
+pub const GeneralCategoryProperties = @import("tables").general_category.GeneralCategoryProperties;
+pub const generalCategoryProperties = @import("tables").general_category.generalCategoryProperties;
+
+/// One code point's `General_Category`. A flat, per-scalar lookup -- unlike
+/// `codepointWidth`/`graphemeProperties`/`isEastAsianWide`, this is data
+/// none of zunic's own engines read, generated solely to expose it.
+pub const generalCategory = @import("tables").general_category.generalCategory;
+
+/// `Alphabetic`: every `Lu`/`Ll`/`Lt`/`Lm`/`Lo` code point, plus some `Mn`/
+/// `Mc` combining marks, every `Nl` letter-number, and even some `So`
+/// symbols -- verified against every `General_Category` that actually
+/// carries `Alphabetic` in the pinned data, not assumed from the property's
+/// name.
+pub const isAlphabetic = @import("tables").general_category.is_alphabetic;
+
+/// `Lowercase`, per `DerivedCoreProperties`. Not the same test as
+/// `generalCategory(cp) == .ll`: also true for some `Lm`/`Lo`/`Mn`/`Nl`/`So`
+/// code points, verified against the pinned data.
+pub const isLowercase = @import("tables").general_category.is_lowercase;
+
+/// `Uppercase`, per `DerivedCoreProperties`. Not the same test as
+/// `generalCategory(cp) == .lu`: also true for some `Nl`/`So` code points
+/// (not `Lt`, despite title case reading as "uppercase-ish"), verified
+/// against the pinned data.
+pub const isUppercase = @import("tables").general_category.is_uppercase;
+
+/// `Cased`: true for anything case conversion can produce or consume,
+/// broader than `isUppercase(cp) or isLowercase(cp)` (also true for `Lt`
+/// and code points whose case is otherwise significant).
+pub const isCased = @import("tables").general_category.is_cased;
+
+/// `Case_Ignorable`: code points a case-insensitive comparison should skip
+/// over rather than compare directly, such as combining marks and some
+/// punctuation. Zunic does not implement case folding; this is the raw
+/// property alone.
+pub const isCaseIgnorable = @import("tables").general_category.is_case_ignorable;
+
+/// `Math`: mathematical symbols and operators. Broader than
+/// `generalCategory(cp) == .sm`; also true for some `Cf`/`Ll`/`Lo`/`Lu`/
+/// `Mn`/`Nd`/`Pc`/`Pd`/`Pe`/`Po`/`Ps`/`Sk`/`So` code points, verified
+/// against the pinned data.
+pub const isMath = @import("tables").general_category.is_math;
+
+/// `ID_Start`: whether a code point may begin a programming-language
+/// identifier under Unicode's recommended default lexical rules. Zunic
+/// implements no lexer; this is the raw property for a caller building one.
+pub const isIdStart = @import("tables").general_category.is_id_start;
+
+/// `ID_Continue`: whether a code point may continue (not necessarily start)
+/// an identifier under the same default rules as `isIdStart`.
+pub const isIdContinue = @import("tables").general_category.is_id_continue;
+
+/// `XID_Start`: `ID_Start` closed under Unicode normalization, so an
+/// identifier built from `XID_Start`/`XID_Continue` code points stays valid
+/// after NFKC. Prefer this over `isIdStart` unless a specific lexer grammar
+/// calls for the unclosed property.
+pub const isXidStart = @import("tables").general_category.is_xid_start;
+
+/// `XID_Continue`, the `XID_Start` counterpart to `isIdContinue`.
+pub const isXidContinue = @import("tables").general_category.is_xid_continue;
+
+/// `Default_Ignorable_Code_Point`: code points recommended to be ignored in
+/// rendering absent higher-level protocol support for them -- some format
+/// characters, variation selectors, and deprecated formatting characters.
+/// Zunic's own text and terminal views do not consult this property.
+pub const isDefaultIgnorable = @import("tables").general_category.is_default_ignorable;
+
+/// `Grapheme_Base`: roughly, code points that can start a grapheme cluster.
+/// Distinct from `graphemeProperties(cp).gcb`, which is `Grapheme_Cluster_
+/// Break`, a different (UAX #29) property Unicode maintains separately;
+/// `Text.graphemes()` is built on the latter, not this one.
+pub const isGraphemeBase = @import("tables").general_category.is_grapheme_base;
+
+/// `Grapheme_Extend`, the `DerivedCoreProperties` property, not the
+/// `Grapheme_Cluster_Break=Extend` class `graphemeProperties(cp).gcb` reads.
+/// The two agree almost everywhere but not quite: five code points in
+/// Unicode 16.0.0 differ between them. `Text.graphemes()` is built on
+/// `Grapheme_Cluster_Break`, not this property.
+pub const isGraphemeExtend = @import("tables").general_category.is_grapheme_extend;
+
 /// Instrumented wrapping is retained solely for zunic's work-bound tests.
 pub const testing = struct {
     pub const instrumentedIterator = wrap_engine.instrumentedIterator;

@@ -13,3 +13,4 @@ pub const word = @import("word_properties.zig");
 pub const normalization = @import("normalization_properties.zig");
 pub const stream_safe = @import("stream_safe_properties.zig");
 pub const line_break_machine_data = @import("line_break_machine_data.zig");
+pub const general_category = @import("general_category.zig");

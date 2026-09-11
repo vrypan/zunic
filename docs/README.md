@@ -236,6 +236,41 @@ pub fn graphemeProperties(cp: u21) GraphemeProperties;
 
 // Whether a code point has East_Asian_Width Wide, Fullwidth, or Halfwidth.
 pub fn isEastAsianWide(cp: u21) bool;
+
+// General_Category and a fixed set of DerivedCoreProperties booleans. Unlike
+// everything above, none of zunic's own engines read this data.
+pub const GeneralCategory = enum { lu, ll, lt, lm, lo, mn, mc, me, nd, nl, no_, pc, pd, ps, pe, pi, pf, po, sm, sc, sk, so, zs, zl, zp, cc, cf, cs, co, cn };
+pub const GeneralCategoryProperties = struct {
+    category: GeneralCategory,
+    is_alphabetic: bool,
+    is_lowercase: bool,
+    is_uppercase: bool,
+    is_cased: bool,
+    is_case_ignorable: bool,
+    is_math: bool,
+    is_id_start: bool,
+    is_id_continue: bool,
+    is_xid_start: bool,
+    is_xid_continue: bool,
+    is_default_ignorable: bool,
+    is_grapheme_base: bool,
+    is_grapheme_extend: bool,
+};
+pub fn generalCategoryProperties(cp: u21) GeneralCategoryProperties;
+pub fn generalCategory(cp: u21) GeneralCategory;
+pub fn isAlphabetic(cp: u21) bool;
+pub fn isLowercase(cp: u21) bool;
+pub fn isUppercase(cp: u21) bool;
+pub fn isCased(cp: u21) bool;
+pub fn isCaseIgnorable(cp: u21) bool;
+pub fn isMath(cp: u21) bool;
+pub fn isIdStart(cp: u21) bool;
+pub fn isIdContinue(cp: u21) bool;
+pub fn isXidStart(cp: u21) bool;
+pub fn isXidContinue(cp: u21) bool;
+pub fn isDefaultIgnorable(cp: u21) bool;
+pub fn isGraphemeBase(cp: u21) bool;
+pub fn isGraphemeExtend(cp: u21) bool;
 ```
 
 Spans describe `bytes[start.value..end.value]` in the view's input slice.
@@ -266,6 +301,18 @@ combining mark measures zero columns even when this is `true`, and a
 Halfwidth scalar (which this also counts as wide) measures one column
 despite it, since `codepointWidth` only treats Wide and Fullwidth as two
 columns.
+
+`generalCategory` and the fourteen functions after it are General_Category
+and `DerivedCoreProperties` booleans, generated solely to expose them -- no
+existing engine in zunic reads this data, unlike everything documented above
+it on this page. Each is a flat, per-code-point fact with no clustering and
+no context. Several read as narrower or broader than their name suggests:
+`isUppercase` also covers some `Nl`/`So` code points but not `Lt`;
+`isGraphemeExtend` is the `DerivedCoreProperties` property, not
+`graphemeProperties(cp).gcb == .extend` (they disagree on five code points
+in Unicode 16.0.0). See each function's doc comment in `root.zig` for the
+verified category list it actually spans. `generalCategoryProperties` is one
+lookup for all fourteen facts; each `isXxx` function reads one field of it.
 
 ## Detailed documentation
 
