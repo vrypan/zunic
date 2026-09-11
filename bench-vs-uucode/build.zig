@@ -11,7 +11,13 @@ pub fn build(b: *std.Build) void {
         // Configure only the data used by the comparable operations.
         .fields = @as([]const []const u8, &.{
             "grapheme_break",
+            "grapheme_break_no_control",
+            "east_asian_width",
+            "is_emoji_presentation",
             "is_emoji_vs_base",
+            "is_emoji_modifier",
+            "is_emoji_modifier_base",
+            "case_folding_full",
             "wcwidth_standalone",
             "wcwidth_zero_in_grapheme",
         }),
@@ -20,6 +26,7 @@ pub fn build(b: *std.Build) void {
     const generated = b.addWriteFiles();
     const benchmark_source = generated.addCopyFile(b.path("src/benchmark.zig"), "benchmark.zig");
     _ = generated.addCopyDirectory(b.path("../bench-vs-rust/texts"), "texts", .{});
+    _ = generated.addCopyFile(b.path("texts/features.txt"), "texts/features.txt");
 
     const Peer = struct {
         name: []const u8,

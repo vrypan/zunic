@@ -11,8 +11,18 @@ const cases = [_]Case{
     .{ .name = "english", .text = @embedFile("texts/english.txt") },
     .{ .name = "japanese", .text = @embedFile("texts/japanese.txt") },
     .{ .name = "mandarin", .text = @embedFile("texts/mandarin.txt") },
+    .{ .name = "features", .text = @embedFile("texts/features.txt") },
 };
-const Operation = enum { utf8, graphemes, measured, width };
+const Operation = enum {
+    utf8,
+    graphemes,
+    measured,
+    width,
+    terminal_properties,
+    case_fold,
+    grapheme_stream,
+    ghostty_width,
+};
 const sample_count = 15;
 const target_ns: u64 = 50 * std.time.ns_per_ms;
 
@@ -24,6 +34,10 @@ inline fn run(comptime operation: Operation, bytes: []const u8) peer.Stats {
         .graphemes => peer.graphemes(input),
         .measured => peer.measured(input),
         .width => peer.width(input),
+        .terminal_properties => peer.terminalProperties(input),
+        .case_fold => peer.caseFold(input),
+        .grapheme_stream => peer.graphemeStream(input),
+        .ghostty_width => peer.ghosttyWidth(input),
     };
 }
 
@@ -83,6 +97,10 @@ fn dumpOne(out: *std.Io.Writer, case: Case, comptime operation: Operation) !void
         .graphemes => try peer.dumpGraphemes(out, case.text),
         .measured => try peer.dumpMeasured(out, case.text),
         .width => try peer.dumpWidth(out, case.text),
+        .terminal_properties => try peer.dumpTerminalProperties(out, case.text),
+        .case_fold => try peer.dumpCaseFold(out, case.text),
+        .grapheme_stream => try peer.dumpGraphemeStream(out, case.text),
+        .ghostty_width => try peer.dumpGhosttyWidth(out, case.text),
     }
     try out.writeByte('\n');
 }
@@ -120,7 +138,7 @@ pub fn main(init: std.process.Init) !void {
     if (args.len == 2 and std.mem.eql(u8, args[1], "--dump")) return printDump(out);
     if (args.len != 2 or !std.mem.eql(u8, args[1], "--bench")) return error.UnexpectedArgument;
 
-    try out.print("protocol=1 suite=unicode peer={s} unicode={s} samples={d} calibration_ms={d} input=bytes consumption=operation_checksum_v1\n", .{
+    try out.print("protocol=2 suite=unicode peer={s} unicode={s} samples={d} calibration_ms={d} input=bytes consumption=operation_checksum_v2\n", .{
         peer.name, peer.unicode_version, sample_count, target_ns / std.time.ns_per_ms,
     });
     for (cases) |case| inline for (@typeInfo(Operation).@"enum".fields) |field|

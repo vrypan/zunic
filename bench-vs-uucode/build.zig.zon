@@ -10,5 +10,5 @@
             .hash = "uucode-0.2.0-ZZjBPvDKVAC0ZmoJJ37dlUn11y68rIKVeeovTLY9zxoQ",
         },
     },
-    .paths = .{ "build.zig", "build.zig.zon", "src", "Makefile", "README.md", "benchmark.py" },
+    .paths = .{ "build.zig", "build.zig.zon", "src", "texts", "Makefile", "README.md", "benchmark.py" },
 }

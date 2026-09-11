@@ -19,16 +19,30 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 CORPUS_DIR = ROOT / "bench-vs-rust" / "texts"
-CORPORA = ("arabic", "hindi", "korean", "russian", "source_code", "english", "japanese", "mandarin")
-OPERATIONS = ("utf8", "graphemes", "measured", "width")
+STANDARD_CORPORA = ("arabic", "hindi", "korean", "russian", "source_code", "english", "japanese", "mandarin")
+CORPUS_PATHS = {
+    name: CORPUS_DIR / f"{name}.txt"
+    for name in STANDARD_CORPORA
+}
+CORPUS_PATHS["features"] = HERE / "texts" / "features.txt"
+CORPORA = tuple(CORPUS_PATHS)
+OPERATIONS = (
+    "utf8", "graphemes", "measured", "width",
+    "terminal_properties", "case_fold", "grapheme_stream", "ghostty_width",
+)
+EXACT_OPERATIONS = ("terminal_properties", "case_fold", "ghostty_width")
 CAPTIONS = {
     "utf8": "UTF-8 decoding",
     "graphemes": "Extended grapheme ranges",
     "measured": "Grapheme ranges with cluster width",
     "width": "Whole-text grapheme width",
+    "terminal_properties": "Unicode terminal property facts",
+    "case_fold": "Full default case folding",
+    "grapheme_stream": "Incremental grapheme boundaries",
+    "ghostty_width": "Ghostty scalar-width composition",
 }
 PEERS = {
-    "zunic": {"binary": "zunic-bench", "unicode": "16.0.0"},
+    "zunic": {"binary": "zunic-bench", "unicode": "17.0.0"},
     "uucode": {"binary": "uucode-bench", "unicode": "17.0.0"},
 }
 UUCODE_COMMIT = "f67fa5dbef5c9de57773dbe2f7a02bebc7e20301"
@@ -92,8 +106,8 @@ def parse_dump(text: str, snapshots: dict[str, bytes]) -> dict[str, dict[str, di
 
 def parse_timing(text: str, peer: str, outputs: dict[str, dict[str, dict[str, object]]], snapshots: dict[str, bytes]) -> dict[str, dict[str, object]]:
     headers = [fields(line) for line in text.splitlines() if line.startswith("protocol=")]
-    expected = {"protocol": "1", "suite": "unicode", "peer": peer, "samples": "15",
-                "calibration_ms": "50", "input": "bytes", "consumption": "operation_checksum_v1"}
+    expected = {"protocol": "2", "suite": "unicode", "peer": peer, "samples": "15",
+                "calibration_ms": "50", "input": "bytes", "consumption": "operation_checksum_v2"}
     if len(headers) != 1 or any(headers[0].get(k) != v for k, v in expected.items()):
         raise ValueError(f"incompatible header for {peer}: {headers}")
     raw: dict[tuple[str, str], list[int]] = {}
@@ -148,7 +162,7 @@ def report(summary: dict, markdown: bool) -> str:
     else:
         lines += [f"Label: {summary['label']}; pairs: {summary['pair_count']}",
                   f"Unicode: Zunic {summary['peers']['zunic']['unicode']}; uucode {summary['peers']['uucode']['unicode']}.", ""]
-    for operation in OPERATIONS:
+    for operation in summary["operations"]:
         if markdown:
             lines += [f"## {CAPTIONS[operation]}", "", "| Corpus | Zunic µs | uucode µs | uucode/Zunic | Units Z/U | Output |",
                       "| --- | ---: | ---: | ---: | ---: | :---: |"]
@@ -171,19 +185,29 @@ def report(summary: dict, markdown: bool) -> str:
 
 
 def self_test() -> int:
-    snapshots = {name: (CORPUS_DIR / f"{name}.txt").read_bytes() for name in CORPORA}
+    snapshots = {name: path.read_bytes() for name, path in CORPUS_PATHS.items()}
+    outputs = {}
     for peer, metadata in PEERS.items():
         binary = HERE / "zig-out" / "bin" / metadata["binary"]
         for args in ([], ["--help"], ["-h"]):
             result = run([str(binary), *args], Path("/"))
-            if "Usage:" not in result.stdout or "protocol=1" in result.stdout:
+            if "Usage:" not in result.stdout or "protocol=2" in result.stdout:
                 raise ValueError(f"{peer}: bad help output")
         dump = run([str(binary), "--dump"], Path("/")).stdout
-        parse_dump(dump, snapshots)
+        outputs[peer] = parse_dump(dump, snapshots)
         bad = subprocess.run([str(binary), "--unknown"], cwd="/", capture_output=True, text=True)
         if bad.returncode == 0:
             raise ValueError(f"{peer}: unknown option succeeded")
-    print("CLI and exact-dump checks passed for both peers")
+    for case in CORPORA:
+        for operation in EXACT_OPERATIONS:
+            if outputs["zunic"][case][operation] != outputs["uucode"][case][operation]:
+                raise ValueError(f"{case}/{operation}: peers produced different exact results")
+    for case in STANDARD_CORPORA:
+        if outputs["zunic"][case]["grapheme_stream"] != outputs["uucode"][case]["grapheme_stream"]:
+            raise ValueError(f"{case}/grapheme_stream: unexpected corpus boundary difference")
+    if outputs["zunic"]["features"]["grapheme_stream"] == outputs["uucode"]["features"]["grapheme_stream"]:
+        raise ValueError("features/grapheme_stream: expected modifier-tailoring difference disappeared")
+    print("CLI, exact dumps, and new-operation contract checks passed for both peers")
     return 0
 
 
@@ -191,7 +215,7 @@ def benchmark(args: argparse.Namespace) -> int:
     env = dict(os.environ, ZIG_GLOBAL_CACHE_DIR=str(HERE / ".zig-global-cache"))
     if not args.skip_build:
         run(["zig", "build", "-Doptimize=ReleaseFast", "-Dcpu=native", "--summary", "all"], env=env)
-    corpus_paths = {name: CORPUS_DIR / f"{name}.txt" for name in CORPORA}
+    corpus_paths = dict(CORPUS_PATHS)
     corpus_hashes_before = {name: sha256(path) for name, path in corpus_paths.items()}
 
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -218,6 +242,10 @@ def benchmark(args: argparse.Namespace) -> int:
         "zunic_count": outputs["zunic"][case][operation]["units"],
         "uucode_count": outputs["uucode"][case][operation]["units"],
     } for case in CORPORA} for operation in OPERATIONS}
+    for operation in EXACT_OPERATIONS:
+        for case in CORPORA:
+            if not operation_outputs[operation][case]["equal"]:
+                raise RuntimeError(f"{case}/{operation}: peers produced different exact results")
 
     pairs = []
     for index in range(args.pairs):
@@ -245,17 +273,19 @@ def benchmark(args: argparse.Namespace) -> int:
     git_head = run(["git", "rev-parse", "HEAD"], ROOT).stdout.strip()
     git_status = run(["git", "status", "--short"], ROOT).stdout
     summary = {
-        "schema": "zunic-uucode-benchmark/v1", "title": "Unicode primitives: uucode vs Zunic",
+        "schema": "zunic-uucode-benchmark/v2", "title": "Unicode primitives: uucode vs Zunic",
         "label": args.label, "pair_count": args.pairs, "cases": list(CORPORA),
         "operations": list(OPERATIONS), "pairs": pairs,
         "peers": {name: {"name": name if name == "zunic" else "uucode 0.2.0",
                           "unicode": metadata["unicode"]} for name, metadata in PEERS.items()},
-        "contract": {"input": "bytes", "consumption": "operation_checksum_v1"},
+        "contract": {"input": "bytes", "consumption": "operation_checksum_v2"},
         "operation_outputs": operation_outputs,
         "notes": [
             "Inputs are valid UTF-8 and file I/O is outside timing.",
             "Measured traversal consumes each grapheme's start, end, and width; Zunic's renderable flag has no uucode counterpart and is excluded.",
-            "Width policies and Unicode versions differ, so width or range disagreement is expected and shown explicitly.",
+            "Both peers use Unicode 17.0.0; whole-grapheme width policies can still differ and are shown explicitly.",
+            "Terminal-property, full-fold, and Ghostty-width rows agree exactly on these valid UTF-8 corpora.",
+            "The focused streaming row intentionally records uucode's emoji-modifier tailoring against Zunic's default UAX #29 GB9 behavior.",
         ],
         "environment": {"platform": platform.platform(), "machine": platform.machine(), "python": sys.version,
                         "zig": run(["zig", "version"]).stdout.strip()},
@@ -286,7 +316,7 @@ def main() -> int:
         return self_test()
     if args.report:
         summary = json.loads(args.report.read_text())
-        if summary.get("schema") != "zunic-uucode-benchmark/v1":
+        if summary.get("schema") not in {"zunic-uucode-benchmark/v1", "zunic-uucode-benchmark/v2"}:
             raise ValueError("unsupported summary schema")
         print(report(summary, True), end="")
         return 0

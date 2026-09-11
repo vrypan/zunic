@@ -6,7 +6,7 @@ Compare the current Zunic working tree with
 are built with the same Zig version, target, optimization mode, and CPU model.
 The dependency hash in `build.zig.zon` verifies the fetched package.
 
-uucode and Zunic overlap in four bytes-to-results operations:
+uucode and Zunic overlap in eight bytes-to-results operations:
 
 | Operation | Zunic | uucode | Timed result consumed |
 |---|---|---|---|
@@ -14,6 +14,10 @@ uucode and Zunic overlap in four bytes-to-results operations:
 | Grapheme segmentation | `text(...).graphemes()` | `grapheme.utf8Iterator` | every start/end byte range |
 | Measured graphemes | measured grapheme iterator | `grapheme.wcwidthNext` | every start/end range and cluster width |
 | Whole-text width | `text(...).width()` | `grapheme.utf8Wcwidth` | total columns |
+| Terminal properties | EAW, emoji predicates, and `widthProperties` | matching generated fields | every scalar's ending offset and property values |
+| Full case folding | `fullCaseFold` | `case_folding_full` | every bounded mapping |
+| Streaming graphemes | `graphemeBreak` | `computeGraphemeBreak` | every adjacent-pair boundary and ending offset |
+| Ghostty scalar width | public width/GCB composition | matching uucode field composition | derived width for every scalar |
 
 uucode does not currently expose comparable line breaking, normalization,
 word boundaries, wrapping, or ANSI stripping, so those Zunic features are not
@@ -56,18 +60,25 @@ less time, below 1 means uucode took less time.
 ## Comparability limits
 
 Both implementations receive the exact same valid UTF-8 bytes, and file I/O
-is excluded from timing. The adapters consume equivalent results and the
-driver compares their exact output records. It also verifies that each timed
+is excluded from timing. Scalar-property rows include UTF-8 decoding because
+their public contracts start from bytes. The adapters consume equivalent
+results and the driver compares their exact output records. It also verifies that each timed
 count and checksum agrees with that peer's dump and that neither output nor
 the source corpus changes during a run.
 
-Zunic uses Unicode 16.0.0 while this pinned uucode revision uses Unicode
-17.0.0. Their terminal-width policies also differ. Output differences are
-therefore reported per corpus rather than treated as benchmark failures.
+Both peers now use Unicode 17.0.0. Their whole-grapheme terminal-width policies
+still differ, so output differences are reported per corpus rather than treated
+as benchmark failures. Terminal-property, full-fold, and Ghostty-width outputs
+must match exactly. Streaming boundaries match on the document corpora; the
+focused corpus pins the known isolated-emoji-modifier difference between
+Zunic's default UAX #29 GB9 behavior and uucode's modifier tailoring.
 Measured traversal excludes Zunic's `renderable` result because uucode has no
-counterpart. uucode is configured with only the four table fields its
-grapheme and width APIs need; unused Unicode properties are not built into its
-runtime tables.
+counterpart. uucode is configured with only the table fields used by the eight
+operations; unrelated Unicode properties are not built into its runtime tables.
+The eight multilingual document corpora are supplemented by a small maintained
+`features` corpus containing expanding/common folds, valid VS15/VS16 sequences,
+an emoji modifier, a ZWJ sequence, a regional-indicator pair, combining marks,
+prepend, and an Indic conjunct.
 
 Binary size is recorded but is not directly comparable as library size: each
 standalone executable includes its adapter, timing harness, embedded corpora,
