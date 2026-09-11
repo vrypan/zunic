@@ -138,7 +138,7 @@ pub fn main(init: std.process.Init) !void {
     if (args.len == 2 and std.mem.eql(u8, args[1], "--dump")) return printDump(out);
     if (args.len != 2 or !std.mem.eql(u8, args[1], "--bench")) return error.UnexpectedArgument;
 
-    try out.print("protocol=2 suite=unicode peer={s} unicode={s} samples={d} calibration_ms={d} input=bytes consumption=operation_checksum_v2\n", .{
+    try out.print("protocol=3 suite=unicode peer={s} unicode={s} samples={d} calibration_ms={d} input=bytes consumption=operation_checksum_v3\n", .{
         peer.name, peer.unicode_version, sample_count, target_ns / std.time.ns_per_ms,
     });
     for (cases) |case| inline for (@typeInfo(Operation).@"enum".fields) |field|

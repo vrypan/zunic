@@ -9,34 +9,46 @@ inline fn mix(hash: u64, value: usize) u64 {
     return (hash ^ @as(u64, @intCast(value))) *% 0x100000001b3;
 }
 
+inline fn finishSums(sums: anytype) u64 {
+    var hash: u64 = 0xcbf29ce484222325;
+    for (sums) |sum| hash = mix(hash, sum);
+    return hash;
+}
+
 pub inline fn utf8(bytes: []const u8) Stats {
     var pos: usize = 0;
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
+    var sums: [2]usize = @splat(0);
     while (pos < bytes.len) : (units += 1) {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
-        hash = mix(mix(hash, step.cp orelse 0xfffd), pos);
+        sums[0] +%= step.cp orelse 0xfffd;
+        sums[1] +%= pos;
     }
-    return .{ .units = units, .checksum = hash };
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn graphemes(bytes: []const u8) Stats {
     var it = zunic.text(bytes).graphemes().iterator();
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
-    while (it.next()) |span| : (units += 1)
-        hash = mix(mix(hash, span.start.value), span.end.value);
-    return .{ .units = units, .checksum = hash };
+    var sums: [2]usize = @splat(0);
+    while (it.next()) |span| : (units += 1) {
+        sums[0] +%= span.start.value;
+        sums[1] +%= span.end.value;
+    }
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn measured(bytes: []const u8) Stats {
     var it = zunic.text(bytes).graphemes().measured().iterator();
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
-    while (it.next()) |span| : (units += 1)
-        hash = mix(mix(mix(hash, span.start.value), span.end.value), span.columns);
-    return .{ .units = units, .checksum = hash };
+    var sums: [3]usize = @splat(0);
+    while (it.next()) |span| : (units += 1) {
+        sums[0] +%= span.start.value;
+        sums[1] +%= span.end.value;
+        sums[2] +%= span.columns;
+    }
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn width(bytes: []const u8) Stats {
@@ -47,38 +59,38 @@ pub inline fn width(bytes: []const u8) Stats {
 pub inline fn terminalProperties(bytes: []const u8) Stats {
     var pos: usize = 0;
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
+    var sums: [9]usize = @splat(0);
     while (pos < bytes.len) : (units += 1) {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
         const cp = step.cp orelse 0xfffd;
         const width_props = zunic.widthProperties(cp);
-        hash = mix(hash, pos);
-        hash = mix(hash, @intFromEnum(zunic.eastAsianWidth(cp)));
-        hash = mix(hash, @intFromBool(zunic.isEmojiPresentation(cp)));
-        hash = mix(hash, @intFromBool(zunic.isEmojiVariationBase(cp)));
-        hash = mix(hash, @intFromBool(zunic.isEmojiModifier(cp)));
-        hash = mix(hash, @intFromBool(zunic.isEmojiModifierBase(cp)));
-        hash = mix(hash, width_props.standalone);
-        hash = mix(hash, @intFromBool(width_props.zero_in_grapheme));
-        hash = mix(hash, @intFromBool(width_props.emoji_modifier));
+        sums[0] +%= pos;
+        sums[1] +%= @intFromEnum(zunic.eastAsianWidth(cp));
+        sums[2] +%= @intFromBool(zunic.isEmojiPresentation(cp));
+        sums[3] +%= @intFromBool(zunic.isEmojiVariationBase(cp));
+        sums[4] +%= @intFromBool(zunic.isEmojiModifier(cp));
+        sums[5] +%= @intFromBool(zunic.isEmojiModifierBase(cp));
+        sums[6] +%= width_props.standalone;
+        sums[7] +%= @intFromBool(width_props.zero_in_grapheme);
+        sums[8] +%= @intFromBool(width_props.emoji_modifier);
     }
-    return .{ .units = units, .checksum = hash };
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn caseFold(bytes: []const u8) Stats {
     var pos: usize = 0;
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
+    var sums: [3]usize = @splat(0);
     while (pos < bytes.len) : (units += 1) {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
         var folded = zunic.fullCaseFold(step.cp orelse 0xfffd);
-        hash = mix(hash, pos);
-        hash = mix(hash, folded.len);
-        for (folded.slice()) |cp| hash = mix(hash, cp);
+        sums[0] +%= pos;
+        sums[1] +%= folded.len;
+        for (folded.slice()) |cp| sums[2] +%= cp;
     }
-    return .{ .units = units, .checksum = hash };
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn graphemeStream(bytes: []const u8) Stats {
@@ -88,16 +100,16 @@ pub inline fn graphemeStream(bytes: []const u8) Stats {
     var previous = first.cp orelse 0xfffd;
     var state: zunic.GraphemeState = .{};
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
+    var sums: [2]usize = @splat(0);
     while (pos < bytes.len) : (units += 1) {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
         const current = step.cp orelse 0xfffd;
-        hash = mix(hash, pos);
-        hash = mix(hash, @intFromBool(zunic.graphemeBreak(previous, current, &state)));
+        sums[0] +%= pos;
+        sums[1] +%= @intFromBool(zunic.graphemeBreak(previous, current, &state));
         previous = current;
     }
-    return .{ .units = units, .checksum = hash };
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 inline fn ghosttyScalarWidth(cp: u21) u2 {
@@ -109,13 +121,14 @@ inline fn ghosttyScalarWidth(cp: u21) u2 {
 pub inline fn ghosttyWidth(bytes: []const u8) Stats {
     var pos: usize = 0;
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
+    var sums: [2]usize = @splat(0);
     while (pos < bytes.len) : (units += 1) {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
-        hash = mix(mix(hash, pos), ghosttyScalarWidth(step.cp orelse 0xfffd));
+        sums[0] +%= pos;
+        sums[1] +%= ghosttyScalarWidth(step.cp orelse 0xfffd);
     }
-    return .{ .units = units, .checksum = hash };
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub fn dumpUtf8(out: *std.Io.Writer, bytes: []const u8) !void {

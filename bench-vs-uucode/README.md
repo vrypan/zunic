@@ -62,9 +62,11 @@ less time, below 1 means uucode took less time.
 Both implementations receive the exact same valid UTF-8 bytes, and file I/O
 is excluded from timing. Scalar-property rows include UTF-8 decoding because
 their public contracts start from bytes. The adapters consume equivalent
-results and the driver compares their exact output records. It also verifies that each timed
-count and checksum agrees with that peer's dump and that neither output nor
-the source corpus changes during a run.
+results and the driver compares their exact output records. Multi-result
+operations use independent field accumulators that are combined once after
+traversal, reducing checksum dependency-chain overhead. The driver also verifies
+that each timed count and checksum agrees with that peer's dump and that neither
+output nor the source corpus changes during a run.
 
 Both peers now use Unicode 17.0.0. Their whole-grapheme terminal-width policies
 still differ, so output differences are reported per corpus rather than treated

@@ -9,34 +9,46 @@ inline fn mix(hash: u64, value: usize) u64 {
     return (hash ^ @as(u64, @intCast(value))) *% 0x100000001b3;
 }
 
+inline fn finishSums(sums: anytype) u64 {
+    var hash: u64 = 0xcbf29ce484222325;
+    for (sums) |sum| hash = mix(hash, sum);
+    return hash;
+}
+
 pub inline fn utf8(bytes: []const u8) Stats {
     var it = uucode.utf8.Iterator.init(bytes);
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
-    while (it.next()) |cp| : (units += 1)
-        hash = mix(mix(hash, cp), it.i);
-    return .{ .units = units, .checksum = hash };
+    var sums: [2]usize = @splat(0);
+    while (it.next()) |cp| : (units += 1) {
+        sums[0] +%= cp;
+        sums[1] +%= it.i;
+    }
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn graphemes(bytes: []const u8) Stats {
     var it = uucode.grapheme.utf8Iterator(bytes);
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
-    while (it.nextGrapheme()) |span| : (units += 1)
-        hash = mix(mix(hash, span.start), span.end);
-    return .{ .units = units, .checksum = hash };
+    var sums: [2]usize = @splat(0);
+    while (it.nextGrapheme()) |span| : (units += 1) {
+        sums[0] +%= span.start;
+        sums[1] +%= span.end;
+    }
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn measured(bytes: []const u8) Stats {
     var it = uucode.grapheme.utf8Iterator(bytes);
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
+    var sums: [3]usize = @splat(0);
     while (it.next_cp != null) : (units += 1) {
         const start = it.i;
         const columns = uucode.grapheme.wcwidthNext(&it);
-        hash = mix(mix(mix(hash, start), it.i), columns);
+        sums[0] +%= start;
+        sums[1] +%= it.i;
+        sums[2] +%= columns;
     }
-    return .{ .units = units, .checksum = hash };
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn width(bytes: []const u8) Stats {
@@ -47,33 +59,33 @@ pub inline fn width(bytes: []const u8) Stats {
 pub inline fn terminalProperties(bytes: []const u8) Stats {
     var it = uucode.utf8.Iterator.init(bytes);
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
+    var sums: [9]usize = @splat(0);
     while (it.next()) |cp| : (units += 1) {
-        hash = mix(hash, it.i);
-        hash = mix(hash, @intFromEnum(uucode.get(.east_asian_width, cp)));
-        hash = mix(hash, @intFromBool(uucode.get(.is_emoji_presentation, cp)));
-        hash = mix(hash, @intFromBool(uucode.get(.is_emoji_vs_base, cp)));
-        hash = mix(hash, @intFromBool(uucode.get(.is_emoji_modifier, cp)));
-        hash = mix(hash, @intFromBool(uucode.get(.is_emoji_modifier_base, cp)));
-        hash = mix(hash, uucode.get(.wcwidth_standalone, cp));
-        hash = mix(hash, @intFromBool(uucode.get(.wcwidth_zero_in_grapheme, cp)));
-        hash = mix(hash, @intFromBool(uucode.get(.is_emoji_modifier, cp)));
+        sums[0] +%= it.i;
+        sums[1] +%= @intFromEnum(uucode.get(.east_asian_width, cp));
+        sums[2] +%= @intFromBool(uucode.get(.is_emoji_presentation, cp));
+        sums[3] +%= @intFromBool(uucode.get(.is_emoji_vs_base, cp));
+        sums[4] +%= @intFromBool(uucode.get(.is_emoji_modifier, cp));
+        sums[5] +%= @intFromBool(uucode.get(.is_emoji_modifier_base, cp));
+        sums[6] +%= uucode.get(.wcwidth_standalone, cp);
+        sums[7] +%= @intFromBool(uucode.get(.wcwidth_zero_in_grapheme, cp));
+        sums[8] +%= @intFromBool(uucode.get(.is_emoji_modifier, cp));
     }
-    return .{ .units = units, .checksum = hash };
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn caseFold(bytes: []const u8) Stats {
     var it = uucode.utf8.Iterator.init(bytes);
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
+    var sums: [3]usize = @splat(0);
     while (it.next()) |cp| : (units += 1) {
         var identity: [1]u21 = undefined;
         const folded = uucode.get(.case_folding_full, cp).with(&identity, cp);
-        hash = mix(hash, it.i);
-        hash = mix(hash, folded.len);
-        for (folded) |value| hash = mix(hash, value);
+        sums[0] +%= it.i;
+        sums[1] +%= folded.len;
+        for (folded) |value| sums[2] +%= value;
     }
-    return .{ .units = units, .checksum = hash };
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn graphemeStream(bytes: []const u8) Stats {
@@ -82,17 +94,18 @@ pub inline fn graphemeStream(bytes: []const u8) Stats {
     var previous = first;
     var state: uucode.grapheme.BreakState = .default;
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
+    var sums: [2]usize = @splat(0);
     while (it.next()) |current| : (units += 1) {
         const decision = uucode.grapheme.computeGraphemeBreak(
             uucode.get(.grapheme_break, previous),
             uucode.get(.grapheme_break, current),
             &state,
         );
-        hash = mix(mix(hash, it.i), @intFromBool(decision));
+        sums[0] +%= it.i;
+        sums[1] +%= @intFromBool(decision);
         previous = current;
     }
-    return .{ .units = units, .checksum = hash };
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 inline fn ghosttyScalarWidth(cp: u21) u2 {
@@ -106,10 +119,12 @@ inline fn ghosttyScalarWidth(cp: u21) u2 {
 pub inline fn ghosttyWidth(bytes: []const u8) Stats {
     var it = uucode.utf8.Iterator.init(bytes);
     var units: usize = 0;
-    var hash: u64 = 0xcbf29ce484222325;
-    while (it.next()) |cp| : (units += 1)
-        hash = mix(mix(hash, it.i), ghosttyScalarWidth(cp));
-    return .{ .units = units, .checksum = hash };
+    var sums: [2]usize = @splat(0);
+    while (it.next()) |cp| : (units += 1) {
+        sums[0] +%= it.i;
+        sums[1] +%= ghosttyScalarWidth(cp);
+    }
+    return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub fn dumpUtf8(out: *std.Io.Writer, bytes: []const u8) !void {

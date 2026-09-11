@@ -106,8 +106,8 @@ def parse_dump(text: str, snapshots: dict[str, bytes]) -> dict[str, dict[str, di
 
 def parse_timing(text: str, peer: str, outputs: dict[str, dict[str, dict[str, object]]], snapshots: dict[str, bytes]) -> dict[str, dict[str, object]]:
     headers = [fields(line) for line in text.splitlines() if line.startswith("protocol=")]
-    expected = {"protocol": "2", "suite": "unicode", "peer": peer, "samples": "15",
-                "calibration_ms": "50", "input": "bytes", "consumption": "operation_checksum_v2"}
+    expected = {"protocol": "3", "suite": "unicode", "peer": peer, "samples": "15",
+                "calibration_ms": "50", "input": "bytes", "consumption": "operation_checksum_v3"}
     if len(headers) != 1 or any(headers[0].get(k) != v for k, v in expected.items()):
         raise ValueError(f"incompatible header for {peer}: {headers}")
     raw: dict[tuple[str, str], list[int]] = {}
@@ -168,7 +168,7 @@ def report(summary: dict, markdown: bool) -> str:
                       "| --- | ---: | ---: | ---: | ---: | :---: |"]
         else:
             lines += [CAPTIONS[operation], "corpus              Zunic µs  uucode µs  U/Z     units Z/U       output"]
-        for case in CORPORA:
+        for case in summary["cases"]:
             z = median_row(summary, "zunic", case, operation)
             u = median_row(summary, "uucode", case, operation)
             equality = summary["operation_outputs"][operation][case]["equal"]
@@ -191,7 +191,7 @@ def self_test() -> int:
         binary = HERE / "zig-out" / "bin" / metadata["binary"]
         for args in ([], ["--help"], ["-h"]):
             result = run([str(binary), *args], Path("/"))
-            if "Usage:" not in result.stdout or "protocol=2" in result.stdout:
+            if "Usage:" not in result.stdout or "protocol=3" in result.stdout:
                 raise ValueError(f"{peer}: bad help output")
         dump = run([str(binary), "--dump"], Path("/")).stdout
         outputs[peer] = parse_dump(dump, snapshots)
@@ -273,18 +273,19 @@ def benchmark(args: argparse.Namespace) -> int:
     git_head = run(["git", "rev-parse", "HEAD"], ROOT).stdout.strip()
     git_status = run(["git", "status", "--short"], ROOT).stdout
     summary = {
-        "schema": "zunic-uucode-benchmark/v2", "title": "Unicode primitives: uucode vs Zunic",
+        "schema": "zunic-uucode-benchmark/v3", "title": "Unicode primitives: uucode vs Zunic",
         "label": args.label, "pair_count": args.pairs, "cases": list(CORPORA),
         "operations": list(OPERATIONS), "pairs": pairs,
         "peers": {name: {"name": name if name == "zunic" else "uucode 0.2.0",
                           "unicode": metadata["unicode"]} for name, metadata in PEERS.items()},
-        "contract": {"input": "bytes", "consumption": "operation_checksum_v2"},
+        "contract": {"input": "bytes", "consumption": "operation_checksum_v3"},
         "operation_outputs": operation_outputs,
         "notes": [
             "Inputs are valid UTF-8 and file I/O is outside timing.",
             "Measured traversal consumes each grapheme's start, end, and width; Zunic's renderable flag has no uucode counterpart and is excluded.",
             "Both peers use Unicode 17.0.0; whole-grapheme width policies can still differ and are shown explicitly.",
             "Terminal-property, full-fold, and Ghostty-width rows agree exactly on these valid UTF-8 corpora.",
+            "Multi-result operations use independent field accumulators, combined once after traversal, to reduce checksum dependency-chain cost.",
             "The focused streaming row intentionally records uucode's emoji-modifier tailoring against Zunic's default UAX #29 GB9 behavior.",
         ],
         "environment": {"platform": platform.platform(), "machine": platform.machine(), "python": sys.version,
@@ -316,7 +317,7 @@ def main() -> int:
         return self_test()
     if args.report:
         summary = json.loads(args.report.read_text())
-        if summary.get("schema") not in {"zunic-uucode-benchmark/v1", "zunic-uucode-benchmark/v2"}:
+        if summary.get("schema") not in {"zunic-uucode-benchmark/v1", "zunic-uucode-benchmark/v2", "zunic-uucode-benchmark/v3"}:
             raise ValueError("unsupported summary schema")
         print(report(summary, True), end="")
         return 0
