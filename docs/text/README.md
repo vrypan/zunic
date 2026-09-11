@@ -16,7 +16,8 @@ pub fn validate(self: Text) error{InvalidUtf8}!void;
 
 `try view.validate()` checks the complete slice and returns `InvalidUtf8` if it
 is malformed. It does not change the view or later operations. Grapheme,
-codepoint, word, width, wrap, and trim operations tolerate malformed UTF-8;
+word, width, wrap, and trim operations tolerate malformed UTF-8. Codepoint
+iteration stops at it and records `err = .invalid_utf8` with its byte `offset`;
 normalization reports it when encountered. Terminators scan exact byte
 sequences.
 

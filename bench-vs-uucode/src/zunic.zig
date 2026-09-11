@@ -64,16 +64,16 @@ pub inline fn terminalProperties(bytes: []const u8) Stats {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
         const cp = step.cp orelse 0xfffd;
-        const props = zunic.terminalProperties(cp);
+        const props = zunic.cp(cp).terminal();
         sums[0] +%= pos;
-        sums[1] +%= @intFromEnum(props.east_asian_width);
-        sums[2] +%= @intFromBool(props.emoji_presentation);
-        sums[3] +%= @intFromBool(props.emoji_variation_base);
-        sums[4] +%= @intFromBool(props.emoji_modifier);
-        sums[5] +%= @intFromBool(props.emoji_modifier_base);
+        sums[1] +%= @intFromEnum(props.eastAsianWidth);
+        sums[2] +%= @intFromBool(props.isEmojiPresentation);
+        sums[3] +%= @intFromBool(props.isEmojiVariationBase);
+        sums[4] +%= @intFromBool(props.isEmojiModifier);
+        sums[5] +%= @intFromBool(props.isEmojiModifierBase);
         sums[6] +%= props.standalone;
-        sums[7] +%= @intFromBool(props.zero_in_grapheme);
-        sums[8] +%= @intFromBool(props.emoji_modifier);
+        sums[7] +%= @intFromBool(props.zeroInGrapheme);
+        sums[8] +%= @intFromBool(props.isEmojiModifier);
     }
     return .{ .units = units, .checksum = finishSums(sums) };
 }
@@ -81,15 +81,15 @@ pub inline fn terminalProperties(bytes: []const u8) Stats {
 pub inline fn terminalLookup(codepoints: []const u21) Stats {
     var sums: [8]usize = @splat(0);
     for (codepoints) |cp| {
-        const props = zunic.terminalProperties(cp);
+        const props = zunic.cp(cp).terminal();
         sums[0] +%= cp;
-        sums[1] +%= @intFromEnum(props.east_asian_width);
-        sums[2] +%= @intFromBool(props.emoji_presentation);
-        sums[3] +%= @intFromBool(props.emoji_variation_base);
-        sums[4] +%= @intFromBool(props.emoji_modifier);
-        sums[5] +%= @intFromBool(props.emoji_modifier_base);
+        sums[1] +%= @intFromEnum(props.eastAsianWidth);
+        sums[2] +%= @intFromBool(props.isEmojiPresentation);
+        sums[3] +%= @intFromBool(props.isEmojiVariationBase);
+        sums[4] +%= @intFromBool(props.isEmojiModifier);
+        sums[5] +%= @intFromBool(props.isEmojiModifierBase);
         sums[6] +%= props.standalone;
-        sums[7] +%= @intFromBool(props.zero_in_grapheme);
+        sums[7] +%= @intFromBool(props.zeroInGrapheme);
     }
     return .{ .units = codepoints.len, .checksum = finishSums(sums) };
 }
@@ -101,7 +101,7 @@ pub inline fn caseFold(bytes: []const u8) Stats {
     while (pos < bytes.len) : (units += 1) {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
-        var folded = zunic.fullCaseFold(step.cp orelse 0xfffd);
+        var folded = zunic.cp(step.cp orelse 0xfffd).fullCaseFold();
         sums[0] +%= pos;
         sums[1] +%= folded.len;
         for (folded.slice()) |cp| sums[2] +%= cp;
@@ -129,8 +129,8 @@ pub inline fn graphemeStream(bytes: []const u8) Stats {
 }
 
 inline fn ghosttyScalarWidth(cp: u21) u2 {
-    const width_props = zunic.widthProperties(cp);
-    if (width_props.zero_in_grapheme and !width_props.emoji_modifier and zunic.graphemeProperties(cp).gcb != .prepend) return 0;
+    const width_props = zunic.cp(cp).terminal();
+    if (width_props.zeroInGrapheme and !width_props.isEmojiModifier and zunic.cp(cp).grapheme().gcb != .prepend) return 0;
     return @min(2, width_props.standalone);
 }
 
@@ -176,33 +176,33 @@ pub fn dumpTerminalProperties(out: *std.Io.Writer, bytes: []const u8) !void {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
         const cp = step.cp orelse 0xfffd;
-        const props = zunic.terminalProperties(cp);
+        const props = zunic.cp(cp).terminal();
         try out.print("{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             pos,
-            @intFromEnum(props.east_asian_width),
-            @intFromBool(props.emoji_presentation),
-            @intFromBool(props.emoji_variation_base),
-            @intFromBool(props.emoji_modifier),
-            @intFromBool(props.emoji_modifier_base),
+            @intFromEnum(props.eastAsianWidth),
+            @intFromBool(props.isEmojiPresentation),
+            @intFromBool(props.isEmojiVariationBase),
+            @intFromBool(props.isEmojiModifier),
+            @intFromBool(props.isEmojiModifierBase),
             props.standalone,
-            @intFromBool(props.zero_in_grapheme),
-            @intFromBool(props.emoji_modifier),
+            @intFromBool(props.zeroInGrapheme),
+            @intFromBool(props.isEmojiModifier),
         });
     }
 }
 
 pub fn dumpTerminalLookup(out: *std.Io.Writer, codepoints: []const u21) !void {
     for (codepoints) |cp| {
-        const props = zunic.terminalProperties(cp);
+        const props = zunic.cp(cp).terminal();
         try out.print("{x}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             cp,
-            @intFromEnum(props.east_asian_width),
-            @intFromBool(props.emoji_presentation),
-            @intFromBool(props.emoji_variation_base),
-            @intFromBool(props.emoji_modifier),
-            @intFromBool(props.emoji_modifier_base),
+            @intFromEnum(props.eastAsianWidth),
+            @intFromBool(props.isEmojiPresentation),
+            @intFromBool(props.isEmojiVariationBase),
+            @intFromBool(props.isEmojiModifier),
+            @intFromBool(props.isEmojiModifierBase),
             props.standalone,
-            @intFromBool(props.zero_in_grapheme),
+            @intFromBool(props.zeroInGrapheme),
         });
     }
 }
@@ -212,7 +212,7 @@ pub fn dumpCaseFold(out: *std.Io.Writer, bytes: []const u8) !void {
     while (pos < bytes.len) {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
-        var folded = zunic.fullCaseFold(step.cp orelse 0xfffd);
+        var folded = zunic.cp(step.cp orelse 0xfffd).fullCaseFold();
         try out.print("{d}:", .{pos});
         for (folded.slice()) |cp| try out.print("{x}.", .{cp});
         try out.writeByte(',');

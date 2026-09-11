@@ -68,7 +68,7 @@ test "the exported predicate agrees with the pinned property data" {
     for (0..0x110000) |value| {
         if (value >= 0xD800 and value <= 0xDFFF) continue;
         const cp: u21 = @intCast(value);
-        try std.testing.expectEqual(expectedWhitespace(cp), zunic.isWhitespace(cp));
+        try std.testing.expectEqual(expectedWhitespace(cp), zunic.cp(cp).isWhitespace());
     }
 }
 

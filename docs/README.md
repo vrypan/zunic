@@ -42,8 +42,8 @@ pub fn isNormalizedQuick(self: Text, comptime form: Form) error{InvalidUtf8}!Qui
 
 Opening a Text view does not scan. `validate()` checks the complete slice.
 Grapheme, word, width, wrap, and trim operations tolerate malformed UTF-8;
-normalization rejects it when encountered. Trimming returns another borrowed
-Text, with offsets relative to its retained slice.
+codepoint iteration stops at it, and normalization rejects it when encountered.
+Trimming returns another borrowed Text, with offsets relative to its retained slice.
 
 #### Text iterators
 
@@ -98,13 +98,13 @@ pub const MeasuredSpan = struct {
 };
 pub const Line = struct { start: ByteOffset, end: ByteOffset, columns: Column };
 pub const WordBound = struct { start: ByteOffset, end: ByteOffset, is_word: bool };
-pub const Codepoint = struct {
-    start: ByteOffset,
-    end: ByteOffset,
-    value: ?u21,
-    width: u2,
-    grapheme: GraphemeProperties,
-    east_asian_wide: bool,
+pub const Codepoint = CodepointView;
+pub const DecodeError = enum { invalid_utf8 };
+pub const CodepointIterator = struct {
+    bytes: []const u8,
+    offset: usize = 0,
+    err: ?DecodeError = null,
+    pub fn next(self: *CodepointIterator) ?CodepointView;
 };
 ```
 
@@ -115,15 +115,36 @@ Neither splits an individual grapheme. A zero width is `InvalidWidth`.
 `isAscii()` scans the whole slice on every call, with no cache; it is a
 byte-range test, not UTF-8 validation.
 
-`codepoints()` yields one `Codepoint` per scalar, unlike `graphemes()`, which
-groups combining marks and multi-scalar sequences with their base. A malformed
-byte is never an error: it yields a `Codepoint` with `value = null` and
-`end - start == 1`, the same one-byte recovery `graphemes()` and `width()` use.
-`Codepoint.width` is the same flat lookup as `codepointWidth()`, `0` for
-malformed input; see that function's docs for how it differs from `Text.width()`.
-`Codepoint.grapheme` and `.east_asian_wide` are the same lookups as
-`graphemeProperties()` and `isEastAsianWide()`; malformed input gets the
-package's fixed fallback classification and `false`, respectively.
+`codepoints()` yields the same `CodepointView` as `zunic.cp(value)`;
+`Codepoint` is an alias for that type. Its `value` is a nonoptional `u21`,
+and `general()`, `terminal()`, `grapheme()`, and other scalar methods are
+available directly. Iteration decodes only; property lookups happen when asked.
+
+The iterator stops at the first malformed UTF-8 sequence. After `next()`
+returns `null`, `err == null` means normal exhaustion; `.invalid_utf8` means
+failure. The byte `offset` points to the next scalar, stays at the start of
+an undecodable sequence on failure, and equals the input length after normal
+exhaustion. Repeated calls after either outcome return `null` and preserve
+`err` and `offset`. If you stop the loop early, `err == null` only describes
+the prefix already visited. Copying the iterator creates an independent
+checkpoint over the same borrowed bytes.
+
+```zig
+var it = zunic.text(bytes).codepoints().iterator();
+while (it.next()) |point| {
+    const p = point.general();
+    std.debug.print("{x}: {s}\n", .{ point.value, @tagName(p.category) });
+}
+if (it.err) |err| {
+    std.debug.print("{s} at byte {d}\n", .{ @tagName(err), it.offset });
+}
+```
+
+Every yielded value is a valid Unicode scalar, including a literal U+FFFD.
+There is no replacement sentinel. The old item fields `start`, `end`,
+`width`, `grapheme`, and `east_asian_wide` are replaced by the iterator's
+`offset` and the code-point methods. To retain a scalar's byte range, capture
+`offset` before calling `next()` and after it returns an item.
 
 `isNormalizedQuick()` scans the whole input and can return `.maybe` for a
 composing form (`.nfc`/`.nfkc`); a decomposing form (`.nfd`/`.nfkd`) never
@@ -131,7 +152,7 @@ does. `isNormalized()` resolves the answer to a boolean and may stop early.
 `.nfkc`/`.nfkd` also decompose compatibility mappings (ligatures, fullwidth
 forms, and similar) that `.nfc`/`.nfd` leave untouched; `eql(..., .compatibility)`
 is the matching broader equivalence. Full default case folding is available
-through `fullCaseFold()` as a separate scalar operation; it is not folded into
+through `cp(value).fullCaseFold()` as a separate scalar operation; it is not folded into
 normalization or equality. Stream-safe normalization is not available.
 
 ### Shared positions and helpers
@@ -141,98 +162,70 @@ pub const ByteOffset = struct { value: usize };
 pub const Column = struct { value: usize };
 pub const Span = struct { start: ByteOffset, end: ByteOffset };
 
-// Whitespace helpers for decoded scalars or byte slices.
-pub fn isWhitespace(cp: u21) bool;
+// Helpers for byte slices; scalar operations live on CodepointView.
 pub fn isWhitespaceSlice(glyph: []const u8) bool;
-
-// Whether every byte in a slice is below 0x80. `Text.isAscii()` applies the
-// same check to the view's bytes.
 pub fn isAscii(bytes: []const u8) bool;
 
-// The terminal-cell width of one code point in isolation: 0, 1, or 2.
-pub fn codepointWidth(cp: u21) u2;
-
-// One code point's grapheme-break classification: the raw facts, not a
-// boundary decision. See `Text.graphemes()` for the full UAX #29 rules.
-pub const GraphemeClass = enum { other, cr, lf, control, extend, zwj, regional_indicator, prepend, spacingmark, l, v, t, lv, lvt };
-pub const IndicConjunctBreak = enum { none, consonant, extend, linker };
-pub const GraphemeProperties = struct {
-    gcb: GraphemeClass,
-    incb: IndicConjunctBreak,
-    extended_pictographic: bool,
+pub fn cp(value: u21) CodepointView;
+pub const CodepointView = packed struct(u32) {
+    value: u21,
+    _padding: u11 = 0,
+    pub fn general(self: CodepointView) GeneralProperties;
+    pub fn terminal(self: CodepointView) TerminalProperties;
+    pub fn grapheme(self: CodepointView) GraphemeProperties;
+    pub fn width(self: CodepointView) u2;
+    pub fn isEastAsianWide(self: CodepointView) bool;
+    pub fn isWhitespace(self: CodepointView) bool;
+    pub fn fullCaseFold(self: CodepointView) CaseFold;
 };
-pub fn graphemeProperties(cp: u21) GraphemeProperties;
 
 pub const max_codepoint: u21 = 0x10FFFF;
+pub const GeneralCategory = enum(u5) { lu, ll, lt, lm, lo, mn, mc, me, nd, nl, no_, pc, pd, ps, pe, pi, pf, po, sm, sc, sk, so, zs, zl, zp, cc, cf, cs, co, cn };
 pub const EastAsianWidth = enum(u3) { neutral, fullwidth, halfwidth, wide, narrow, ambiguous };
-pub const WidthProperties = struct {
-    standalone: u2,
-    zero_in_grapheme: bool,
-    emoji_modifier: bool,
+pub const GraphemeClass = enum(u4) { other, cr, lf, control, extend, zwj, regional_indicator, prepend, spacingmark, l, v, t, lv, lvt };
+pub const IndicConjunctBreak = enum(u2) { none, consonant, extend, linker };
+
+pub const GeneralProperties = packed struct(u32) {
+    category: GeneralCategory,
+    isAlphabetic: bool,
+    isLowercase: bool,
+    isUppercase: bool,
+    isCased: bool,
+    isCaseIgnorable: bool,
+    isMath: bool,
+    isIdStart: bool,
+    isIdContinue: bool,
+    isXidStart: bool,
+    isXidContinue: bool,
+    isDefaultIgnorable: bool,
+    isGraphemeBase: bool,
+    isGraphemeExtend: bool,
+    _padding: u14 = 0,
 };
+
 pub const TerminalProperties = packed struct(u10) {
-    east_asian_width: EastAsianWidth,
-    emoji_presentation: bool,
-    emoji_variation_base: bool,
-    emoji_modifier: bool,
-    emoji_modifier_base: bool,
+    eastAsianWidth: EastAsianWidth,
+    isEmojiPresentation: bool,
+    isEmojiVariationBase: bool,
+    isEmojiModifier: bool,
+    isEmojiModifierBase: bool,
     standalone: u2,
-    zero_in_grapheme: bool,
+    zeroInGrapheme: bool,
 };
+
+pub const GraphemeProperties = packed struct(u7) {
+    gcb: GraphemeClass,
+    incb: IndicConjunctBreak,
+    extendedPictographic: bool,
+};
+
 pub const CaseFold = struct {
     codepoints: [3]u21,
     len: u2,
     pub fn slice(self: *const CaseFold) []const u21;
 };
 pub const GraphemeState = struct { /* copyable checkpoint state */ };
-pub fn eastAsianWidth(cp: u21) EastAsianWidth;
-pub fn isEmojiPresentation(cp: u21) bool;
-pub fn isEmojiVariationBase(cp: u21) bool;
-pub fn isEmojiModifier(cp: u21) bool;
-pub fn isEmojiModifierBase(cp: u21) bool;
-pub fn widthProperties(cp: u21) WidthProperties;
-// Fetch every terminal property above with one table lookup.
-pub fn terminalProperties(cp: u21) TerminalProperties;
-pub fn fullCaseFold(cp: u21) CaseFold;
 pub fn graphemeBreak(previous: u21, current: u21, state: *GraphemeState) bool;
-
-// Whether a code point has East_Asian_Width Wide, Fullwidth, or Halfwidth.
-pub fn isEastAsianWide(cp: u21) bool;
-
-// General_Category and a fixed set of DerivedCoreProperties booleans. Unlike
-// everything above, none of zunic's own engines read this data.
-pub const GeneralCategory = enum { lu, ll, lt, lm, lo, mn, mc, me, nd, nl, no_, pc, pd, ps, pe, pi, pf, po, sm, sc, sk, so, zs, zl, zp, cc, cf, cs, co, cn };
-pub const GeneralCategoryProperties = struct {
-    category: GeneralCategory,
-    is_alphabetic: bool,
-    is_lowercase: bool,
-    is_uppercase: bool,
-    is_cased: bool,
-    is_case_ignorable: bool,
-    is_math: bool,
-    is_id_start: bool,
-    is_id_continue: bool,
-    is_xid_start: bool,
-    is_xid_continue: bool,
-    is_default_ignorable: bool,
-    is_grapheme_base: bool,
-    is_grapheme_extend: bool,
-};
-pub fn generalCategoryProperties(cp: u21) GeneralCategoryProperties;
-pub fn generalCategory(cp: u21) GeneralCategory;
-pub fn isAlphabetic(cp: u21) bool;
-pub fn isLowercase(cp: u21) bool;
-pub fn isUppercase(cp: u21) bool;
-pub fn isCased(cp: u21) bool;
-pub fn isCaseIgnorable(cp: u21) bool;
-pub fn isMath(cp: u21) bool;
-pub fn isIdStart(cp: u21) bool;
-pub fn isIdContinue(cp: u21) bool;
-pub fn isXidStart(cp: u21) bool;
-pub fn isXidContinue(cp: u21) bool;
-pub fn isDefaultIgnorable(cp: u21) bool;
-pub fn isGraphemeBase(cp: u21) bool;
-pub fn isGraphemeExtend(cp: u21) bool;
 ```
 
 Spans describe `bytes[start.value..end.value]` in the view's input slice.
@@ -243,17 +236,17 @@ or to malformed input. It is not UTF-8 validation and not a printable-text
 check. `std.ascii.isAscii` checks one byte; this checks a whole slice with a
 vectorized scan (SIMD where the target supports it) and a scalar tail.
 
-`codepointWidth` is a flat, per-scalar lookup: it does not group combining
+`cp(value).width()` is a flat, per-scalar lookup: it does not group combining
 marks or multi-scalar sequences with a base. Summing it over a string's
 scalars is a different, narrower question than `Text.width()` and disagrees
 with it on exactly the inputs that motivate grapheme clustering -- a
 combining mark or a conjunct's vowel sign reports its own nonzero width here,
 while `Text.width()` folds it into the cluster it belongs to. Prefer
-`text(bytes).width()` for text; reach for `codepointWidth` when working with
+`text(bytes).width()` for text; reach for `cp(value).width()` when working with
 a code point that did not come from `Text`, or read it directly off
-`Codepoint.width` while iterating `codepoints()`.
+`point.width()` while iterating `codepoints()`.
 
-`graphemeProperties` is the per-code-point data `Text.graphemes()` clusters
+`cp(value).grapheme()` is the per-code-point data `Text.graphemes()` clusters
 with -- not a boundary decision by itself, since a real decision also needs
 the state carried between code points. Reach for it to build a different
 segmentation on code points that did not come from `Text`; use
@@ -267,30 +260,54 @@ checkpoint speculative input and restore the copy to undo it. Controls retain
 default UAX #29 behavior; values above `max_codepoint` form independent
 boundaries and clear carried context.
 
-`isEastAsianWide` answers a different question than `codepointWidth`: a
+`cp(value).isEastAsianWide()` answers a different question than `cp(value).width()`: a
 combining mark measures zero columns even when this is `true`, and a
 Halfwidth scalar (which this also counts as wide) measures one column
-despite it, since `codepointWidth` only treats Wide and Fullwidth as two
+despite it, since `cp(value).width()` only treats Wide and Fullwidth as two
 columns.
 
-`fullCaseFold` folds one code point using Unicode's full default C/F mapping.
+`cp(value).fullCaseFold()` folds one code point using Unicode's full default C/F mapping.
 The returned `CaseFold` owns its fixed `[3]u21` storage and allocates nothing;
 retain the value while using `slice()`. Full mappings take precedence over
 common mappings, Turkic alternatives are excluded, and unmapped or
 out-of-range `u21` values return themselves. Folding is separate from
 normalization and locale-sensitive casing.
 
-`generalCategory` and the fourteen functions after it are General_Category
-and `DerivedCoreProperties` booleans, generated solely to expose them -- no
-existing engine in zunic reads this data, unlike everything documented above
-it on this page. Each is a flat, per-code-point fact with no clustering and
-no context. Several read as narrower or broader than their name suggests:
-`isUppercase` also covers some `Nl`/`So` code points but not `Lt`;
-`isGraphemeExtend` is the `DerivedCoreProperties` property, not
-`graphemeProperties(cp).gcb == .extend` (they disagree on five code points
-in Unicode 17.0.0). See each function's doc comment in `root.zig` for the
-verified category list it actually spans. `generalCategoryProperties` is one
-lookup for all fourteen facts; each `isXxx` function reads one field of it.
+`cp(value).general()` returns General_Category and thirteen
+DerivedCoreProperties flags in one lookup. These are scalar facts with no
+clustering or context. `isUppercase` also covers some `Nl`/`So` code points
+but not `Lt`; `isGraphemeExtend` differs from `grapheme().gcb == .extend` on
+five code points in Unicode 17.0.0. See the field comments in
+[src/codepoint.zig](../src/codepoint.zig) for details.
+
+`cp(value).terminal()` returns East Asian width, emoji flags, and terminal
+width facts in one lookup. `standalone` follows the pinned uucode convention
+and may be 3 (U+2E3B); `zeroInGrapheme` is a separate continuation fact.
+This differs from `cp(value).width()`, which returns zunic's scalar width
+in the range 0–2. For values above `max_codepoint`, the terminal group returns
+neutral East Asian width, false emoji flags, standalone width 1, and
+`zeroInGrapheme = true`. The general group returns `.cn` with false flags;
+the grapheme group returns `.other`, `.none`, and false. Construction accepts
+all `u21` values without validation.
+
+The view stores only the code point; construction performs no lookup. Each
+group fetches its own packed record. Retain a group when reading several fields:
+
+```zig
+const point = zunic.cp(0x1f600);
+const p = point.general();
+const t = point.terminal();
+const g = point.grapheme();
+// p.category == .so
+// t.isEmojiPresentation == true
+// g.extendedPictographic == true
+```
+
+The former free scalar functions are replaced by this view. For example,
+`zunic.generalCategory(value)` becomes `zunic.cp(value).general().category`,
+and `zunic.terminalProperties(value)` becomes `zunic.cp(value).terminal()`.
+`WidthProperties` is absorbed into `TerminalProperties`; aggregate fields use
+camelCase, including `point.grapheme().extendedPictographic`.
 
 ## Detailed documentation
 

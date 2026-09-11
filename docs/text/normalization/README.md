@@ -8,7 +8,7 @@ characters where canonical composition is possible. NFKD and NFKC do the same,
 but decompose compatibility mappings too -- ligatures, fullwidth and
 half-width forms, circled and superscript digits, and similar -- which NFC and
 NFD never touch. Case folding is a separate scalar operation exposed as
-`fullCaseFold()`; normalization does not apply it implicitly.
+`cp(value).fullCaseFold()`; normalization does not apply it implicitly.
 
 Compatibility equivalence, `eql(..., .compatibility)`, is a separate, coarser
 relation than canonical equivalence: `"\u{FB01}"` (a ligature) and `"fi"` are

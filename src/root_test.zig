@@ -191,47 +191,71 @@ test "word bounds partition the view and name their own types" {
     try std.testing.expectEqual(@as(?unicode.WordBound, null), empty.next());
 }
 
-test "codepoints partition the view one scalar at a time and name their own types" {
-    const text = "a\xff\u{754c}\xc0\x80";
-
-    const points: unicode.Codepoints = unicode.text(text).codepoints();
+test "codepoints yield the same view as cp without eager properties" {
+    const bytes = "a\u{754c}\u{fffd}\u{1f600}\x00\u{10ffff}";
+    const points: unicode.Codepoints = unicode.text(bytes).codepoints();
     var it: unicode.CodepointIterator = points.iterator();
-    var first: unicode.Codepoint = undefined;
+    const values = [_]u21{ 'a', 0x754c, 0xfffd, 0x1f600, 0, 0x10ffff };
+    const ends = [_]usize{ 1, 4, 7, 11, 12, 16 };
+    try std.testing.expectEqual(@as(usize, 0), it.offset);
+    try std.testing.expectEqual(@as(?unicode.DecodeError, null), it.err);
+    for (values, ends) |value, end| {
+        const point: unicode.Codepoint = it.next().?;
+        try std.testing.expectEqualDeep(unicode.cp(value), point);
+        try std.testing.expectEqual(end, it.offset);
+        try std.testing.expectEqual(@as(?unicode.DecodeError, null), it.err);
+    }
+    try std.testing.expectEqual(bytes.len, it.offset);
+    try std.testing.expectEqual(@as(?unicode.CodepointView, null), it.next());
+    try std.testing.expectEqual(@as(?unicode.CodepointView, null), it.next());
+    try std.testing.expectEqual(@as(?unicode.DecodeError, null), it.err);
+    try std.testing.expectEqual(bytes.len, it.offset);
+}
 
-    var scalars: usize = 0;
-    var malformed: usize = 0;
-    var cursor: usize = 0;
-    var count: usize = 0;
-    while (it.next()) |cp| : (count += 1) {
-        if (count == 0) first = cp;
-        try std.testing.expectEqual(cursor, cp.start.value);
-        cursor = cp.end.value;
-        if (cp.value) |value| {
-            scalars += 1;
-            // The per-scalar width the iterator carries always agrees with
-            // the standalone lookup for the same code point.
-            try std.testing.expectEqual(unicode.codepointWidth(value), cp.width);
-        } else {
-            malformed += 1;
-            try std.testing.expectEqual(@as(u2, 0), cp.width);
+test "codepoints stop at malformed UTF-8 and retain error and byte offset" {
+    const invalids = [_][]const u8{
+        "\xffvalid", "\x80valid", "\xc0\x80valid", // illegal lead, stray continuation, overlong
+        "\xc2", "\xe2\x82", "\xf0\x9f\x98", // truncation
+        "\xc2A", "\xe2\x82A", "\xf0\x9f\x98A", // broken continuation
+        "\xed\xa0\x80", "\xf4\x90\x80\x80", // surrogate, above Unicode range
+        "\xe0\x80\x80", "\xf0\x80\x80\x80", // overlong 3/4-byte forms
+    };
+    for (invalids) |invalid| {
+        var buffer: [32]u8 = undefined;
+        const prefix = "a\u{754c}";
+        @memcpy(buffer[0..prefix.len], prefix);
+        @memcpy(buffer[prefix.len..][0..invalid.len], invalid);
+        // Test both an error at the start and an error following valid scalars.
+        for ([_][]const u8{ invalid, buffer[0 .. prefix.len + invalid.len] }, [_]usize{ 0, prefix.len }) |bytes, failure_offset| {
+            var it = unicode.text(bytes).codepoints().iterator();
+            var count: usize = 0;
+            while (it.next()) |_| count += 1;
+            try std.testing.expectEqual(@as(usize, if (failure_offset == 0) 0 else 2), count);
+            try std.testing.expectEqual(failure_offset, it.offset);
+            try std.testing.expectEqual(unicode.DecodeError.invalid_utf8, it.err.?);
+            try std.testing.expectEqual(@as(?unicode.CodepointView, null), it.next());
+            try std.testing.expectEqual(@as(?unicode.CodepointView, null), it.next());
+            try std.testing.expectEqual(failure_offset, it.offset);
+            try std.testing.expectEqual(unicode.DecodeError.invalid_utf8, it.err.?);
         }
     }
-    try std.testing.expectEqual(text.len, cursor);
-    try std.testing.expectEqual(@as(usize, 2), scalars); // 'a', U+754C
-    // A stray 0xff byte and an overlong two-byte encoding of NUL each
-    // consume exactly one byte, per `graphemes()`/`width()`'s own recovery.
-    try std.testing.expectEqual(@as(usize, 3), malformed);
-    try std.testing.expectEqual(@as(usize, 1), first.end.value - first.start.value);
-    try std.testing.expectEqual(@as(?u21, 'a'), first.value);
-    try std.testing.expectEqual(@as(u2, 1), first.width);
-    try std.testing.expectEqual(@as(u2, 1), unicode.codepointWidth('a'));
-    try std.testing.expectEqual(@as(u2, 2), unicode.codepointWidth(0x754c)); // 界, wide
-    try std.testing.expectEqual(@as(u2, 0), unicode.codepointWidth(0x0301)); // combining acute, zero
+}
 
-    // Opening the view scans nothing, and an exhausted iterator stays null.
-    try std.testing.expectEqual(@as(?unicode.Codepoint, null), it.next());
+test "empty and copied codepoint iterators retain independent state" {
     var empty = unicode.text("").codepoints().iterator();
-    try std.testing.expectEqual(@as(?unicode.Codepoint, null), empty.next());
+    try std.testing.expectEqual(@as(?unicode.CodepointView, null), empty.next());
+    try std.testing.expectEqual(@as(?unicode.CodepointView, null), empty.next());
+    try std.testing.expectEqual(@as(?unicode.DecodeError, null), empty.err);
+    try std.testing.expectEqual(@as(usize, 0), empty.offset);
+
+    var it = unicode.text("a\xff").codepoints().iterator();
+    try std.testing.expectEqual(@as(u21, 'a'), it.next().?.value);
+    var checkpoint = it;
+    try std.testing.expectEqual(@as(?unicode.CodepointView, null), it.next());
+    try std.testing.expectEqual(@as(?unicode.DecodeError, null), checkpoint.err);
+    try std.testing.expectEqual(@as(usize, 1), checkpoint.offset);
+    try std.testing.expectEqual(@as(?unicode.CodepointView, null), checkpoint.next());
+    try std.testing.expectEqual(unicode.DecodeError.invalid_utf8, checkpoint.err.?);
 }
 
 test "the pinned Unicode data version is published" {
@@ -267,46 +291,41 @@ test "exactly four normalization forms" {
     try std.testing.expectEqual(@as(usize, 2), @typeInfo(unicode.Equivalence).@"enum".fields.len);
 }
 
-test "east_asian_wide and codepointWidth answer different questions" {
+test "code-point width and East Asian wide answer different questions" {
     // U+302A IDEOGRAPHIC LEVEL TONE MARK: Mn, and East_Asian_Width=Wide.
     // Category forces width to zero regardless of east_asian_wide.
-    try std.testing.expect(unicode.isEastAsianWide(0x302A));
-    try std.testing.expectEqual(@as(u2, 0), unicode.codepointWidth(0x302A));
+    try std.testing.expect(unicode.cp(0x302A).isEastAsianWide());
+    try std.testing.expectEqual(@as(u2, 0), unicode.cp(0x302A).width());
 
     // U+FF61 HALFWIDTH IDEOGRAPHIC FULL STOP: East_Asian_Width=Halfwidth.
     // east_asian_wide is true (it covers H too), but width only treats
     // Wide/Fullwidth as two columns, so this measures one.
-    try std.testing.expect(unicode.isEastAsianWide(0xFF61));
-    try std.testing.expectEqual(@as(u2, 1), unicode.codepointWidth(0xFF61));
+    try std.testing.expect(unicode.cp(0xFF61).isEastAsianWide());
+    try std.testing.expectEqual(@as(u2, 1), unicode.cp(0xFF61).width());
 
     // An ordinary CJK ideograph agrees on both questions.
-    try std.testing.expect(unicode.isEastAsianWide(0x4E00));
-    try std.testing.expectEqual(@as(u2, 2), unicode.codepointWidth(0x4E00));
+    try std.testing.expect(unicode.cp(0x4E00).isEastAsianWide());
+    try std.testing.expectEqual(@as(u2, 2), unicode.cp(0x4E00).width());
 
-    try std.testing.expect(!unicode.isEastAsianWide('a'));
-    try std.testing.expectEqual(@as(u2, 1), unicode.codepointWidth('a'));
+    try std.testing.expect(!unicode.cp('a').isEastAsianWide());
+    try std.testing.expectEqual(@as(u2, 1), unicode.cp('a').width());
 }
 
-test "graphemeProperties matches Codepoint.grapheme from the same iterator" {
-    const text = "a\u{200D}\u{1F1FA}\xff";
-    var it = unicode.text(text).codepoints().iterator();
-    while (it.next()) |cp| {
-        if (cp.value) |value| {
-            try std.testing.expectEqualDeep(unicode.graphemeProperties(value), cp.grapheme);
-        } else {
-            // Malformed input carries the package's fixed fallback classification.
-            try std.testing.expectEqual(unicode.GraphemeClass.other, cp.grapheme.gcb);
-            try std.testing.expectEqual(unicode.IndicConjunctBreak.none, cp.grapheme.incb);
-            try std.testing.expect(!cp.grapheme.extended_pictographic);
-        }
+test "iterated code-point views expose property groups" {
+    const bytes = "a\u{200D}\u{1F1FA}\u{fffd}";
+    var it = unicode.text(bytes).codepoints().iterator();
+    while (it.next()) |point| {
+        try std.testing.expectEqualDeep(unicode.cp(point.value).general(), point.general());
+        try std.testing.expectEqualDeep(unicode.cp(point.value).terminal(), point.terminal());
+        try std.testing.expectEqualDeep(unicode.cp(point.value).grapheme(), point.grapheme());
+        try std.testing.expectEqual(unicode.cp(point.value).width(), point.width());
     }
-
-    // ZWJ and a regional indicator have their own, distinct classes.
-    try std.testing.expectEqual(unicode.GraphemeClass.zwj, unicode.graphemeProperties(0x200D).gcb);
-    try std.testing.expectEqual(unicode.GraphemeClass.regional_indicator, unicode.graphemeProperties(0x1F1FA).gcb);
+    try std.testing.expectEqual(@as(?unicode.DecodeError, null), it.err);
+    try std.testing.expectEqual(unicode.GraphemeClass.zwj, unicode.cp(0x200D).grapheme().gcb);
+    try std.testing.expectEqual(unicode.GraphemeClass.regional_indicator, unicode.cp(0x1F1FA).grapheme().gcb);
 }
 
-test "generalCategory and its derived booleans agree with the pinned UCD" {
+test "general group agrees with the pinned UCD" {
     const Want = struct {
         cp: u21,
         category: unicode.GeneralCategory,
@@ -351,32 +370,69 @@ test "generalCategory and its derived booleans agree with the pinned UCD" {
         .{ .cp = 0x0378, .category = .cn, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = false, .grapheme_base = false, .grapheme_extend = false },
     };
     for (cases) |want| {
-        try std.testing.expectEqual(want.category, unicode.generalCategory(want.cp));
-        try std.testing.expectEqual(want.alphabetic, unicode.isAlphabetic(want.cp));
-        try std.testing.expectEqual(want.lowercase, unicode.isLowercase(want.cp));
-        try std.testing.expectEqual(want.uppercase, unicode.isUppercase(want.cp));
-        try std.testing.expectEqual(want.cased, unicode.isCased(want.cp));
-        try std.testing.expectEqual(want.case_ignorable, unicode.isCaseIgnorable(want.cp));
-        try std.testing.expectEqual(want.math, unicode.isMath(want.cp));
-        try std.testing.expectEqual(want.id_start, unicode.isIdStart(want.cp));
-        try std.testing.expectEqual(want.id_continue, unicode.isIdContinue(want.cp));
-        try std.testing.expectEqual(want.xid_start, unicode.isXidStart(want.cp));
-        try std.testing.expectEqual(want.xid_continue, unicode.isXidContinue(want.cp));
-        try std.testing.expectEqual(want.default_ignorable, unicode.isDefaultIgnorable(want.cp));
-        try std.testing.expectEqual(want.grapheme_base, unicode.isGraphemeBase(want.cp));
-        try std.testing.expectEqual(want.grapheme_extend, unicode.isGraphemeExtend(want.cp));
-
-        // generalCategoryProperties() is the one-lookup form every isXxx
-        // function reads a field from; it must agree with all of them.
-        const props = unicode.generalCategoryProperties(want.cp);
+        const props = unicode.cp(want.cp).general();
         try std.testing.expectEqual(want.category, props.category);
-        try std.testing.expectEqual(want.alphabetic, props.is_alphabetic);
-        try std.testing.expectEqual(want.grapheme_extend, props.is_grapheme_extend);
+        try std.testing.expectEqual(want.alphabetic, props.isAlphabetic);
+        try std.testing.expectEqual(want.lowercase, props.isLowercase);
+        try std.testing.expectEqual(want.uppercase, props.isUppercase);
+        try std.testing.expectEqual(want.cased, props.isCased);
+        try std.testing.expectEqual(want.case_ignorable, props.isCaseIgnorable);
+        try std.testing.expectEqual(want.math, props.isMath);
+        try std.testing.expectEqual(want.id_start, props.isIdStart);
+        try std.testing.expectEqual(want.id_continue, props.isIdContinue);
+        try std.testing.expectEqual(want.xid_start, props.isXidStart);
+        try std.testing.expectEqual(want.xid_continue, props.isXidContinue);
+        try std.testing.expectEqual(want.default_ignorable, props.isDefaultIgnorable);
+        try std.testing.expectEqual(want.grapheme_base, props.isGraphemeBase);
+        try std.testing.expectEqual(want.grapheme_extend, props.isGraphemeExtend);
     }
 
     // Every Lu/Ll/Lt code point is Cased, by the property's own definition
     // (verified exhaustively by src/tools/test-general-category.py; this is
     // a second, narrower consistency signal from inside the test suite).
-    try std.testing.expect(unicode.isCased('A'));
-    try std.testing.expect(unicode.generalCategory('A') == .lu);
+    try std.testing.expect(unicode.cp('A').general().isCased);
+    try std.testing.expect(unicode.cp('A').general().category == .lu);
+}
+
+test "code-point groups preserve table facts across the complete u21 domain" {
+    const tables = @import("tables");
+    var raw: u32 = 0;
+    while (raw <= std.math.maxInt(u21)) : (raw += 1) {
+        const value: u21 = @intCast(raw);
+        const point = unicode.cp(value);
+        try std.testing.expectEqual(value, point.value);
+        const general = point.general();
+        const expected_general = tables.general_category.generalCategoryProperties(value);
+        try std.testing.expectEqual(expected_general.category, general.category);
+        try std.testing.expectEqual(expected_general.is_alphabetic, general.isAlphabetic);
+        try std.testing.expectEqual(expected_general.is_lowercase, general.isLowercase);
+        try std.testing.expectEqual(expected_general.is_uppercase, general.isUppercase);
+        try std.testing.expectEqual(expected_general.is_cased, general.isCased);
+        try std.testing.expectEqual(expected_general.is_case_ignorable, general.isCaseIgnorable);
+        try std.testing.expectEqual(expected_general.is_math, general.isMath);
+        try std.testing.expectEqual(expected_general.is_id_start, general.isIdStart);
+        try std.testing.expectEqual(expected_general.is_id_continue, general.isIdContinue);
+        try std.testing.expectEqual(expected_general.is_xid_start, general.isXidStart);
+        try std.testing.expectEqual(expected_general.is_xid_continue, general.isXidContinue);
+        try std.testing.expectEqual(expected_general.is_default_ignorable, general.isDefaultIgnorable);
+        try std.testing.expectEqual(expected_general.is_grapheme_base, general.isGraphemeBase);
+        try std.testing.expectEqual(expected_general.is_grapheme_extend, general.isGraphemeExtend);
+        try std.testing.expectEqual(expected_general._padding, general._padding);
+        const terminal = point.terminal();
+        const expected_terminal = tables.terminal_properties.terminalProperties(value);
+        try std.testing.expectEqual(expected_terminal.east_asian_width, terminal.eastAsianWidth);
+        try std.testing.expectEqual(expected_terminal.emoji_presentation, terminal.isEmojiPresentation);
+        try std.testing.expectEqual(expected_terminal.emoji_variation_base, terminal.isEmojiVariationBase);
+        try std.testing.expectEqual(expected_terminal.emoji_modifier, terminal.isEmojiModifier);
+        try std.testing.expectEqual(expected_terminal.emoji_modifier_base, terminal.isEmojiModifierBase);
+        try std.testing.expectEqual(expected_terminal.standalone, terminal.standalone);
+        try std.testing.expectEqual(expected_terminal.zero_in_grapheme, terminal.zeroInGrapheme);
+        const grapheme = point.grapheme();
+        const expected_grapheme = tables.properties.graphemeProperties(value);
+        try std.testing.expectEqual(expected_grapheme.gcb, grapheme.gcb);
+        try std.testing.expectEqual(expected_grapheme.incb, grapheme.incb);
+        try std.testing.expectEqual(expected_grapheme.extended_pictographic, grapheme.extendedPictographic);
+        try std.testing.expectEqual(tables.properties.codepointWidth(value), point.width());
+        try std.testing.expectEqual(tables.properties.isEastAsianWide(value), point.isEastAsianWide());
+    }
 }

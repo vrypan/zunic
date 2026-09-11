@@ -14,6 +14,7 @@
 //! `text` reads bytes as plain text. ANSI escape sequences are ordinary bytes
 //! here, so remove them before measuring or wrapping styled input.
 pub const utf8 = @import("encoding").utf8;
+const codepoint_view = @import("codepoint.zig");
 const text_view = @import("text.zig");
 const text_trim = @import("text_trim.zig");
 const types = @import("types");
@@ -36,7 +37,9 @@ pub const Graphemes = text_view.Graphemes;
 pub const WordBound = text_view.WordBound;
 pub const WordBounds = text_view.WordBounds;
 pub const WordBoundIterator = text_view.WordBoundIterator;
-pub const Codepoint = text_view.Codepoint;
+/// The code-point iterator yields the same view as cp(value).
+pub const Codepoint = CodepointView;
+pub const DecodeError = text_view.DecodeError;
 pub const Codepoints = text_view.Codepoints;
 pub const CodepointIterator = text_view.CodepointIterator;
 pub const Form = normalization.Form;
@@ -64,17 +67,13 @@ pub fn text(bytes: []const u8) Text {
     return .{ .bytes = bytes };
 }
 
-/// Unicode 17.0.0 `White_Space=Yes`: the predicate `Text.trim()`, `trimStart()`
-/// and `trimEnd()` apply at each edge, and `Text.isWhitespace(span)` applies
-/// to a whole span. Not general category `Zs`, not `Pattern_White_Space`, and
-/// not the zero-width set; see [trim](../docs/text/trim/README.md) for the full
-/// 25-code-point table.
-///
-/// This scalar form is exposed for code working with a code point directly
-/// rather than a span of bytes -- most span-shaped code should reach for
-/// `text(bytes).isWhitespace(span)` instead, which also confirms the span is
-/// exactly one such scalar rather than merely starting with one.
-pub const isWhitespace = text_trim.isWhitespace;
+/// Open a code-point view without decoding or looking up any properties.
+pub fn cp(value: u21) CodepointView {
+    return .{ .value = value };
+}
+
+pub const CodepointView = codepoint_view.CodepointView;
+pub const GeneralProperties = codepoint_view.GeneralProperties;
 
 /// Whether `glyph` is exactly one `White_Space` scalar and nothing else --
 /// the primitive behind `Text.isWhitespace`, exposed directly for a byte
@@ -93,86 +92,28 @@ pub const isWhitespaceSlice = text_trim.isWhitespaceSlice;
 /// scalar tail. `Text.isAscii()` is the same check on its view's bytes.
 pub const isAscii = @import("encoding").ascii.isAscii;
 
-/// The terminal-cell width of one code point in isolation: `0`, `1`, or `2`.
-///
-/// This is a flat, per-scalar lookup -- it does not group combining marks or
-/// multi-scalar sequences with a base, so summing it over a string's scalars
-/// is a different, narrower question than `Text.width()` and disagrees with
-/// it on exactly the inputs that motivate grapheme clustering: a combining
-/// mark or a conjunct's vowel sign reports its own nonzero width here, while
-/// `Text.width()` folds it into the cluster it belongs to. Reach for this
-/// when working with a code point that did not come from `Text`, such as one
-/// produced elsewhere in a caller's own pipeline; prefer
-/// `text(bytes).width()` or `text(bytes).graphemes().measured()` for text.
-pub const codepointWidth = @import("tables").properties.codepointWidth;
-
 /// One code point's classification for extended grapheme clustering
 /// ([UAX #29](https://www.unicode.org/reports/tr29/)), the raw facts
 /// `Text.graphemes()` applies the full boundary rules to.
 pub const GraphemeClass = @import("tables").properties.GraphemeClass;
 
 /// `Indic_Conjunct_Break`, part of the same clustering rules; also read by
-/// `graphemeProperties()`.
+/// `CodepointView.grapheme()`.
 pub const IndicConjunctBreak = @import("tables").properties.IndicConjunctBreak;
 
-/// The three facts `graphemeProperties()` returns together, and the same
-/// fields `Codepoint.grapheme` carries while iterating `codepoints()`.
-pub const GraphemeProperties = @import("tables").properties.GraphemeProperties;
-
-/// One code point's grapheme-break classification: `Grapheme_Cluster_Break`,
-/// `Indic_Conjunct_Break`, and `Extended_Pictographic`.
-///
-/// This is the raw per-scalar data, not a boundary decision -- it does not
-/// say whether a break exists between two code points, only classifies one
-/// of them. `Text.graphemes()` already applies the full UAX #29 rules,
-/// including the state carried between code points that a single lookup
-/// cannot see, and disagreements between adjacent code points and Unicode's
-/// stream-safe recommendations. Reach for this when building a different
-/// segmentation on code points that did not come from `Text`, not as a
-/// shortcut for clustering.
-pub const graphemeProperties = @import("tables").properties.graphemeProperties;
-
-/// Whether a code point has `East_Asian_Width` `Wide`, `Fullwidth`, or
-/// `Halfwidth`.
-///
-/// Not the same question as `codepointWidth()`: a combining mark measures
-/// zero columns even when this is `true`, and a Halfwidth scalar measures
-/// one column despite it -- `codepointWidth()` only treats Wide and
-/// Fullwidth as two columns. This is the raw property alone, for callers
-/// that want it directly rather than folded into a width decision.
-pub const isEastAsianWide = @import("tables").properties.isEastAsianWide;
+/// The three facts `CodepointView.grapheme()` returns together, and the same
+/// fields `Codepoint.grapheme()` returns while iterating `codepoints()`.
+pub const GraphemeProperties = codepoint_view.GraphemeProperties;
 
 /// The six values of Unicode's `East_Asian_Width` property.
 pub const EastAsianWidth = @import("tables").terminal_properties.EastAsianWidth;
-pub const eastAsianWidth = @import("tables").terminal_properties.eastAsianWidth;
-
-/// Whether a scalar has the Unicode `Emoji_Presentation` property.
-pub const isEmojiPresentation = @import("tables").terminal_properties.isEmojiPresentation;
-/// Whether a scalar is a valid base for VS15/VS16 in the standardized emoji
-/// variation-sequence data.
-pub const isEmojiVariationBase = @import("tables").terminal_properties.isEmojiVariationBase;
-/// Whether a scalar has the Unicode `Emoji_Modifier` property.
-pub const isEmojiModifier = @import("tables").terminal_properties.isEmojiModifier;
-/// Whether a scalar has the Unicode `Emoji_Modifier_Base` property.
-pub const isEmojiModifierBase = @import("tables").terminal_properties.isEmojiModifierBase;
-
-/// Terminal width facts matching the pinned uucode derivation. `standalone`
-/// is that terminal convention rather than a normative Unicode property and
-/// may be 3 (U+2E3B). `zero_in_grapheme` is a separate continuation fact. For
-/// values above `max_codepoint`, the result is standalone width 1, zero in a
-/// grapheme, and not an emoji modifier; guard first when composing a different
-/// wider-input fallback policy.
-pub const WidthProperties = @import("tables").terminal_properties.WidthProperties;
-pub const widthProperties = @import("tables").terminal_properties.widthProperties;
 
 /// All terminal-facing scalar properties stored in the terminal table,
 /// fetched together with one indexed lookup. The fields have the same
-/// semantics and wider-`u21` fallback as the corresponding scalar functions.
-pub const TerminalProperties = @import("tables").terminal_properties.TerminalProperties;
-pub const terminalProperties = @import("tables").terminal_properties.terminalProperties;
+/// semantics and wider-`u21` fallback as the CodepointView methods.
+pub const TerminalProperties = codepoint_view.TerminalProperties;
 
 pub const CaseFold = @import("case_folding.zig").CaseFold;
-pub const fullCaseFold = @import("case_folding.zig").fullCaseFold;
 
 /// Copyable state for incremental default UAX #29 grapheme decisions.
 pub const GraphemeState = @import("grapheme_stream.zig").GraphemeState;
@@ -184,90 +125,6 @@ pub const graphemeBreak = @import("grapheme_stream.zig").graphemeBreak;
 /// One code point's Unicode `General_Category`: `Lu`, `Ll`, `Nd`, `Po`, and
 /// so on, spelled in lowercase (`no` becomes `no_` to dodge the keyword).
 pub const GeneralCategory = @import("tables").general_category.GeneralCategory;
-
-/// `generalCategory()` plus a fixed set of `DerivedCoreProperties` booleans,
-/// fetched together in one lookup. The individual `isXxx` functions below
-/// each read one field of this; call this directly to avoid repeating the
-/// lookup for more than one fact about the same code point.
-pub const GeneralCategoryProperties = @import("tables").general_category.GeneralCategoryProperties;
-pub const generalCategoryProperties = @import("tables").general_category.generalCategoryProperties;
-
-/// One code point's `General_Category`. A flat, per-scalar lookup -- unlike
-/// `codepointWidth`/`graphemeProperties`/`isEastAsianWide`, this is data
-/// none of zunic's own engines read, generated solely to expose it.
-pub const generalCategory = @import("tables").general_category.generalCategory;
-
-/// `Alphabetic`: every `Lu`/`Ll`/`Lt`/`Lm`/`Lo` code point, plus some `Mn`/
-/// `Mc` combining marks, every `Nl` letter-number, and even some `So`
-/// symbols -- verified against every `General_Category` that actually
-/// carries `Alphabetic` in the pinned data, not assumed from the property's
-/// name.
-pub const isAlphabetic = @import("tables").general_category.is_alphabetic;
-
-/// `Lowercase`, per `DerivedCoreProperties`. Not the same test as
-/// `generalCategory(cp) == .ll`: also true for some `Lm`/`Lo`/`Mn`/`Nl`/`So`
-/// code points, verified against the pinned data.
-pub const isLowercase = @import("tables").general_category.is_lowercase;
-
-/// `Uppercase`, per `DerivedCoreProperties`. Not the same test as
-/// `generalCategory(cp) == .lu`: also true for some `Nl`/`So` code points
-/// (not `Lt`, despite title case reading as "uppercase-ish"), verified
-/// against the pinned data.
-pub const isUppercase = @import("tables").general_category.is_uppercase;
-
-/// `Cased`: true for anything case conversion can produce or consume,
-/// broader than `isUppercase(cp) or isLowercase(cp)` (also true for `Lt`
-/// and code points whose case is otherwise significant).
-pub const isCased = @import("tables").general_category.is_cased;
-
-/// `Case_Ignorable`: code points a case-insensitive comparison should skip
-/// over rather than compare directly, such as combining marks and some
-/// punctuation. This remains a raw property; `fullCaseFold` performs the
-/// actual default fold and does not treat this predicate as a mapping.
-pub const isCaseIgnorable = @import("tables").general_category.is_case_ignorable;
-
-/// `Math`: mathematical symbols and operators. Broader than
-/// `generalCategory(cp) == .sm`; also true for some `Cf`/`Ll`/`Lo`/`Lu`/
-/// `Mn`/`Nd`/`Pc`/`Pd`/`Pe`/`Po`/`Ps`/`Sk`/`So` code points, verified
-/// against the pinned data.
-pub const isMath = @import("tables").general_category.is_math;
-
-/// `ID_Start`: whether a code point may begin a programming-language
-/// identifier under Unicode's recommended default lexical rules. Zunic
-/// implements no lexer; this is the raw property for a caller building one.
-pub const isIdStart = @import("tables").general_category.is_id_start;
-
-/// `ID_Continue`: whether a code point may continue (not necessarily start)
-/// an identifier under the same default rules as `isIdStart`.
-pub const isIdContinue = @import("tables").general_category.is_id_continue;
-
-/// `XID_Start`: `ID_Start` closed under Unicode normalization, so an
-/// identifier built from `XID_Start`/`XID_Continue` code points stays valid
-/// after NFKC. Prefer this over `isIdStart` unless a specific lexer grammar
-/// calls for the unclosed property.
-pub const isXidStart = @import("tables").general_category.is_xid_start;
-
-/// `XID_Continue`, the `XID_Start` counterpart to `isIdContinue`.
-pub const isXidContinue = @import("tables").general_category.is_xid_continue;
-
-/// `Default_Ignorable_Code_Point`: code points recommended to be ignored in
-/// rendering absent higher-level protocol support for them -- some format
-/// characters, variation selectors, and deprecated formatting characters.
-/// Zunic's own text view does not consult this property.
-pub const isDefaultIgnorable = @import("tables").general_category.is_default_ignorable;
-
-/// `Grapheme_Base`: roughly, code points that can start a grapheme cluster.
-/// Distinct from `graphemeProperties(cp).gcb`, which is `Grapheme_Cluster_
-/// Break`, a different (UAX #29) property Unicode maintains separately;
-/// `Text.graphemes()` is built on the latter, not this one.
-pub const isGraphemeBase = @import("tables").general_category.is_grapheme_base;
-
-/// `Grapheme_Extend`, the `DerivedCoreProperties` property, not the
-/// `Grapheme_Cluster_Break=Extend` class `graphemeProperties(cp).gcb` reads.
-/// The two agree almost everywhere but not quite: five code points in
-/// Unicode 17.0.0 differ between them. `Text.graphemes()` is built on
-/// `Grapheme_Cluster_Break`, not this property.
-pub const isGraphemeExtend = @import("tables").general_category.is_grapheme_extend;
 
 /// Instrumented wrapping is retained solely for zunic's work-bound tests.
 pub const testing = struct {

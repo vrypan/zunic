@@ -57,6 +57,11 @@ try text.validate();
 Validation returns `InvalidUtf8` for malformed input and otherwise returns
 nothing. It does not change the view or the behavior of later operations.
 
+Codepoint iteration stops at the first malformed sequence: `next()` returns
+`null`, `err` becomes `.invalid_utf8`, and `offset` identifies the start of the
+sequence. At normal exhaustion `err` is null and `offset` equals the slice
+length. It yields only valid scalar views, with no replacement values.
+
 Normalization is deliberately different: it returns `InvalidUtf8` for malformed
 input and `SequenceTooLong` when its configured combining-run limit is reached.
 See [normalization error semantics](text/normalization/README.md#errors-and-partial-results).

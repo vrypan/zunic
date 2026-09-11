@@ -74,7 +74,7 @@ pub fn isWhitespace(self: Text, span: anytype) bool;
 ```
 
 The scalar test behind all three trim methods is exported as
-`zunic.isWhitespace`, for code working with a decoded code point directly.
+`zunic.cp(value).isWhitespace()`, for code working with a decoded code point directly.
 Most span-shaped code should reach for `text(bytes).isWhitespace(span)`
 instead -- `span` can be a `Span` returned by `Graphemes.iterator()` or a
 `MeasuredSpan` from `.measured().iterator()`; anything with `start`/`end`

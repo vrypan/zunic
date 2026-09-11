@@ -10,8 +10,8 @@ const word_engine = @import("segmentation").word;
 const wrap_engine = @import("layout").wrap;
 const text_trim = @import("text_trim.zig");
 const ascii_scan = @import("encoding").ascii;
-const scalar_engine = @import("encoding").scalar;
-const properties = @import("tables").properties;
+const utf8 = @import("encoding").utf8;
+const CodepointView = @import("codepoint.zig").CodepointView;
 
 const types = @import("types");
 pub const ByteOffset = types.ByteOffset;
@@ -129,8 +129,8 @@ pub const Text = struct {
     /// Check that the complete byte slice is valid UTF-8.
     ///
     /// This is a direct UTF-8 scan. It does not iterate graphemes or look up
-    /// Unicode properties. Other text operations remain tolerant of malformed
-    /// input whether or not this method is called.
+    /// Unicode properties. Calling this does not change how later operations
+    /// handle malformed input.
     pub fn validate(self: Text) error{InvalidUtf8}!void {
         if (!std.unicode.utf8ValidateSlice(self.bytes)) return error.InvalidUtf8;
     }
@@ -426,67 +426,50 @@ pub const WordBoundIterator = struct {
     }
 };
 
-/// One decoded Unicode scalar, or one byte of malformed input.
-pub const Codepoint = struct {
-    start: ByteOffset,
-    end: ByteOffset,
-    /// Null for a byte that could not begin or continue valid UTF-8; `end`
-    /// still advances by exactly one byte in that case, the same recovery
-    /// `graphemes()` and `width()` use, so scanning always finishes.
-    value: ?u21,
-    /// This scalar's own terminal-cell width, `0`, `1`, or `2` -- the same
-    /// flat lookup as the top-level `codepointWidth()`, not folded into a
-    /// cluster. Malformed input (`value == null`) is `0`, matching
-    /// `Text.width()`'s own treatment of undecodable bytes. Summing this
-    /// field over every item is not the same question as `Text.width()`;
-    /// see `codepointWidth()`'s docs for why.
-    width: u2,
-    /// This scalar's raw grapheme-break classification -- the same lookup
-    /// `graphemeProperties()` performs, and the facts `graphemes()` clusters
-    /// with, not a cluster boundary decision by itself. Use this to build a
-    /// different segmentation than `graphemes()` provides; `graphemes()`
-    /// already applies the full UAX #29 rules for the common case.
-    grapheme: properties.GraphemeProperties,
-    /// Whether this scalar has `East_Asian_Width` `Wide`, `Fullwidth`, or
-    /// `Halfwidth` -- the same lookup as the top-level `isEastAsianWide()`.
-    /// Not the same question as `width`: a combining mark (general category
-    /// `Mn`/`Me`/`Cf`) measures zero columns even when this is `true`, and a
-    /// Halfwidth scalar measures one column despite it, since `width` only
-    /// treats Wide and Fullwidth as two columns. `east_asian_wide` is
-    /// `false`, not `0`, for malformed input.
-    east_asian_wide: bool,
-};
-
 /// The individual Unicode scalars of this text, as a lazy iterator.
+/// Each yielded item is the same view returned by zunic.cp(value), with property
+/// lookups deferred until requested. No allocation or eager property lookup.
 ///
-/// Unlike `graphemes()`, this does not group combining marks or multi-scalar
-/// sequences with their base -- each scalar is its own item. Malformed UTF-8
-/// is never an error here: see `Codepoint.value`.
+/// Iteration stops at the first malformed UTF-8 sequence. After next() returns
+/// null, inspect the iterator's err field to distinguish failure from exhaustion.
+/// Unlike graphemes(), this does not group combining marks with their base.
 ///
 /// ```zig
 /// var it = zunic.text(bytes).codepoints().iterator();
-/// while (it.next()) |cp| if (cp.value) |scalar| use(scalar);
+/// while (it.next()) |point| use(point.value);
+/// if (it.err) |err| handleDecodeError(err, it.offset);
 /// ```
 pub const Codepoints = struct {
     bytes: []const u8,
 
     pub fn iterator(self: Codepoints) CodepointIterator {
-        return .{ .inner = scalar_engine.iterator(self.bytes) };
+        return .{ .bytes = self.bytes };
     }
 };
 
-pub const CodepointIterator = struct {
-    inner: scalar_engine.Iterator,
+pub const DecodeError = enum { invalid_utf8 };
 
-    pub fn next(self: *CodepointIterator) ?Codepoint {
-        const token = self.inner.next() orelse return null;
-        return .{
-            .start = .{ .value = token.start },
-            .end = .{ .value = token.end },
-            .value = token.codepoint,
-            .width = token.cell_width,
-            .grapheme = token.grapheme,
-            .east_asian_wide = token.east_asian_wide,
+/// Strict UTF-8 iteration. A copy is an independent checkpoint over borrowed bytes.
+pub const CodepointIterator = struct {
+    bytes: []const u8,
+    /// Byte offset of the next scalar, or of the undecodable sequence on error.
+    /// Equals bytes.len after normal exhaustion. Relative to the view's slice.
+    offset: usize = 0,
+    /// Sticky decoding failure. Null means no error has been encountered;
+    /// only a loop that reaches exhaustion has checked the complete input.
+    err: ?DecodeError = null,
+
+    /// Return a valid scalar view, or null on exhaustion or decoding failure.
+    /// On failure the offending bytes are not consumed. Subsequent calls keep
+    /// returning null and preserve err and offset.
+    pub fn next(self: *CodepointIterator) ?CodepointView {
+        if (self.err != null or self.offset == self.bytes.len) return null;
+        const step = utf8.step(self.bytes[self.offset..]);
+        const value = step.cp orelse {
+            self.err = .invalid_utf8;
+            return null;
         };
+        self.offset += step.len;
+        return .{ .value = value };
     }
 };

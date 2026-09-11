@@ -105,22 +105,22 @@ test "docs: the pinned Unicode data version" {
 }
 
 test "docs: terminal properties, case folding, and streaming graphemes" {
-    const terminal = zunic.terminalProperties(0x1f600);
-    try std.testing.expectEqual(zunic.EastAsianWidth.wide, terminal.east_asian_width);
-    try std.testing.expect(terminal.emoji_presentation);
-    try std.testing.expect(zunic.isEmojiVariationBase(0x231b));
+    const terminal = zunic.cp(0x1f600).terminal();
+    try std.testing.expectEqual(zunic.EastAsianWidth.wide, terminal.eastAsianWidth);
+    try std.testing.expect(terminal.isEmojiPresentation);
+    try std.testing.expect(zunic.cp(0x231b).terminal().isEmojiVariationBase);
 
-    const width = zunic.widthProperties(0x1f3fb);
+    const width = zunic.cp(0x1f3fb).terminal();
     try std.testing.expectEqual(@as(u2, 2), width.standalone);
-    try std.testing.expect(width.zero_in_grapheme);
+    try std.testing.expect(width.zeroInGrapheme);
 
-    const folded = zunic.fullCaseFold(0x00df);
+    const folded = zunic.cp(0x00df).fullCaseFold();
     try std.testing.expectEqualSlices(u21, &.{ 's', 's' }, folded.slice());
 
     // Each retained result owns a [3]u21 buffer, so scalar keys can be folded
     // and compared without allocating.
-    const kelvin = zunic.fullCaseFold(0x212a);
-    const ascii_k = zunic.fullCaseFold('K');
+    const kelvin = zunic.cp(0x212a).fullCaseFold();
+    const ascii_k = zunic.cp('K').fullCaseFold();
     try std.testing.expect(std.mem.eql(u21, kelvin.slice(), ascii_k.slice()));
 
     var state: zunic.GraphemeState = .{};
@@ -242,4 +242,40 @@ test "docs: isAscii on bytes and Text" {
 
     // ASCII controls, including ESC, count as ASCII.
     try std.testing.expect(zunic.isAscii("\x00\x1b\x7f"));
+}
+
+test "docs: code-point property groups" {
+    const point = zunic.cp(0x1f600);
+    const p: zunic.GeneralProperties = point.general();
+    const t: zunic.TerminalProperties = point.terminal();
+    const g: zunic.GraphemeProperties = point.grapheme();
+    try std.testing.expectEqual(zunic.GeneralCategory.so, p.category);
+    try std.testing.expect(!p.isAlphabetic);
+    try std.testing.expect(!p.isUppercase);
+    try std.testing.expect(t.isEmojiPresentation);
+    try std.testing.expectEqual(zunic.EastAsianWidth.wide, t.eastAsianWidth);
+    try std.testing.expect(g.extendedPictographic);
+    try std.testing.expectEqual(zunic.GraphemeClass.other, g.gcb);
+    try std.testing.expectEqual(zunic.IndicConjunctBreak.none, g.incb);
+    try std.testing.expect(zunic.cp(' ').isWhitespace());
+}
+
+test "docs: strict codepoint iteration exposes decoding errors after the loop" {
+    var it = zunic.text("A\u{1f600}\xffB").codepoints().iterator();
+    var count: usize = 0;
+    var emoji_count: usize = 0;
+    while (it.next()) |point| {
+        if (point.terminal().isEmojiPresentation) emoji_count += 1;
+        count += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 2), count);
+    try std.testing.expectEqual(@as(usize, 1), emoji_count);
+    try std.testing.expectEqual(zunic.DecodeError.invalid_utf8, it.err.?);
+    try std.testing.expectEqual(@as(usize, 5), it.offset);
+
+    // A literal replacement character is valid input.
+    var valid = zunic.text("\u{fffd}").codepoints().iterator();
+    try std.testing.expectEqual(@as(u21, 0xfffd), valid.next().?.value);
+    try std.testing.expectEqual(@as(?zunic.CodepointView, null), valid.next());
+    try std.testing.expectEqual(@as(?zunic.DecodeError, null), valid.err);
 }

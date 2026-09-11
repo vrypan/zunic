@@ -7,7 +7,7 @@
 //! is never scanned through its middle.
 //!
 //! `isWhitespace` and `isWhitespaceSlice` are shared beyond this file: the
-//! former as `zunic.isWhitespace`, the latter backing `Text.isWhitespace` in
+//! former as `zunic.cp(value).isWhitespace()`, the latter backing `Text.isWhitespace` in
 //! `src/text.zig` as well as `zunic.isWhitespaceSlice` directly. See their
 //! doc comments at those call sites for what each is for.
 //!
