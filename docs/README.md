@@ -1,27 +1,20 @@
 # Zunic documentation
 
-Zunic provides allocation-free operations over borrowed bytes. Choose the view
-that matches the input:
-
-| View | Entry point | Operations |
-| --- | --- | --- |
-| [Text](text/README.md) | `zunic.text(bytes)` | Graphemes, width, wrapping, trimming, terminators, words, normalization, validation, ASCII check |
-| [Terminal](terminal/README.md) | `zunic.terminal(bytes)` | Grapheme and escape tokens, formatting state, ANSI stripping |
-
-Both expose their borrowed input as `.bytes`. To use plain-text operations on
-styled input, call `terminal(bytes).stripAnsi(buffer)`, then `text(plain)` on the
-returned bytes. See [shared conventions](conventions.md) for lifetimes and offsets.
+Zunic provides allocation-free Unicode operations over borrowed bytes.
+[`zunic.text(bytes)`](text/README.md) opens the main view for graphemes, width,
+wrapping, trimming, terminators, words, normalization, validation, and ASCII
+checks. `Text` exposes its borrowed input as `.bytes`; see
+[shared conventions](conventions.md) for lifetimes and offsets.
 
 ## API overview
 
-The signatures use names exported by `zunic`, grouped by their owning view.
+The signatures use names exported by `zunic`, grouped by API area.
 They are an overview, not a standalone Zig file. `form` and `how` are compile-time
 arguments. Unicode data is pinned to **17.0.0**.
 
 ```zig
 pub const unicode_version: std.SemanticVersion; // 17.0.0
 pub fn text(bytes: []const u8) Text;
-pub fn terminal(bytes: []const u8) Terminal;
 ```
 
 ### Text
@@ -141,71 +134,6 @@ is the matching broader equivalence. Full default case folding is available
 through `fullCaseFold()` as a separate scalar operation; it is not folded into
 normalization or equality. Stream-safe normalization is not available.
 
-### Terminal
-
-```zig
-pub fn isAscii(self: Terminal) bool;
-pub fn tokens(self: Terminal) TerminalTokens;
-pub fn stripAnsi(self: Terminal, buffer: []u8) error{NoSpace}![]u8;
-```
-
-`isAscii()` scans the raw bytes exactly as given: no escape parsing, no state
-tracking, no restriction to visible content. An all-ASCII escape sequence
-counts as ASCII even if incomplete; a non-ASCII byte inside an OSC payload
-fails the check even though stripping would remove it. Scans the whole slice
-every call, with no cache.
-
-#### Terminal iterator
-
-| View | Methods | Iterator result |
-| --- | --- | --- |
-| `TerminalTokens` | `.iterator()` | `next(self: *Self) error{EscapeInsideGrapheme}!?TerminalToken` |
-
-The iterator exposes `state: TerminalState = .{}`, updated before returning an
-SGR or OSC 8 token. See the [full state layout](terminal/state.md) for colors,
-attributes, fonts, framing, scripts, ideogram marks, and borrowed links.
-
-Tokens follow source order. If later content joins a grapheme across an escape,
-`next()` returns `EscapeInsideGrapheme`; earlier tokens have already been emitted.
-`stripAnsi()` removes recognized escapes without decoding UTF-8 or checking
-grapheme boundaries. Its only error is `NoSpace`. See [tokens](terminal/tokens.md)
-and [stripping](terminal/strip-ansi.md) for full error contracts.
-
-#### Terminal results
-
-```zig
-pub const StyleFields = packed struct {
-    foreground: bool = false,
-    background: bool = false,
-    underline_color: bool = false,
-    bold: bool = false,
-    faint: bool = false,
-    italic: bool = false,
-    fraktur: bool = false,
-    inverse: bool = false,
-    concealed: bool = false,
-    strikethrough: bool = false,
-    overline: bool = false,
-    proportional: bool = false,
-    underline: bool = false,
-    blink: bool = false,
-    frame: bool = false,
-    font: bool = false,
-    script: bool = false,
-    ideogram: bool = false,
-    unhandled: bool = false,
-};
-
-pub const Escape = struct {
-    span: Span,
-    effect: union(enum) { sgr: StyleFields, hyperlink, other },
-};
-pub const TerminalToken = union(enum) {
-    grapheme: Span,
-    escape: Escape,
-};
-```
-
 ### Shared positions and helpers
 
 ```zig
@@ -217,8 +145,8 @@ pub const Span = struct { start: ByteOffset, end: ByteOffset };
 pub fn isWhitespace(cp: u21) bool;
 pub fn isWhitespaceSlice(glyph: []const u8) bool;
 
-// Whether every byte in a slice is below 0x80. `Text.isAscii()` and
-// `Terminal.isAscii()` are the same check on a view's own bytes.
+// Whether every byte in a slice is below 0x80. `Text.isAscii()` applies the
+// same check to the view's bytes.
 pub fn isAscii(bytes: []const u8) bool;
 
 // The terminal-cell width of one code point in isolation: 0, 1, or 2.
@@ -367,7 +295,6 @@ lookup for all fourteen facts; each `isXxx` function reads one field of it.
 ## Detailed documentation
 
 - [Text](text/README.md): operation pages with signatures, examples, standards, and implementation decisions.
-- [Terminal](terminal/README.md): [tokens](terminal/tokens.md), [formatting state](terminal/state.md), and [ANSI stripping](terminal/strip-ansi.md), with implementation notes and benchmarks.
 - [Shared conventions](conventions.md): borrowing, offsets, buffers, and error behavior.
 
 [Architecture](internals/README.md) explains the shared property data, build options,
@@ -379,12 +306,10 @@ Examples assume `const zunic = @import("zunic");` and
 The runnable versions are in [examples.zig](examples.zig), covered by
 `zig build docs-test` and `zig build test` from the repository root.
 
-These pages cover the Text and Terminal views. The separately exported `utf8`,
+These pages cover the Text view. The separately exported `utf8`,
 `line_break`, and `testing` namespaces are lower-level facilities; see their
 source documentation when composing custom scanners or work-bound tests.
 
 `text(bytes).isWhitespace(span)` answers the same `White_Space` question
-`Text.trim()` uses, for any span you already have -- for example, an
-escape-aware trim built over `Terminal.tokens()` that decides for itself
-whether a styled space is content or padding. See
+`Text.trim()` uses for any span you already have. See
 [trim](text/trim/README.md#the-predicate-itself).

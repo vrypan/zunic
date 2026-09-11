@@ -121,9 +121,8 @@ pub const WrappedIterator = struct {
 /// If the bytes may contain ANSI escape sequences, strip them first. This view
 /// measures `ESC`, `[`, `3`, `1`, `m` as ordinary characters, so
 /// `"\x1b[31mred\x1b[0m"` reports width 10 rather than 3 and wrapping can
-/// place a break inside the sequence, which corrupts the output. The initial
-/// `terminal` view provides tokens and stripAnsi() for escape handling; this
-/// text view makes no attempt at interpreting escapes.
+/// place a break inside the sequence, which corrupts the output. This text
+/// view makes no attempt at interpreting escapes.
 pub const Text = struct {
     bytes: []const u8,
 
@@ -276,15 +275,13 @@ pub const Text = struct {
     /// error.
     ///
     /// This is the same definition `trim()` uses, extended to a span you
-    /// already have -- while iterating `graphemes()`, for example, or a
-    /// `TerminalToken`'s `.grapheme` field. Correct, if not always an
-    /// interesting question, for a span that was never grapheme content:
+    /// already have -- while iterating `graphemes()`, for example. Correct,
+    /// if not always an interesting question, for a span that was never
+    /// grapheme content:
     /// every single-scalar UAX #14 hard terminator (LF, VT, FF, CR, NEL, LS,
     /// PS) is also `White_Space`, so its `Terminators` span answers `true`
     /// -- except CRLF, the one terminator that is two scalars, which like
-    /// any other two-scalar span answers `false`. An escape sequence's
-    /// leading `ESC` byte is not `White_Space`, so a `TerminalToken`'s
-    /// `Escape.span` answers `false`.
+    /// any other two-scalar span answers `false`.
     pub fn isWhitespace(self: Text, span: anytype) bool {
         return text_trim.isWhitespaceSlice(self.bytes[span.start.value..span.end.value]);
     }

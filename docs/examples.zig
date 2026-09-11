@@ -1,42 +1,6 @@
 const std = @import("std");
 const zunic = @import("zunic");
 
-test "docs: terminal tokens return escapes before a later error" {
-    const bytes = "e\x1b[31m\u{0301}";
-    var it = zunic.terminal(bytes).tokens().iterator();
-    _ = (try it.next()).?.grapheme; // e
-    _ = (try it.next()).?.escape; // SGR
-    try std.testing.expectError(error.EscapeInsideGrapheme, it.next());
-}
-
-test "docs: terminal token traversal" {
-    const bytes = "\x1b[31mhi\x1b[0m";
-    var it = zunic.terminal(bytes).tokens().iterator();
-    var content: usize = 0;
-    var commands: usize = 0;
-    while (try it.next()) |token| switch (token) {
-        .grapheme => |span| content += span.end.value - span.start.value,
-        .escape => |esc| {
-            try std.testing.expectEqual(.sgr, std.meta.activeTag(esc.effect));
-            commands += 1;
-        },
-    };
-    try std.testing.expectEqual(@as(usize, 2), content);
-    try std.testing.expectEqual(@as(usize, 2), commands);
-}
-
-test "docs: strip ANSI then use the text view" {
-    const input = "\x1b[31mcafe\x1b[0m\u{0301}";
-    var buffer: [input.len]u8 = undefined;
-    const plain = try zunic.terminal(input).stripAnsi(&buffer);
-    try std.testing.expectEqualStrings("cafe\u{0301}", plain);
-    try std.testing.expectEqual(@as(usize, 4), zunic.text(plain).width());
-    var it = zunic.text(plain).graphemes().iterator();
-    var count: usize = 0;
-    while (it.next() != null) count += 1;
-    try std.testing.expectEqual(@as(usize, 4), count);
-}
-
 test "docs: measured graphemes" {
     const bytes = "e\u{0301}界";
     var it = zunic.text(bytes).graphemes().measured().iterator();
@@ -211,20 +175,6 @@ test "docs: quick check, including maybe" {
     try std.testing.expect(!try zunic.text("a\u{0301}").isNormalized(.nfc));
 }
 
-test "terminal SGR effects expose affected fields and unhandled parameters" {
-    var it = zunic.terminal("\x1b[1;31;999m").tokens().iterator();
-    const esc = (try it.next()).?.escape;
-    switch (esc.effect) {
-        .sgr => |fields| {
-            try std.testing.expect(fields.bold and fields.foreground);
-            try std.testing.expect(it.state.bold);
-            try std.testing.expectEqual(@as(u8, 1), it.state.foreground.indexed);
-            try std.testing.expect(fields.unhandled);
-        },
-        .hyperlink, .other => unreachable,
-    }
-}
-
 test "docs: trim and print" {
     const input = "\u{00a0} Hello, 世界! \n";
     const trimmed = zunic.text(input).trim();
@@ -280,47 +230,10 @@ test "docs: Text.isWhitespace while iterating graphemes" {
     try std.testing.expectEqual(@as(usize, 6), whitespace_count);
 }
 
-test "docs: Text.isWhitespace composes with terminal tokens" {
-    // zunic does not ship a trim for styled text, because whether a space
-    // wrapped in escapes is padding or meaningful content (a colored block,
-    // say) is a policy call this library cannot make. Text.isWhitespace lets
-    // that policy be built from Terminal.tokens() using zunic's own
-    // whitespace definition instead of a re-derived one.
-    const styled = "\x1b[31m hello\x1b[41m \x1b[0m"; // fg red, space, "hello", bg red, space, reset
-    const view = zunic.text(styled);
-    var it = zunic.terminal(styled).tokens().iterator();
-    var keep_from: usize = 0;
-    var found_content = false;
-    while (!found_content) {
-        const token = (try it.next()) orelse break;
-        switch (token) {
-            .escape => {},
-            .grapheme => |span| {
-                const on_default_background = switch (it.state.background) {
-                    .default => true,
-                    else => false,
-                };
-                const is_padding = view.isWhitespace(span) and on_default_background;
-                if (is_padding) {
-                    keep_from = span.end.value;
-                } else {
-                    found_content = true;
-                }
-            },
-        }
-    }
-    // The leading plain space is padding and is skipped.
-    try std.testing.expectEqualStrings("hello", styled[keep_from..][0..5]);
-    // The trailing space sits on a red background, so it is content and stays.
-    try std.testing.expect(std.mem.indexOf(u8, styled[keep_from..], "\x1b[41m \x1b[0m") != null);
-}
-
-test "docs: isAscii on bytes, Text, and Terminal" {
-    // Same check, three entry points: a free function over raw bytes, and a
-    // method on each view over its own bytes.
+test "docs: isAscii on bytes and Text" {
+    // Same check through a free function and a method on the text view.
     try std.testing.expect(zunic.isAscii("Hello, world!"));
     try std.testing.expect(zunic.text("Hello, world!").isAscii());
-    try std.testing.expect(zunic.terminal("Hello, world!").isAscii());
 
     // A byte-range test, not UTF-8 validation: any byte 0x80 or above fails
     // it, whether it is part of valid UTF-8 or malformed input.
@@ -329,12 +242,4 @@ test "docs: isAscii on bytes, Text, and Terminal" {
 
     // ASCII controls, including ESC, count as ASCII.
     try std.testing.expect(zunic.isAscii("\x00\x1b\x7f"));
-
-    // Terminal.isAscii() scans raw bytes: it does not parse escapes, so an
-    // all-ASCII, incomplete escape sequence is still ASCII, but a non-ASCII
-    // byte inside an OSC payload fails the check even though stripAnsi()
-    // would remove it.
-    try std.testing.expect(zunic.terminal("\x1b[31mhi\x1b[0m").isAscii());
-    try std.testing.expect(zunic.terminal("\x1b[31").isAscii());
-    try std.testing.expect(!zunic.terminal("\x1b]0;caf\u{00E9}\x07").isAscii());
 }

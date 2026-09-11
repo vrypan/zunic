@@ -4,7 +4,7 @@ Allocation-free Unicode primitives for Zig 0.16.0 or later.
 
 Measure width, iterate graphemes and words, stream grapheme decisions, fold
 case, query Unicode properties, wrap text, find line endings, trim whitespace,
-and normalize Unicode. Strip ANSI escapes or track formatting as you iterate.
+and normalize Unicode.
 
 > [!CAUTION] 
 >
@@ -16,13 +16,12 @@ and normalize Unicode. Strip ANSI escapes or track formatting as you iterate.
 
 - **Fast.** On par with corresponding Rust libraries in our benchmarks,
   and faster on many workloads.
-- **No allocation.** Views borrow your bytes. Iterators return byte
-  ranges; normalization and ANSI stripping write into a buffer you supply.
+- **No allocation.** Views borrow your bytes. Iterators return byte ranges;
+  normalization writes into a buffer you supply.
 - **Wrap without breaking.** Measure whole grapheme clusters and wrap
   without splitting them.
 - **Use what you need.** Ask for width, boundaries, or normalized text
   without building a larger object.
-- **Parsed terminal formatting.** Track ANSI styles and hyperlinks as you iterate.
 - **Zig only.** No external libraries.
 - **Tested.** Tests cover Unicode rules, fast paths, and edge cases.
 
@@ -91,44 +90,12 @@ pub fn main() !void {
 }
 ```
 
-`text()` treats input as plain text. Use `terminal().stripAnsi()` before
-measuring or wrapping input containing ANSI escapes.
+`text()` treats input as plain text. Remove ANSI escape sequences before
+measuring or wrapping styled input.
 Display operations tolerate malformed UTF-8; normalization rejects it and has a
 [configurable combining-run limit](docs/text/normalization/README.md#combining-run-limit).
 Call `try text.validate()` first when malformed UTF-8 should be rejected.
 Word boundaries are locale-independent and do not use dictionaries.
-
-## Terminal text
-
-`zunic.terminal(bytes)` provides byte-only ANSI stripping and token iteration.
-It recognizes a subset of CSI and OSC commands, including SGR formatting and
-OSC 8 hyperlinks.
-
-```zig
-const styled = "\x1b[1;31mHello\x1b[0m";
-var buffer: [styled.len]u8 = undefined;
-const plain = try zunic.terminal(styled).stripAnsi(&buffer);
-std.debug.print("width: {d}\n", .{zunic.text(plain).width()}); // 5
-
-var tokens = zunic.terminal(styled).tokens().iterator();
-const fields = (try tokens.next()).?.escape.effect.sgr;
-std.debug.print("sets bold: {any}\n", .{fields.bold}); // true
-std.debug.print("active bold: {any}\n", .{tokens.state.bold}); // true
-```
-
-Tokens return grapheme spans or escapes with `.sgr`, `.hyperlink`, or `.other`
-effects. SGR effects list affected fields and flag unsupported or invalid
-parameters as `unhandled`. Read resulting values from `iterator.state`.
-State updates before the command is returned; links borrow the original input.
-
-Token iteration reports `EscapeInsideGrapheme` when it reaches content that joins
-across an escape. Earlier tokens and state updates are not rolled back. `stripAnsi()`
-simply removes recognized commands, without UTF-8 validation or grapheme checks.
-Terminal width and styled wrapping are not provided yet.
-
-See the [terminal API](docs/terminal/README.md), [state layout](docs/terminal/state.md),
-and [native benchmarks](docs/terminal/benchmarks.md). State tracking adds work,
-especially on command-heavy input; the Rust comparison above covers text operations.
 
 ## Standards
 
@@ -145,18 +112,12 @@ Zunic uses **Unicode 17.0.0** data:
 Terminal column counts and line fitting are Zunic policies built on these rules
 and properties. See the [known line-break limitation](docs/text/wrap/implementation.md#known-limitation).
 
-Escape handling uses a subset of [ECMA-48](https://ecma-international.org/publications-and-standards/standards/ecma-48/)
-and [XTerm control sequences](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html),
-with [OSC 8 hyperlinks](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda)
-and [colored and styled underlines](https://sw.kovidgoyal.net/kitty/underlines/).
-
 ## Documentation
 
 See [docs/](docs/README.md) for signatures, return values, examples, and
 implementation decisions:
 
 [Text view](docs/text/README.md) ·
-[Terminal view](docs/terminal/README.md) ·
 [API overview](docs/README.md#api-overview)
 
 Run `zig build test` for the test suite or `zig build docs-test` for the

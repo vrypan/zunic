@@ -4,12 +4,11 @@
 
 ```zig
 pub fn text(bytes: []const u8) Text;
-pub fn terminal(bytes: []const u8) Terminal;
 ```
 
-`zunic.text(bytes)` and `zunic.terminal(bytes)` construct views without scanning,
-validating, copying, or allocating. Both expose the borrowed slice as `.bytes`. Keep its storage alive and
-unchanged while using a view or iterator. A view does not own or free memory.
+`zunic.text(bytes)` constructs a view without scanning, validating, copying, or
+allocating. It exposes the borrowed slice as `.bytes`. Keep its storage alive
+and unchanged while using a view or iterator. A view does not own or free memory.
 
 Every `.iterator()` call creates independent traversal state at the beginning
 of its view. Call `next()` on a mutable iterator until it returns `null`.
@@ -25,8 +24,8 @@ pub const Span = struct { start: ByteOffset, end: ByteOffset };
 ```
 
 All spans are half-open: `bytes[span.start.value..span.end.value]`.
-Offsets index the input slice of the Text or Terminal view, even when that
-slice is itself a substring. Trimming returns a new Text; its offsets index
+Offsets index the input slice of the Text view, even when that slice is itself
+a substring. Trimming returns a new Text; its offsets index
 the retained slice, starting at zero. They count **bytes**, not scalars, graphemes, or columns.
 `Column` deliberately separates display measurements from byte offsets.
 Returned spans borrow the input indirectly; they contain no copied text.
@@ -38,14 +37,6 @@ terminal cursor. Strip styling escapes before measuring or wrapping styled
 text. Width is a fixed terminal-cell policy, not font shaping or terminal
 capability detection. CR and LF have zero width; `width()` sums the text's
 columns rather than returning the widest physical line.
-
-The separate [terminal view](terminal/README.md) provides `tokens()` for content
-and escape commands in source order, and `stripAnsi(buffer)` for byte-only
-removal of recognized escapes. Stripping neither allocates nor validates UTF-8;
-use `text()` on its output for Unicode operations. During token iteration, if
-later content joins across an escape, `EscapeInsideGrapheme` is returned then;
-a grapheme prefix and intervening commands may already have been emitted.
-There is no rollback. Stripping does not perform that boundary check.
 
 Grapheme, word, width, wrap, and trim operations tolerate malformed UTF-8,
 advancing one byte at a time on decoding errors. They retain original byte

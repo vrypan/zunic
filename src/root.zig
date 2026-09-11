@@ -11,14 +11,11 @@
 //! Byte spans and terminal-column policy form the package's public boundary.
 //! Nothing allocates, and every span indexes the slice the view was opened on.
 //!
-//! `text` reads bytes as plain text. **Strip ANSI escape sequences before
-//! using it** -- it measures them as ordinary characters, so styled input
-//! reports the wrong width and can be broken mid-sequence. `terminal` offers
-//! escape-aware tokens and byte-only stripping; use `text` on stripped output.
+//! `text` reads bytes as plain text. ANSI escape sequences are ordinary bytes
+//! here, so remove them before measuring or wrapping styled input.
 pub const utf8 = @import("encoding").utf8;
 const text_view = @import("text.zig");
 const text_trim = @import("text_trim.zig");
-const terminal_view = @import("terminal");
 const types = @import("types");
 const wrap_engine = @import("layout").wrap;
 pub const line_break = @import("linebreak");
@@ -33,12 +30,6 @@ pub const WrapOptions = wrap_engine.Options;
 pub const Overflow = wrap_engine.Overflow;
 pub const Wrapped = text_view.Wrapped;
 pub const Text = text_view.Text;
-pub const Terminal = terminal_view.Terminal;
-pub const TerminalTokens = terminal_view.Tokens;
-pub const TerminalToken = terminal_view.Token;
-pub const TerminalState = terminal_view.State;
-pub const StyleFields = terminal_view.StyleFields;
-pub const Escape = terminal_view.Escape;
 pub const Terminators = text_view.Terminators;
 pub const TerminatorIterator = text_view.TerminatorIterator;
 pub const Graphemes = text_view.Graphemes;
@@ -73,12 +64,6 @@ pub fn text(bytes: []const u8) Text {
     return .{ .bytes = bytes };
 }
 
-/// Open a borrowed terminal view without scanning or allocating.
-/// Provides token iteration and byte-only stripping with CSI/OSC recognition.
-pub fn terminal(bytes: []const u8) Terminal {
-    return .{ .bytes = bytes };
-}
-
 /// Unicode 17.0.0 `White_Space=Yes`: the predicate `Text.trim()`, `trimStart()`
 /// and `trimEnd()` apply at each edge, and `Text.isWhitespace(span)` applies
 /// to a whole span. Not general category `Zs`, not `Pattern_White_Space`, and
@@ -93,16 +78,9 @@ pub const isWhitespace = text_trim.isWhitespace;
 
 /// Whether `glyph` is exactly one `White_Space` scalar and nothing else --
 /// the primitive behind `Text.isWhitespace`, exposed directly for a byte
-/// slice that did not come from a span at all. For building operations
-/// `Text` and `Terminal` do not provide -- for example, a trim over
-/// `terminal(bytes).tokens()` that also consults escape state, so a styled
-/// space with a non-default background can be kept as content rather than
-/// treated as padding -- prefer `text(bytes).isWhitespace(token.grapheme)`
-/// after matching out the `.escape` case; what counts as trimmable in the
-/// presence of escapes is a policy decision for that caller to make, and this
-/// function and `Text.isWhitespace` only answer the Unicode question, so such
-/// code does not have to re-derive `PropList.txt` to match `Text.trim()`'s
-/// definition.
+/// slice that did not come from a span at all. It answers only the Unicode
+/// question; callers decide how whitespace participates in their own higher
+/// level protocols.
 pub const isWhitespaceSlice = text_trim.isWhitespaceSlice;
 
 /// Whether every byte in `bytes` is below 0x80. Empty input is ASCII, and so
@@ -112,8 +90,7 @@ pub const isWhitespaceSlice = text_trim.isWhitespaceSlice;
 /// check: a high byte fails this whether it belongs to valid UTF-8 or to
 /// malformed input. `std.ascii.isAscii` checks one byte; this checks a whole
 /// slice with a vectorized scan (SIMD where the target supports it) and a
-/// scalar tail. `Text.isAscii()` and `Terminal.isAscii()` are the same check
-/// on a view's own bytes.
+/// scalar tail. `Text.isAscii()` is the same check on its view's bytes.
 pub const isAscii = @import("encoding").ascii.isAscii;
 
 /// The terminal-cell width of one code point in isolation: `0`, `1`, or `2`.
@@ -276,7 +253,7 @@ pub const isXidContinue = @import("tables").general_category.is_xid_continue;
 /// `Default_Ignorable_Code_Point`: code points recommended to be ignored in
 /// rendering absent higher-level protocol support for them -- some format
 /// characters, variation selectors, and deprecated formatting characters.
-/// Zunic's own text and terminal views do not consult this property.
+/// Zunic's own text view does not consult this property.
 pub const isDefaultIgnorable = @import("tables").general_category.is_default_ignorable;
 
 /// `Grapheme_Base`: roughly, code points that can start a grapheme cluster.

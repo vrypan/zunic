@@ -325,10 +325,6 @@ test "escapes receive no special treatment" {
     try std.testing.expectEqualStrings("\x1b[31mred\x1b[0m", zunic.text(input).trim().bytes);
     // ESC itself ends a scan.
     try std.testing.expectEqualStrings("\x1b", zunic.text(" \x1b ").trim().bytes);
-    // Stripping first, then trimming, is the supported order for styled text.
-    var buffer: [32]u8 = undefined;
-    const plain = try zunic.terminal(input).stripAnsi(&buffer);
-    try std.testing.expectEqualStrings("red", zunic.text(plain).trim().bytes);
 }
 
 test "idempotence and composition" {
@@ -499,11 +495,4 @@ test "Text.isWhitespace on non-grapheme spans" {
     try std.testing.expectEqualStrings("\x0C", with_terms[ff.start.value..ff.end.value]);
     try std.testing.expect(terms_view.isWhitespace(ff));
     try std.testing.expect(terms.next() == null);
-
-    // A TerminalToken's escape span starts with ESC, which is not
-    // White_Space, so it answers false.
-    const styled = "\x1b[31mx";
-    var tokens = zunic.terminal(styled).tokens().iterator();
-    const escape = (try tokens.next()).?.escape;
-    try std.testing.expect(!zunic.text(styled).isWhitespace(escape.span));
 }

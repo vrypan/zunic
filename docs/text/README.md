@@ -1,6 +1,6 @@
 # Text view
 
-[Documentation index](../README.md) · [Terminal view](../terminal/README.md) · [Shared conventions](../conventions.md)
+[Documentation index](../README.md) · [Shared conventions](../conventions.md)
 
 `zunic.text(bytes)` opens a borrowed view for plain-text Unicode operations.
 Opening it does not scan, validate, copy, or allocate. The input is available as
@@ -62,10 +62,9 @@ while (it.next()) |span| {
 Offsets from this iterator index `view.bytes`, starting at zero in the trimmed
 slice. They do not index the original padded input.
 
-Text does not interpret ANSI escapes. For styled input, use
-[`terminal(input).stripAnsi(buffer)`](../terminal/strip-ansi.md), then open a
-Text view on the returned slice. Width measures display cells under Zunic's
-fixed policy; it does not measure a font or reconstruct a terminal screen.
+Text does not interpret ANSI escapes; remove them before measuring styled
+input. Width measures display cells under Zunic's fixed policy and does not
+measure a font or reconstruct a terminal screen.
 
 ## Standards used
 

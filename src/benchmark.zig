@@ -22,9 +22,7 @@ const corpora = @import("corpora.zig");
 // Version 9 adds `nfc_quick` and `nfd_quick` beside the existing
 // normalization rows. Old names and checksums are untouched, so a
 // version-8 archive still compares row for row against the shared cases.
-// Version 10 adds terminal tokens and byte-only ANSI stripping.
-// Version 11 adds state-consuming terminal traversal; existing rows are unchanged.
-// Version 12 consumes escape effects, including affected fields and unhandled.
+// Versions 10-12 covered the removed ANSI terminal view.
 // Version 13 adds the trim rows and their dedicated corpora. Every earlier row
 // name, corpus and checksum is untouched.
 // Version 14 adds the is_ascii rows and their dedicated corpora. Every
@@ -33,7 +31,8 @@ const corpora = @import("corpora.zig");
 // the existing normalization corpora, plus dedicated compat_corpora for
 // compatibility-mapping-heavy input. Every earlier row name, corpus and
 // checksum is untouched.
-const harness_version = "15";
+// Version 16 removes the ANSI terminal-view rows.
+const harness_version = "16";
 const sample_count = 7;
 const Corpus = struct { name: []const u8, seed: []const u8, length: usize };
 const WrapCase = struct { name: []const u8, corpus: Corpus, max_columns: usize, overflow: zunic.Overflow, max_lines: ?usize = null };
@@ -90,116 +89,6 @@ const compat_corpora = [_]Corpus{
     .{ .name = "compat-circled-and-super", .seed = "\u{2460}\u{2461}\u{2462}\u{00B2}\u{00B3}\u{00B9} ", .length = 4096 },
     .{ .name = "max-expansion", .seed = "\u{FDFA}", .length = 4096 },
 };
-
-// Whole seeds keep intended UTF-8 and escape boundaries intact. Each shape
-// exercises both APIs; malformed bytes and unsupported commands are deliberate.
-const terminal_corpora = [_]Corpus{
-    .{ .name = "term-plain-ascii", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 4096 },
-    .{ .name = "term-sparse-sgr", .seed = "An ordinary log message with a single \x1b[31mwarning\x1b[0m among otherwise plain words. ", .length = 4096 },
-    .{ .name = "term-dense-sgr", .seed = "\x1b[1;31ma\x1b[0m\x1b[38:2::1:2:3mb\x1b[0m", .length = 4096 },
-    .{ .name = "term-unicode", .seed = "\x1b[32mCafe\u{0301} 日本語 👩‍👩‍👧‍👦 🇬🇷\x1b[0m ", .length = 4096 },
-    .{ .name = "term-osc", .seed = "\x1b]8;;https://example.com/page\x07link\x1b]8;;\x07 ", .length = 4096 },
-    .{ .name = "term-commands-only", .seed = "\x1b[31m\x1b[0m\x1b[2K\x1b]0;title\x07", .length = 4096 },
-    .{ .name = "term-unhandled-sgr", .seed = "\x1b[1;999;31ma\x1b[38;2;999;1;2mb\x1b[0m", .length = 4096 },
-    .{ .name = "term-malformed", .seed = "\xff\xc0\xaf \x1b[31mtext\x1b[0m \x1b]broken\n", .length = 4096 },
-    .{ .name = "term-plain-ascii-64k", .seed = "The quick brown fox jumps over the lazy dog. ", .length = 65536 },
-};
-
-fn runTerminalCorpora(output: *std.Io.Writer, allocator: std.mem.Allocator, target_bytes: usize, io: std.Io) !void {
-    for (terminal_corpora) |corpus| {
-        var whole = corpus;
-        whole.length = @max(1, corpus.length / corpus.seed.len) * corpus.seed.len;
-        const bytes = try makeCorpus(allocator, whole);
-        try printSamples(output, corpus.name, "terminal_tokens", bytes, target_bytes, terminalTokenChecksum, io);
-        try printSamples(output, corpus.name, "terminal_state", bytes, target_bytes, terminalStateChecksum, io);
-        try printSamples(output, corpus.name, "strip_ansi", bytes, target_bytes, stripAnsiChecksum, io);
-    }
-    // Long OSC payloads expose rescanning cost, independent of content width.
-    const osc = try allocator.alloc(u8, 65536);
-    @memset(osc, 'x');
-    @memcpy(osc[0..4], "\x1b]0;");
-    osc[osc.len - 1] = 0x07;
-    try printSamples(output, "term-long-osc", "terminal_tokens", osc, target_bytes, terminalTokenChecksum, io);
-    try printSamples(output, "term-long-osc", "terminal_state", osc, target_bytes, terminalStateChecksum, io);
-    try printSamples(output, "term-long-osc", "strip_ansi", osc, target_bytes, stripAnsiChecksum, io);
-    // Unterminated OSC must fall back to content without quadratic work.
-    osc[osc.len - 1] = 'x';
-    try printSamples(output, "term-unterminated-osc", "terminal_tokens", osc, target_bytes, terminalTokenChecksum, io);
-    try printSamples(output, "term-unterminated-osc", "terminal_state", osc, target_bytes, terminalStateChecksum, io);
-    try printSamples(output, "term-unterminated-osc", "strip_ansi", osc, target_bytes, stripAnsiChecksum, io);
-    // Error is at the end, so input-byte throughput still describes a full scan.
-    const split = try allocator.alloc(u8, 4096);
-    @memset(split, 'a');
-    const tail = "e\x1b[31m\u{0301}";
-    @memcpy(split[split.len - tail.len ..], tail);
-    try printSamples(output, "term-split-grapheme", "terminal_tokens", split, target_bytes, terminalTokenErrorChecksum, io);
-    try printSamples(output, "term-split-grapheme", "terminal_state", split, target_bytes, terminalStateErrorChecksum, io);
-    try printSamples(output, "term-split-grapheme", "strip_ansi", split, target_bytes, stripAnsiChecksum, io);
-}
-
-var terminal_buffer: [65536]u8 = undefined;
-
-fn stripAnsiChecksum(bytes: []const u8) u64 {
-    const written = zunic.terminal(bytes).stripAnsi(&terminal_buffer) catch @panic("terminal benchmark buffer too small");
-    var sum: u64 = 0xcbf29ce484222325;
-    for (written) |byte| sum = mix(sum, byte);
-    return mix(sum, written.len);
-}
-
-fn tokenChecksum(bytes: []const u8, comptime expect_error: bool, comptime consume_state: bool) u64 {
-    var it = zunic.terminal(bytes).tokens().iterator();
-    var sum: u64 = 0xcbf29ce484222325;
-    if (consume_state) sum = stateChecksum(sum, it.state);
-    while (it.next() catch {
-        if (!expect_error) @panic("unexpected terminal benchmark error");
-        return mix(sum, 0xeeee);
-    }) |token| {
-        const span = switch (token) {
-            .grapheme => |span| blk: {
-                sum = mix(sum, 1);
-                break :blk span;
-            },
-            .escape => |escape| blk: {
-                switch (escape.effect) {
-                    .sgr => |fields| {
-                        sum = mix(sum, 2);
-                        sum = mix(sum, @as(std.meta.Int(.unsigned, @bitSizeOf(zunic.StyleFields)), @bitCast(fields)));
-                    },
-                    .other => sum = mix(sum, 3),
-                    .hyperlink => sum = mix(sum, 4),
-                }
-                if (consume_state) sum = stateChecksum(sum, it.state);
-                break :blk escape.span;
-            },
-        };
-        sum = mix(sum, span.start.value);
-        sum = mix(sum, span.end.value);
-    }
-    if (expect_error) @panic("terminal benchmark failed to reject split grapheme");
-    return sum;
-}
-
-fn terminalTokenChecksum(bytes: []const u8) u64 {
-    return tokenChecksum(bytes, false, false);
-}
-fn terminalTokenErrorChecksum(bytes: []const u8) u64 {
-    return tokenChecksum(bytes, true, false);
-}
-
-// Hash fields rather than raw struct bytes (which can contain padding). Deep
-// hashing reads link contents, not pointer addresses. Only escape transitions
-// need a new snapshot: content tokens do not change formatting.
-fn stateChecksum(seed: u64, state: zunic.TerminalState) u64 {
-    var hash = std.hash.Wyhash.init(seed);
-    std.hash.autoHashStrat(&hash, state, .Deep);
-    return hash.final();
-}
-fn terminalStateChecksum(bytes: []const u8) u64 {
-    return tokenChecksum(bytes, false, true);
-}
-fn terminalStateErrorChecksum(bytes: []const u8) u64 {
-    return tokenChecksum(bytes, true, true);
-}
 
 /// Trimming only. These rows are timed per *call*, not per byte: the cost is
 /// the whitespace removed plus one bounded look at the first retained scalar,
@@ -268,10 +157,8 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.arena.allocator();
     const args = try init.minimal.args.toSlice(allocator);
     var smoke = false;
-    var terminal_only = false;
     for (args[1..]) |arg| {
         if (std.mem.eql(u8, arg, "--smoke")) smoke = true;
-        if (std.mem.eql(u8, arg, "--terminal")) terminal_only = true;
     }
     if (args.len > 1 and std.mem.eql(u8, args[1], "--corpus-stats")) {
         var stats_buffer: [4096]u8 = undefined;
@@ -283,9 +170,7 @@ pub fn main(init: std.process.Init) !void {
     var output_buffer: [4096]u8 = undefined;
     var output_file = std.Io.File.stdout().writer(io, &output_buffer);
     const output = &output_file.interface;
-    try output.print("zunic-benchmark harness_version={s} target_bytes={d} samples={d} smoke={any} wrap_fast_path={s} line_break_engine=machine scope={s}\n", .{ harness_version, target_bytes, sample_count, smoke, @tagName(zunic.build_options.wrap_fast_path), if (terminal_only) "terminal" else "all" });
-    try runTerminalCorpora(output, allocator, target_bytes, io);
-    if (terminal_only) return output.flush();
+    try output.print("zunic-benchmark harness_version={s} target_bytes={d} samples={d} smoke={any} wrap_fast_path={s} line_break_engine=machine scope=all\n", .{ harness_version, target_bytes, sample_count, smoke, @tagName(zunic.build_options.wrap_fast_path) });
     for (legacy_corpora) |corpus| {
         const text = try makeCorpus(allocator, corpus);
         try printSamples(output, corpus.name, "utf8", text, target_bytes, utf8Checksum, io);

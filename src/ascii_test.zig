@@ -1,4 +1,4 @@
-//! Public-API tests for `zunic.isAscii`, `Text.isAscii`, and `Terminal.isAscii`.
+//! Public-API tests for `zunic.isAscii` and `Text.isAscii`.
 //!
 //! `std.ascii.isAscii` checks one byte; `referenceIsAscii` below is the
 //! independent whole-slice oracle these tests check the shared detector
@@ -12,12 +12,11 @@ fn referenceIsAscii(bytes: []const u8) bool {
     return true;
 }
 
-/// All three entry points, and the reference, must agree for `bytes`.
+/// Both entry points, and the reference, must agree for `bytes`.
 fn expectAgree(bytes: []const u8, expected: bool) !void {
     try std.testing.expectEqual(expected, referenceIsAscii(bytes));
     try std.testing.expectEqual(expected, zunic.isAscii(bytes));
     try std.testing.expectEqual(expected, zunic.text(bytes).isAscii());
-    try std.testing.expectEqual(expected, zunic.terminal(bytes).isAscii());
 }
 
 test "empty input is ASCII" {
@@ -102,14 +101,13 @@ test "varied slice alignment does not change the answer" {
     }
 }
 
-test "Terminal scans raw bytes: escapes are not parsed or stripped" {
+test "escape bytes receive no special treatment" {
     // An all-ASCII SGR sequence around ASCII text is ASCII.
     try expectAgree("\x1b[31mHello\x1b[0m", true);
     // An all-ASCII, incomplete escape sequence is still ASCII.
     try expectAgree("\x1b[31", true);
     try expectAgree("\x1b]0;title", true);
-    // A non-ASCII byte inside an OSC payload fails the check even though
-    // stripping the escape would remove exactly that content.
+    // A non-ASCII byte inside an OSC payload fails the byte-range check.
     try expectAgree("\x1b]0;caf\u{00E9}\x07", false);
     // A non-ASCII byte inside an SGR-like sequence also fails.
     try expectAgree("\x1b[3\u{00E9}mHello\x1b[0m", false);
@@ -118,14 +116,10 @@ test "Terminal scans raw bytes: escapes are not parsed or stripped" {
 test "const values and temporary views" {
     const bytes: []const u8 = "Hello";
     const text_view = zunic.text(bytes);
-    const terminal_view = zunic.terminal(bytes);
     try std.testing.expect(text_view.isAscii());
-    try std.testing.expect(terminal_view.isAscii());
-    // Temporary views, never bound to a local.
+    // Temporary view, never bound to a local.
     try std.testing.expect(zunic.text("Hello").isAscii());
-    try std.testing.expect(zunic.terminal("Hello").isAscii());
     try std.testing.expect(!zunic.text("caf\u{00E9}").isAscii());
-    try std.testing.expect(!zunic.terminal("caf\u{00E9}").isAscii());
 }
 
 test "every call re-scans: no cache across repeated calls" {

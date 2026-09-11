@@ -21,7 +21,7 @@ uucode and Zunic overlap in nine benchmarked operations:
 | Ghostty scalar width | public width/GCB composition | matching uucode field composition | derived width for every scalar |
 
 uucode does not currently expose comparable line breaking, normalization,
-word boundaries, wrapping, or ANSI stripping, so those Zunic features are not
+word boundaries, or wrapping, so those Zunic features are not
 included. The shared corpora are the same eight multilingual files used by
 `bench-vs-rust`; the suite checks them before use and embeds them into both
 executables.

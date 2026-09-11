@@ -46,7 +46,6 @@ pub fn build(b: *std.Build) void {
         linebreak: *std.Build.Module,
         normalization: *std.Build.Module,
         layout: *std.Build.Module,
-        terminal: *std.Build.Module,
 
         /// Grant every internal module to `module`. Tests reach past the
         /// public API into the module they exercise, so they get the same
@@ -89,11 +88,6 @@ pub fn build(b: *std.Build) void {
             layout.addImport("linebreak", linebreak);
             layout.addImport("build_options", options);
 
-            const terminal = owner.createModule(.{ .root_source_file = owner.path("src/terminal/terminal.zig") });
-            terminal.addImport("types", types);
-            terminal.addImport("encoding", encoding);
-            terminal.addImport("segmentation", segmentation);
-
             return .{
                 .types = types,
                 .tables = tables,
@@ -102,7 +96,6 @@ pub fn build(b: *std.Build) void {
                 .linebreak = linebreak,
                 .normalization = normalization,
                 .layout = layout,
-                .terminal = terminal,
             };
         }
     }.call;
@@ -154,11 +147,8 @@ pub fn build(b: *std.Build) void {
         .{ .path = "src/unicode_properties_test.zig", .group = "unicode-properties", .grants = &.{.api} },
         .{ .path = "src/case_folding_test.zig", .group = "case-folding", .grants = &.{.api} },
         .{ .path = "src/grapheme_stream_test.zig", .group = "grapheme-stream", .grants = &.{.api} },
-        .{ .path = "src/terminal_test.zig", .group = "terminal", .grants = &.{.api} },
         .{ .path = "src/trim_test.zig", .group = "trim", .grants = &.{.api} },
         .{ .path = "src/ascii_test.zig", .group = "ascii", .grants = &.{.api} },
-        // The stripping root deliberately has no Unicode-engine imports.
-        .{ .path = "src/terminal/strip_test.zig", .group = "terminal", .grants = &.{.none} },
         .{ .path = "docs/examples.zig", .group = "api", .grants = &.{.api} },
     };
 

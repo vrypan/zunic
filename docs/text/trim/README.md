@@ -76,9 +76,8 @@ pub fn isWhitespace(self: Text, span: anytype) bool;
 The scalar test behind all three trim methods is exported as
 `zunic.isWhitespace`, for code working with a decoded code point directly.
 Most span-shaped code should reach for `text(bytes).isWhitespace(span)`
-instead -- `span` can be a `Span` (returned by, among others,
-`Graphemes.iterator()` and `TerminalToken`'s `.grapheme` field) or a
-`MeasuredSpan` (from `.measured().iterator()`); anything with `start`/`end`
+instead -- `span` can be a `Span` returned by `Graphemes.iterator()` or a
+`MeasuredSpan` from `.measured().iterator()`; anything with `start`/`end`
 byte offsets works. It slices `bytes[span.start.value..span.end.value]` and
 confirms that slice is exactly one whitespace scalar, not merely a span that
 starts with one:
@@ -98,17 +97,8 @@ always interesting, question for a span that was never grapheme content:
 every single-scalar UAX #14 hard terminator (LF, VT, FF, CR, NEL, LS, PS) is
 also `White_Space`, so its `Terminators` span answers `true` -- except CRLF,
 the one terminator that is two scalars, which like any other two-scalar span
-answers `false`. An escape sequence's leading `ESC` byte is not `White_Space`,
-so a `TerminalToken`'s `Escape.span` answers `false`.
-
-The motivating case for reaching past `Text.trim()` at all is styled terminal
-text: a trim over `Terminal.tokens()` has to decide, for each escape sequence
-it encounters, whether the space it wraps is padding or meaningful content (a
-background color used as a block character, say) -- a policy call this
-library does not make. `Text.isWhitespace` and `isWhitespace` let that
-decision use zunic's exact whitespace set without re-deriving `PropList.txt`.
-`isWhitespaceSlice` is the primitive both build on, exported directly for a
-byte slice that did not come from a span at all.
+answers `false`. `isWhitespaceSlice` is the primitive both build on, exported
+directly for a byte slice that did not come from a span at all.
 
 ### Borrowed lifetime and offsets
 
@@ -172,14 +162,8 @@ operation treats malformed input.
 
 Escape bytes get no special treatment. `ESC` ends a scan like any other
 content, so `"  \x1b[31mred\x1b[0m  "` trims to `"\x1b[31mred\x1b[0m"` with the
-sequences intact. For styled text, strip escapes first and trim the result:
-
-```zig
-const plain = try zunic.terminal(input).stripAnsi(&buffer);
-const trimmed = zunic.text(plain).trim();
-```
-
-Terminal formatting state and stripping behaviour are unchanged by trimming.
+sequences intact. Remove escapes before opening the text view when working
+with styled input.
 
 ## Example: chaining
 

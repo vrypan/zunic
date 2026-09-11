@@ -4,15 +4,9 @@
 
 ## Public views and internal modules
 
-Applications import one package, `zunic`, and choose a view of their bytes:
-
-- [`Text`](../text/README.md), opened with `zunic.text(bytes)`, provides plain-text Unicode operations.
-- [`Terminal`](../terminal/README.md), opened with `zunic.terminal(bytes)`, provides escape tokens, formatting state, and escape removal.
-
-Both borrow input. Their documentation follows those public entry points.
-The internal build modules divide the implementation differently: the Text view
-lives with the public facade, while Terminal has its own internal module. This
-does not change how callers use either view.
+Applications import `zunic` and open a borrowed [`Text`](../text/README.md)
+view with `zunic.text(bytes)`. The text view lives with the public facade;
+Unicode engines and tables are separated into internal build modules.
 
 ## Borrow bytes and return positions
 
@@ -23,8 +17,7 @@ whether to keep results, render them, or stop early.
 
 Normalization may reorder, expand, or combine input characters. It returns
 scalar values or writes UTF-8 into a caller's buffer instead of returning
-positions. Terminal stripping also writes to caller-owned storage, removing
-recognized escapes while copying the remaining bytes unchanged.
+positions.
 
 ## Internal modules
 
