@@ -389,6 +389,7 @@ fn referenceAt(bytes: []const u8, start: usize) scalar.Token {
         .grapheme = if (cp) |v| properties.graphemeProperties(v) else .{ .gcb = .other, .incb = .none, .extended_pictographic = false },
         .line_break = if (cp) |v| properties.lineBreak(v) else .al,
         .cell_width = if (cp) |v| scalar.codepointWidth(v) else 0,
+        .east_asian_wide = if (cp) |v| properties.isEastAsianWide(v) else false,
     };
 }
 
@@ -407,6 +408,7 @@ fn expectSameToken(bytes: []const u8, start: usize) !void {
     try std.testing.expectEqual(want.grapheme.gcb, got.grapheme.gcb);
     try std.testing.expectEqual(want.grapheme.incb, got.grapheme.incb);
     try std.testing.expectEqual(want.grapheme.extended_pictographic, got.grapheme.extended_pictographic);
+    try std.testing.expectEqual(want.east_asian_wide, got.east_asian_wide);
 }
 
 test "scalar.at ASCII shortcut matches the general path for every byte" {

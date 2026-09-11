@@ -12,6 +12,7 @@ pub const Token = struct {
     grapheme: properties.GraphemeProperties,
     line_break: properties.LineBreak,
     cell_width: u2,
+    east_asian_wide: bool,
 };
 
 /// Internal token used by composed scans that also need line-break predicates.
@@ -30,6 +31,7 @@ pub const ClassifiedToken = struct {
             .grapheme = properties.graphemeOf(self.record),
             .line_break = self.record.line_break,
             .cell_width = self.record.width,
+            .east_asian_wide = self.record.east_asian_wide,
         };
     }
 };
@@ -102,6 +104,7 @@ inline fn malformedRecord() properties.Record {
         r.line_break = .al;
         r.width = 0;
         r.line_break_category = properties.line_break_malformed_category;
+        r.east_asian_wide = false;
         break :blk r;
     };
 }
@@ -118,6 +121,7 @@ inline fn malformedToken(start: usize, end: usize) Token {
         .grapheme = properties.graphemeOf(r),
         .line_break = r.line_break,
         .cell_width = r.width,
+        .east_asian_wide = r.east_asian_wide,
     };
 }
 
@@ -153,6 +157,7 @@ pub fn at(bytes: []const u8, start: usize) Token {
         .grapheme = properties.grapheme_ascii[bytes[start]],
         .line_break = properties.line_break_ascii[bytes[start]],
         .cell_width = 1,
+        .east_asian_wide = false, // No ASCII byte is East_Asian_Wide.
     };
 
     const step = utf8.step(bytes[start..]);
@@ -175,6 +180,7 @@ fn fromRecord(start: usize, end: usize, cp: u21, r: properties.Record) Token {
         .grapheme = properties.graphemeOf(r),
         .line_break = r.line_break,
         .cell_width = r.width,
+        .east_asian_wide = r.east_asian_wide,
     };
 }
 

@@ -105,7 +105,14 @@ pub const MeasuredSpan = struct {
 };
 pub const Line = struct { start: ByteOffset, end: ByteOffset, columns: Column };
 pub const WordBound = struct { start: ByteOffset, end: ByteOffset, is_word: bool };
-pub const Codepoint = struct { start: ByteOffset, end: ByteOffset, value: ?u21, width: u2 };
+pub const Codepoint = struct {
+    start: ByteOffset,
+    end: ByteOffset,
+    value: ?u21,
+    width: u2,
+    grapheme: GraphemeProperties,
+    east_asian_wide: bool,
+};
 ```
 
 Columns follow Zunic's cell width policy. `.grapheme` allows wrapping
@@ -121,6 +128,9 @@ byte is never an error: it yields a `Codepoint` with `value = null` and
 `end - start == 1`, the same one-byte recovery `graphemes()` and `width()` use.
 `Codepoint.width` is the same flat lookup as `codepointWidth()`, `0` for
 malformed input; see that function's docs for how it differs from `Text.width()`.
+`Codepoint.grapheme` and `.east_asian_wide` are the same lookups as
+`graphemeProperties()` and `isEastAsianWide()`; malformed input gets the
+package's fixed fallback classification and `false`, respectively.
 
 `isNormalizedQuick()` scans the whole input and can return `.maybe` for a
 composing form (`.nfc`/`.nfkc`); a decomposing form (`.nfd`/`.nfkd`) never
@@ -212,6 +222,20 @@ pub fn isAscii(bytes: []const u8) bool;
 
 // The terminal-cell width of one code point in isolation: 0, 1, or 2.
 pub fn codepointWidth(cp: u21) u2;
+
+// One code point's grapheme-break classification: the raw facts, not a
+// boundary decision. See `Text.graphemes()` for the full UAX #29 rules.
+pub const GraphemeClass = enum { other, cr, lf, control, extend, zwj, regional_indicator, prepend, spacingmark, l, v, t, lv, lvt };
+pub const IndicConjunctBreak = enum { none, consonant, extend, linker };
+pub const GraphemeProperties = struct {
+    gcb: GraphemeClass,
+    incb: IndicConjunctBreak,
+    extended_pictographic: bool,
+};
+pub fn graphemeProperties(cp: u21) GraphemeProperties;
+
+// Whether a code point has East_Asian_Width Wide, Fullwidth, or Halfwidth.
+pub fn isEastAsianWide(cp: u21) bool;
 ```
 
 Spans describe `bytes[start.value..end.value]` in the view's input slice.
@@ -231,6 +255,17 @@ while `Text.width()` folds it into the cluster it belongs to. Prefer
 `text(bytes).width()` for text; reach for `codepointWidth` when working with
 a code point that did not come from `Text`, or read it directly off
 `Codepoint.width` while iterating `codepoints()`.
+
+`graphemeProperties` is the per-code-point data `Text.graphemes()` clusters
+with -- not a boundary decision by itself, since a real decision also needs
+the state carried between code points. Reach for it to build a different
+segmentation on code points that did not come from `Text`; use
+`Text.graphemes()` for the common case, which already applies the full rules.
+`isEastAsianWide` answers a different question than `codepointWidth`: a
+combining mark measures zero columns even when this is `true`, and a
+Halfwidth scalar (which this also counts as wide) measures one column
+despite it, since `codepointWidth` only treats Wide and Fullwidth as two
+columns.
 
 ## Detailed documentation
 

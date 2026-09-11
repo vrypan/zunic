@@ -237,3 +237,42 @@ test "exactly four normalization forms" {
     try std.testing.expectEqual(@as(usize, 4), @typeInfo(unicode.Form).@"enum".fields.len);
     try std.testing.expectEqual(@as(usize, 2), @typeInfo(unicode.Equivalence).@"enum".fields.len);
 }
+
+test "east_asian_wide and codepointWidth answer different questions" {
+    // U+302A IDEOGRAPHIC LEVEL TONE MARK: Mn, and East_Asian_Width=Wide.
+    // Category forces width to zero regardless of east_asian_wide.
+    try std.testing.expect(unicode.isEastAsianWide(0x302A));
+    try std.testing.expectEqual(@as(u2, 0), unicode.codepointWidth(0x302A));
+
+    // U+FF61 HALFWIDTH IDEOGRAPHIC FULL STOP: East_Asian_Width=Halfwidth.
+    // east_asian_wide is true (it covers H too), but width only treats
+    // Wide/Fullwidth as two columns, so this measures one.
+    try std.testing.expect(unicode.isEastAsianWide(0xFF61));
+    try std.testing.expectEqual(@as(u2, 1), unicode.codepointWidth(0xFF61));
+
+    // An ordinary CJK ideograph agrees on both questions.
+    try std.testing.expect(unicode.isEastAsianWide(0x4E00));
+    try std.testing.expectEqual(@as(u2, 2), unicode.codepointWidth(0x4E00));
+
+    try std.testing.expect(!unicode.isEastAsianWide('a'));
+    try std.testing.expectEqual(@as(u2, 1), unicode.codepointWidth('a'));
+}
+
+test "graphemeProperties matches Codepoint.grapheme from the same iterator" {
+    const text = "a\u{200D}\u{1F1FA}\xff";
+    var it = unicode.text(text).codepoints().iterator();
+    while (it.next()) |cp| {
+        if (cp.value) |value| {
+            try std.testing.expectEqualDeep(unicode.graphemeProperties(value), cp.grapheme);
+        } else {
+            // Malformed input carries the package's fixed fallback classification.
+            try std.testing.expectEqual(unicode.GraphemeClass.other, cp.grapheme.gcb);
+            try std.testing.expectEqual(unicode.IndicConjunctBreak.none, cp.grapheme.incb);
+            try std.testing.expect(!cp.grapheme.extended_pictographic);
+        }
+    }
+
+    // ZWJ and a regional indicator have their own, distinct classes.
+    try std.testing.expectEqual(unicode.GraphemeClass.zwj, unicode.graphemeProperties(0x200D).gcb);
+    try std.testing.expectEqual(unicode.GraphemeClass.regional_indicator, unicode.graphemeProperties(0x1F1FA).gcb);
+}

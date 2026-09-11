@@ -11,6 +11,7 @@ const wrap_engine = @import("layout").wrap;
 const text_trim = @import("text_trim.zig");
 const ascii_scan = @import("encoding").ascii;
 const scalar_engine = @import("encoding").scalar;
+const properties = @import("tables").properties;
 
 const types = @import("types");
 pub const ByteOffset = types.ByteOffset;
@@ -440,6 +441,20 @@ pub const Codepoint = struct {
     /// field over every item is not the same question as `Text.width()`;
     /// see `codepointWidth()`'s docs for why.
     width: u2,
+    /// This scalar's raw grapheme-break classification -- the same lookup
+    /// `graphemeProperties()` performs, and the facts `graphemes()` clusters
+    /// with, not a cluster boundary decision by itself. Use this to build a
+    /// different segmentation than `graphemes()` provides; `graphemes()`
+    /// already applies the full UAX #29 rules for the common case.
+    grapheme: properties.GraphemeProperties,
+    /// Whether this scalar has `East_Asian_Width` `Wide`, `Fullwidth`, or
+    /// `Halfwidth` -- the same lookup as the top-level `isEastAsianWide()`.
+    /// Not the same question as `width`: a combining mark (general category
+    /// `Mn`/`Me`/`Cf`) measures zero columns even when this is `true`, and a
+    /// Halfwidth scalar measures one column despite it, since `width` only
+    /// treats Wide and Fullwidth as two columns. `east_asian_wide` is
+    /// `false`, not `0`, for malformed input.
+    east_asian_wide: bool,
 };
 
 /// The individual Unicode scalars of this text, as a lazy iterator.
@@ -470,6 +485,8 @@ pub const CodepointIterator = struct {
             .end = .{ .value = token.end },
             .value = token.codepoint,
             .width = token.cell_width,
+            .grapheme = token.grapheme,
+            .east_asian_wide = token.east_asian_wide,
         };
     }
 };

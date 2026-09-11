@@ -126,6 +126,42 @@ pub const isAscii = @import("encoding").ascii.isAscii;
 /// `text(bytes).width()` or `text(bytes).graphemes().measured()` for text.
 pub const codepointWidth = @import("tables").properties.codepointWidth;
 
+/// One code point's classification for extended grapheme clustering
+/// ([UAX #29](https://www.unicode.org/reports/tr29/)), the raw facts
+/// `Text.graphemes()` applies the full boundary rules to.
+pub const GraphemeClass = @import("tables").properties.GraphemeClass;
+
+/// `Indic_Conjunct_Break`, part of the same clustering rules; also read by
+/// `graphemeProperties()`.
+pub const IndicConjunctBreak = @import("tables").properties.IndicConjunctBreak;
+
+/// The three facts `graphemeProperties()` returns together, and the same
+/// fields `Codepoint.grapheme` carries while iterating `codepoints()`.
+pub const GraphemeProperties = @import("tables").properties.GraphemeProperties;
+
+/// One code point's grapheme-break classification: `Grapheme_Cluster_Break`,
+/// `Indic_Conjunct_Break`, and `Extended_Pictographic`.
+///
+/// This is the raw per-scalar data, not a boundary decision -- it does not
+/// say whether a break exists between two code points, only classifies one
+/// of them. `Text.graphemes()` already applies the full UAX #29 rules,
+/// including the state carried between code points that a single lookup
+/// cannot see, and disagreements between adjacent code points and Unicode's
+/// stream-safe recommendations. Reach for this when building a different
+/// segmentation on code points that did not come from `Text`, not as a
+/// shortcut for clustering.
+pub const graphemeProperties = @import("tables").properties.graphemeProperties;
+
+/// Whether a code point has `East_Asian_Width` `Wide`, `Fullwidth`, or
+/// `Halfwidth`.
+///
+/// Not the same question as `codepointWidth()`: a combining mark measures
+/// zero columns even when this is `true`, and a Halfwidth scalar measures
+/// one column despite it -- `codepointWidth()` only treats Wide and
+/// Fullwidth as two columns. This is the raw property alone, for callers
+/// that want it directly rather than folded into a width decision.
+pub const isEastAsianWide = @import("tables").properties.isEastAsianWide;
+
 /// Instrumented wrapping is retained solely for zunic's work-bound tests.
 pub const testing = struct {
     pub const instrumentedIterator = wrap_engine.instrumentedIterator;
