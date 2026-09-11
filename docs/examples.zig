@@ -141,8 +141,9 @@ test "docs: the pinned Unicode data version" {
 }
 
 test "docs: terminal properties, case folding, and streaming graphemes" {
-    try std.testing.expectEqual(zunic.EastAsianWidth.wide, zunic.eastAsianWidth(0x754c));
-    try std.testing.expect(zunic.isEmojiPresentation(0x1f600));
+    const terminal = zunic.terminalProperties(0x1f600);
+    try std.testing.expectEqual(zunic.EastAsianWidth.wide, terminal.east_asian_width);
+    try std.testing.expect(terminal.emoji_presentation);
     try std.testing.expect(zunic.isEmojiVariationBase(0x231b));
 
     const width = zunic.widthProperties(0x1f3fb);

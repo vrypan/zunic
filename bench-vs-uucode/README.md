@@ -14,7 +14,7 @@ uucode and Zunic overlap in eight bytes-to-results operations:
 | Grapheme segmentation | `text(...).graphemes()` | `grapheme.utf8Iterator` | every start/end byte range |
 | Measured graphemes | measured grapheme iterator | `grapheme.wcwidthNext` | every start/end range and cluster width |
 | Whole-text width | `text(...).width()` | `grapheme.utf8Wcwidth` | total columns |
-| Terminal properties | EAW, emoji predicates, and `widthProperties` | matching generated fields | every scalar's ending offset and property values |
+| Terminal properties | `terminalProperties` | configured-table `getAll` | every scalar's ending offset and property values |
 | Full case folding | `fullCaseFold` | `case_folding_full` | every bounded mapping |
 | Streaming graphemes | `graphemeBreak` | `computeGraphemeBreak` | every adjacent-pair boundary and ending offset |
 | Ghostty scalar width | public width/GCB composition | matching uucode field composition | derived width for every scalar |
@@ -77,6 +77,10 @@ Zunic's default UAX #29 GB9 behavior and uucode's modifier tailoring.
 Measured traversal excludes Zunic's `renderable` result because uucode has no
 counterpart. uucode is configured with only the table fields used by the eight
 operations; unrelated Unicode properties are not built into its runtime tables.
+Its `getAll("0", cp)` call returns every field assigned to generated table
+`"0"`; this suite uses that low-level fused lookup for the terminal-property
+row. The table name and returned fields depend on the consuming build's uucode
+configuration rather than forming a fixed terminal-property API.
 The eight multilingual document corpora are supplemented by a small maintained
 `features` corpus containing expanding/common folds, valid VS15/VS16 sequences,
 an emoji modifier, a ZWJ sequence, a regional-indicator pair, combining marks,

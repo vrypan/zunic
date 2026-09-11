@@ -38,6 +38,14 @@ test "surrogate and wider u21 policies are explicit" {
     try std.testing.expectEqual(zunic.EastAsianWidth.neutral, zunic.eastAsianWidth(outside));
     try std.testing.expect(!zunic.isEmojiPresentation(outside));
     try std.testing.expect(!zunic.isEmojiVariationBase(outside));
+    const terminal = zunic.terminalProperties(outside);
+    try std.testing.expectEqual(zunic.EastAsianWidth.neutral, terminal.east_asian_width);
+    try std.testing.expect(!terminal.emoji_presentation);
+    try std.testing.expect(!terminal.emoji_variation_base);
+    try std.testing.expect(!terminal.emoji_modifier);
+    try std.testing.expect(!terminal.emoji_modifier_base);
+    try std.testing.expectEqual(@as(u2, 1), terminal.standalone);
+    try std.testing.expect(terminal.zero_in_grapheme);
     const width = zunic.widthProperties(outside);
     try std.testing.expectEqual(@as(u2, 1), width.standalone);
     try std.testing.expect(width.zero_in_grapheme);
@@ -48,12 +56,20 @@ test "fused terminal records preserve public property invariants" {
     var raw: u32 = 0;
     while (raw <= zunic.max_codepoint) : (raw += 1) {
         const cp: u21 = @intCast(raw);
-        const eaw = zunic.eastAsianWidth(cp);
+        const terminal = zunic.terminalProperties(cp);
+        const eaw = terminal.east_asian_width;
         const width = zunic.widthProperties(cp);
+        try std.testing.expectEqual(eaw, zunic.eastAsianWidth(cp));
+        try std.testing.expectEqual(terminal.emoji_presentation, zunic.isEmojiPresentation(cp));
+        try std.testing.expectEqual(terminal.emoji_variation_base, zunic.isEmojiVariationBase(cp));
+        try std.testing.expectEqual(terminal.emoji_modifier, zunic.isEmojiModifier(cp));
+        try std.testing.expectEqual(terminal.emoji_modifier_base, zunic.isEmojiModifierBase(cp));
+        try std.testing.expectEqual(terminal.standalone, width.standalone);
+        try std.testing.expectEqual(terminal.zero_in_grapheme, width.zero_in_grapheme);
+        try std.testing.expectEqual(terminal.emoji_modifier, width.emoji_modifier);
         try std.testing.expectEqual(
             eaw == .wide or eaw == .fullwidth or eaw == .halfwidth,
             zunic.isEastAsianWide(cp),
         );
-        try std.testing.expectEqual(width.emoji_modifier, zunic.isEmojiModifier(cp));
     }
 }

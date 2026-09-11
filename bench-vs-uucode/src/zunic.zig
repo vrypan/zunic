@@ -64,16 +64,16 @@ pub inline fn terminalProperties(bytes: []const u8) Stats {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
         const cp = step.cp orelse 0xfffd;
-        const width_props = zunic.widthProperties(cp);
+        const props = zunic.terminalProperties(cp);
         sums[0] +%= pos;
-        sums[1] +%= @intFromEnum(zunic.eastAsianWidth(cp));
-        sums[2] +%= @intFromBool(zunic.isEmojiPresentation(cp));
-        sums[3] +%= @intFromBool(zunic.isEmojiVariationBase(cp));
-        sums[4] +%= @intFromBool(zunic.isEmojiModifier(cp));
-        sums[5] +%= @intFromBool(zunic.isEmojiModifierBase(cp));
-        sums[6] +%= width_props.standalone;
-        sums[7] +%= @intFromBool(width_props.zero_in_grapheme);
-        sums[8] +%= @intFromBool(width_props.emoji_modifier);
+        sums[1] +%= @intFromEnum(props.east_asian_width);
+        sums[2] +%= @intFromBool(props.emoji_presentation);
+        sums[3] +%= @intFromBool(props.emoji_variation_base);
+        sums[4] +%= @intFromBool(props.emoji_modifier);
+        sums[5] +%= @intFromBool(props.emoji_modifier_base);
+        sums[6] +%= props.standalone;
+        sums[7] +%= @intFromBool(props.zero_in_grapheme);
+        sums[8] +%= @intFromBool(props.emoji_modifier);
     }
     return .{ .units = units, .checksum = finishSums(sums) };
 }
@@ -160,17 +160,17 @@ pub fn dumpTerminalProperties(out: *std.Io.Writer, bytes: []const u8) !void {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
         const cp = step.cp orelse 0xfffd;
-        const width_props = zunic.widthProperties(cp);
+        const props = zunic.terminalProperties(cp);
         try out.print("{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             pos,
-            @intFromEnum(zunic.eastAsianWidth(cp)),
-            @intFromBool(zunic.isEmojiPresentation(cp)),
-            @intFromBool(zunic.isEmojiVariationBase(cp)),
-            @intFromBool(zunic.isEmojiModifier(cp)),
-            @intFromBool(zunic.isEmojiModifierBase(cp)),
-            width_props.standalone,
-            @intFromBool(width_props.zero_in_grapheme),
-            @intFromBool(width_props.emoji_modifier),
+            @intFromEnum(props.east_asian_width),
+            @intFromBool(props.emoji_presentation),
+            @intFromBool(props.emoji_variation_base),
+            @intFromBool(props.emoji_modifier),
+            @intFromBool(props.emoji_modifier_base),
+            props.standalone,
+            @intFromBool(props.zero_in_grapheme),
+            @intFromBool(props.emoji_modifier),
         });
     }
 }

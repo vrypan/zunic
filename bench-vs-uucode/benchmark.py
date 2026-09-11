@@ -106,8 +106,8 @@ def parse_dump(text: str, snapshots: dict[str, bytes]) -> dict[str, dict[str, di
 
 def parse_timing(text: str, peer: str, outputs: dict[str, dict[str, dict[str, object]]], snapshots: dict[str, bytes]) -> dict[str, dict[str, object]]:
     headers = [fields(line) for line in text.splitlines() if line.startswith("protocol=")]
-    expected = {"protocol": "3", "suite": "unicode", "peer": peer, "samples": "15",
-                "calibration_ms": "50", "input": "bytes", "consumption": "operation_checksum_v3"}
+    expected = {"protocol": "4", "suite": "unicode", "peer": peer, "samples": "15",
+                "calibration_ms": "50", "input": "bytes", "consumption": "operation_checksum_v4"}
     if len(headers) != 1 or any(headers[0].get(k) != v for k, v in expected.items()):
         raise ValueError(f"incompatible header for {peer}: {headers}")
     raw: dict[tuple[str, str], list[int]] = {}
@@ -191,7 +191,7 @@ def self_test() -> int:
         binary = HERE / "zig-out" / "bin" / metadata["binary"]
         for args in ([], ["--help"], ["-h"]):
             result = run([str(binary), *args], Path("/"))
-            if "Usage:" not in result.stdout or "protocol=3" in result.stdout:
+            if "Usage:" not in result.stdout or "protocol=4" in result.stdout:
                 raise ValueError(f"{peer}: bad help output")
         dump = run([str(binary), "--dump"], Path("/")).stdout
         outputs[peer] = parse_dump(dump, snapshots)
@@ -273,12 +273,12 @@ def benchmark(args: argparse.Namespace) -> int:
     git_head = run(["git", "rev-parse", "HEAD"], ROOT).stdout.strip()
     git_status = run(["git", "status", "--short"], ROOT).stdout
     summary = {
-        "schema": "zunic-uucode-benchmark/v3", "title": "Unicode primitives: uucode vs Zunic",
+        "schema": "zunic-uucode-benchmark/v4", "title": "Unicode primitives: uucode vs Zunic",
         "label": args.label, "pair_count": args.pairs, "cases": list(CORPORA),
         "operations": list(OPERATIONS), "pairs": pairs,
         "peers": {name: {"name": name if name == "zunic" else "uucode 0.2.0",
                           "unicode": metadata["unicode"]} for name, metadata in PEERS.items()},
-        "contract": {"input": "bytes", "consumption": "operation_checksum_v3"},
+        "contract": {"input": "bytes", "consumption": "operation_checksum_v4"},
         "operation_outputs": operation_outputs,
         "notes": [
             "Inputs are valid UTF-8 and file I/O is outside timing.",
@@ -317,7 +317,7 @@ def main() -> int:
         return self_test()
     if args.report:
         summary = json.loads(args.report.read_text())
-        if summary.get("schema") not in {"zunic-uucode-benchmark/v1", "zunic-uucode-benchmark/v2", "zunic-uucode-benchmark/v3"}:
+        if summary.get("schema") not in {"zunic-uucode-benchmark/v1", "zunic-uucode-benchmark/v2", "zunic-uucode-benchmark/v3", "zunic-uucode-benchmark/v4"}:
             raise ValueError("unsupported summary schema")
         print(report(summary, True), end="")
         return 0

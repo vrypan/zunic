@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 SOURCE = ROOT / "tables/terminal_properties.zig"
 MAXCP = 0x110000
+SHIFT = 7
 EAW = {"N": 0, "F": 1, "H": 2, "W": 3, "Na": 4, "A": 5}
 
 
@@ -88,7 +89,7 @@ def main():
     category = categories()
 
     text = SOURCE.read_text(encoding="utf-8")
-    index = zig_array(text, "index", "u16", 10)
+    index = zig_array(text, "index", "u8", 10)
     table = zig_array(text, "data", "u16", 16)
     failures = 0
     for cp in range(MAXCP):
@@ -113,8 +114,8 @@ def main():
         expected = (eaw[cp] | presentation[cp] << 3 | variation_base[cp] << 4 |
                     modifier[cp] << 5 | modifier_base[cp] << 6 |
                     standalone << 7 | int(zero) << 9)
-        block = index[cp >> 8]
-        got = table[(block << 8) | (cp & 0xFF)]
+        block = index[cp >> SHIFT]
+        got = table[(block << SHIFT) | (cp & ((1 << SHIFT) - 1))]
         if got != expected:
             failures += 1
             if failures <= 20:

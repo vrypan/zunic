@@ -242,6 +242,15 @@ pub const WidthProperties = struct {
     zero_in_grapheme: bool,
     emoji_modifier: bool,
 };
+pub const TerminalProperties = packed struct(u10) {
+    east_asian_width: EastAsianWidth,
+    emoji_presentation: bool,
+    emoji_variation_base: bool,
+    emoji_modifier: bool,
+    emoji_modifier_base: bool,
+    standalone: u2,
+    zero_in_grapheme: bool,
+};
 pub const CaseFold = struct {
     codepoints: [3]u21,
     len: u2,
@@ -254,6 +263,8 @@ pub fn isEmojiVariationBase(cp: u21) bool;
 pub fn isEmojiModifier(cp: u21) bool;
 pub fn isEmojiModifierBase(cp: u21) bool;
 pub fn widthProperties(cp: u21) WidthProperties;
+// Fetch every terminal property above with one table lookup.
+pub fn terminalProperties(cp: u21) TerminalProperties;
 pub fn fullCaseFold(cp: u21) CaseFold;
 pub fn graphemeBreak(previous: u21, current: u21, state: *GraphemeState) bool;
 

@@ -61,15 +61,16 @@ pub inline fn terminalProperties(bytes: []const u8) Stats {
     var units: usize = 0;
     var sums: [9]usize = @splat(0);
     while (it.next()) |cp| : (units += 1) {
+        const props = uucode.getAll("0", cp);
         sums[0] +%= it.i;
-        sums[1] +%= @intFromEnum(uucode.get(.east_asian_width, cp));
-        sums[2] +%= @intFromBool(uucode.get(.is_emoji_presentation, cp));
-        sums[3] +%= @intFromBool(uucode.get(.is_emoji_vs_base, cp));
-        sums[4] +%= @intFromBool(uucode.get(.is_emoji_modifier, cp));
-        sums[5] +%= @intFromBool(uucode.get(.is_emoji_modifier_base, cp));
-        sums[6] +%= uucode.get(.wcwidth_standalone, cp);
-        sums[7] +%= @intFromBool(uucode.get(.wcwidth_zero_in_grapheme, cp));
-        sums[8] +%= @intFromBool(uucode.get(.is_emoji_modifier, cp));
+        sums[1] +%= @intFromEnum(props.east_asian_width);
+        sums[2] +%= @intFromBool(props.is_emoji_presentation);
+        sums[3] +%= @intFromBool(props.is_emoji_vs_base);
+        sums[4] +%= @intFromBool(props.is_emoji_modifier);
+        sums[5] +%= @intFromBool(props.is_emoji_modifier_base);
+        sums[6] +%= props.wcwidth_standalone;
+        sums[7] +%= @intFromBool(props.wcwidth_zero_in_grapheme);
+        sums[8] +%= @intFromBool(props.is_emoji_modifier);
     }
     return .{ .units = units, .checksum = finishSums(sums) };
 }
@@ -153,16 +154,17 @@ pub fn dumpWidth(out: *std.Io.Writer, bytes: []const u8) !void {
 pub fn dumpTerminalProperties(out: *std.Io.Writer, bytes: []const u8) !void {
     var it = uucode.utf8.Iterator.init(bytes);
     while (it.next()) |cp| {
+        const props = uucode.getAll("0", cp);
         try out.print("{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             it.i,
-            @intFromEnum(uucode.get(.east_asian_width, cp)),
-            @intFromBool(uucode.get(.is_emoji_presentation, cp)),
-            @intFromBool(uucode.get(.is_emoji_vs_base, cp)),
-            @intFromBool(uucode.get(.is_emoji_modifier, cp)),
-            @intFromBool(uucode.get(.is_emoji_modifier_base, cp)),
-            uucode.get(.wcwidth_standalone, cp),
-            @intFromBool(uucode.get(.wcwidth_zero_in_grapheme, cp)),
-            @intFromBool(uucode.get(.is_emoji_modifier, cp)),
+            @intFromEnum(props.east_asian_width),
+            @intFromBool(props.is_emoji_presentation),
+            @intFromBool(props.is_emoji_vs_base),
+            @intFromBool(props.is_emoji_modifier),
+            @intFromBool(props.is_emoji_modifier_base),
+            props.wcwidth_standalone,
+            @intFromBool(props.wcwidth_zero_in_grapheme),
+            @intFromBool(props.is_emoji_modifier),
         });
     }
 }

@@ -188,6 +188,12 @@ pub const isEmojiModifierBase = @import("tables").terminal_properties.isEmojiMod
 pub const WidthProperties = @import("tables").terminal_properties.WidthProperties;
 pub const widthProperties = @import("tables").terminal_properties.widthProperties;
 
+/// All terminal-facing scalar properties stored in the terminal table,
+/// fetched together with one indexed lookup. The fields have the same
+/// semantics and wider-`u21` fallback as the corresponding scalar functions.
+pub const TerminalProperties = @import("tables").terminal_properties.TerminalProperties;
+pub const terminalProperties = @import("tables").terminal_properties.terminalProperties;
+
 pub const CaseFold = @import("case_folding.zig").CaseFold;
 pub const fullCaseFold = @import("case_folding.zig").fullCaseFold;
 
