@@ -43,7 +43,10 @@ pub fn Iterator(comptime include_measure: bool) type {
     return struct {
         inner: grapheme_engine.Iterator,
 
-        pub fn next(self: *@This()) ?if (include_measure) MeasuredSpan else Span {
+        // Complete the decoder-to-consumer inline chain. Otherwise the larger
+        // engine can cause this wrapper to be outlined once per grapheme;
+        // unmeasured callers also need to eliminate the unused width work.
+        pub inline fn next(self: *@This()) ?if (include_measure) MeasuredSpan else Span {
             const span = self.inner.next() orelse return null;
             if (!include_measure) return .{
                 .start = .{ .value = span.start },

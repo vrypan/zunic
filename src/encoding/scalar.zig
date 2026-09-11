@@ -142,7 +142,10 @@ pub fn iterator(bytes: []const u8) Iterator {
     return .{ .bytes = bytes };
 }
 
-pub fn at(bytes: []const u8, start: usize) Token {
+// Keep decoding visible through the grapheme iterator to its public caller:
+// unused token fields and property extraction can then be eliminated. The
+// iterator's token helpers and public next() must stay inline as well.
+pub inline fn at(bytes: []const u8, start: usize) Token {
     // One record carries the grapheme, line-break and width facts, so a token
     // costs a single two-load lookup instead of three separate searches.
     // ASCII still skips the decode; it is one byte, one scalar.

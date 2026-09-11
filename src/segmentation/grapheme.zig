@@ -123,19 +123,22 @@ pub const Iterator = struct {
         return .{ .start = start, .end = self.pos, .columns = measure.finish() };
     }
 
-    fn takeToken(self: *Iterator) Token {
+    // These helpers complete the inline chain from scalar.at to the public
+    // iterator. Inlining only the decoder can move an out-of-line call here,
+    // retaining token materialization and preventing caller specialization.
+    inline fn takeToken(self: *Iterator) Token {
         const token = self.pending orelse self.decodeAt(self.pos);
         self.pending = null;
         self.pos = token.scalar.end;
         return token;
     }
 
-    fn peekToken(self: *Iterator) Token {
+    inline fn peekToken(self: *Iterator) Token {
         if (self.pending == null) self.pending = self.decodeAt(self.pos);
         return self.pending.?;
     }
 
-    fn decodeAt(self: *const Iterator, offset: usize) Token {
+    inline fn decodeAt(self: *const Iterator, offset: usize) Token {
         const token = scalar.at(self.bytes, offset);
         return .{ .scalar = token, .category = categoryOf(token) };
     }
