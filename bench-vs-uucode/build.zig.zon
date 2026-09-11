@@ -1,0 +1,14 @@
+.{
+    .name = .zunic_uucode_comparison,
+    .version = "0.0.0",
+    .fingerprint = 0xdbbab2389718a0b7,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .zunic = .{ .path = ".." },
+        .uucode = .{
+            .url = "git+https://github.com/jacobsandlund/uucode.git#f67fa5dbef5c9de57773dbe2f7a02bebc7e20301",
+            .hash = "uucode-0.2.0-ZZjBPvDKVAC0ZmoJJ37dlUn11y68rIKVeeovTLY9zxoQ",
+        },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "src", "Makefile", "README.md", "benchmark.py" },
+}

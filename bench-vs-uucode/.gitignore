@@ -1,0 +1,6 @@
+/.zig-cache/
+/.zig-global-cache/
+/zig-out/
+/zig-pkg/
+/benchmarks/
+/__pycache__/

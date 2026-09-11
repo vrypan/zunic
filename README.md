@@ -166,3 +166,8 @@ documentation examples. Build options and verification details are in
 Rust comparison benchmarks live in [bench-vs-rust/](bench-vs-rust/README.md).
 Run `make -C bench-vs-rust build`, `test`, or `bench` from a source checkout.
 Cargo fetches the pinned Rust dependencies when needed.
+
+The like-for-like Zig comparison against uucode lives in
+[bench-vs-uucode/](bench-vs-uucode/README.md). It covers UTF-8 decoding,
+grapheme segmentation, measured graphemes, and whole-text width. Run it with
+`make -C bench-vs-uucode build`, `test`, or `bench`.
