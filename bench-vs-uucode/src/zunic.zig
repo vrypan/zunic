@@ -78,6 +78,22 @@ pub inline fn terminalProperties(bytes: []const u8) Stats {
     return .{ .units = units, .checksum = finishSums(sums) };
 }
 
+pub inline fn terminalLookup(codepoints: []const u21) Stats {
+    var sums: [8]usize = @splat(0);
+    for (codepoints) |cp| {
+        const props = zunic.terminalProperties(cp);
+        sums[0] +%= cp;
+        sums[1] +%= @intFromEnum(props.east_asian_width);
+        sums[2] +%= @intFromBool(props.emoji_presentation);
+        sums[3] +%= @intFromBool(props.emoji_variation_base);
+        sums[4] +%= @intFromBool(props.emoji_modifier);
+        sums[5] +%= @intFromBool(props.emoji_modifier_base);
+        sums[6] +%= props.standalone;
+        sums[7] +%= @intFromBool(props.zero_in_grapheme);
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
 pub inline fn caseFold(bytes: []const u8) Stats {
     var pos: usize = 0;
     var units: usize = 0;
@@ -171,6 +187,22 @@ pub fn dumpTerminalProperties(out: *std.Io.Writer, bytes: []const u8) !void {
             props.standalone,
             @intFromBool(props.zero_in_grapheme),
             @intFromBool(props.emoji_modifier),
+        });
+    }
+}
+
+pub fn dumpTerminalLookup(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp| {
+        const props = zunic.terminalProperties(cp);
+        try out.print("{x}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
+            cp,
+            @intFromEnum(props.east_asian_width),
+            @intFromBool(props.emoji_presentation),
+            @intFromBool(props.emoji_variation_base),
+            @intFromBool(props.emoji_modifier),
+            @intFromBool(props.emoji_modifier_base),
+            props.standalone,
+            @intFromBool(props.zero_in_grapheme),
         });
     }
 }

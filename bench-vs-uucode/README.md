@@ -6,7 +6,7 @@ Compare the current Zunic working tree with
 are built with the same Zig version, target, optimization mode, and CPU model.
 The dependency hash in `build.zig.zon` verifies the fetched package.
 
-uucode and Zunic overlap in eight bytes-to-results operations:
+uucode and Zunic overlap in nine benchmarked operations:
 
 | Operation | Zunic | uucode | Timed result consumed |
 |---|---|---|---|
@@ -15,6 +15,7 @@ uucode and Zunic overlap in eight bytes-to-results operations:
 | Measured graphemes | measured grapheme iterator | `grapheme.wcwidthNext` | every start/end range and cluster width |
 | Whole-text width | `text(...).width()` | `grapheme.utf8Wcwidth` | total columns |
 | Terminal properties | `terminalProperties` | configured-table `getAll` | every scalar's ending offset and property values |
+| Fused scalar terminal lookup | `terminalProperties` | configured-table `getAll` | every predecoded scalar and its property values |
 | Full case folding | `fullCaseFold` | `case_folding_full` | every bounded mapping |
 | Streaming graphemes | `graphemeBreak` | `computeGraphemeBreak` | every adjacent-pair boundary and ending offset |
 | Ghostty scalar width | public width/GCB composition | matching uucode field composition | derived width for every scalar |
@@ -60,9 +61,10 @@ less time, below 1 means uucode took less time.
 ## Comparability limits
 
 Both implementations receive the exact same valid UTF-8 bytes, and file I/O
-is excluded from timing. Scalar-property rows include UTF-8 decoding because
-their public contracts start from bytes. The adapters consume equivalent
-results and the driver compares their exact output records. Multi-result
+is excluded from timing. The terminal-properties row includes UTF-8 decoding
+because its public contract starts from bytes. The fused scalar lookup receives
+predecoded code points and isolates the two table APIs. The adapters consume
+equivalent results and the driver compares their exact output records. Multi-result
 operations use independent field accumulators that are combined once after
 traversal, reducing checksum dependency-chain overhead. The driver also verifies
 that each timed count and checksum agrees with that peer's dump and that neither
