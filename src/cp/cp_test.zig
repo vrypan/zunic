@@ -74,6 +74,11 @@ test "general group agrees with the pinned UCD" {
         uppercase: bool,
         cased: bool,
         case_ignorable: bool,
+        changes_when_lowercased: bool,
+        changes_when_uppercased: bool,
+        changes_when_titlecased: bool,
+        changes_when_casefolded: bool,
+        changes_when_casemapped: bool,
         math: bool,
         id_start: bool,
         id_continue: bool,
@@ -89,25 +94,31 @@ test "general group agrees with the pinned UCD" {
     // Sm) are easy to get wrong by assumption.
     const cases = [_]Want{
         // 'A': Lu, cased and identifier-capable both ways.
-        .{ .cp = 'A', .category = .lu, .alphabetic = true, .lowercase = false, .uppercase = true, .cased = true, .case_ignorable = false, .math = false, .id_start = true, .id_continue = true, .xid_start = true, .xid_continue = true, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        .{ .cp = 'A', .category = .lu, .alphabetic = true, .lowercase = false, .uppercase = true, .cased = true, .case_ignorable = false, .changes_when_lowercased = true, .changes_when_uppercased = false, .changes_when_titlecased = false, .changes_when_casefolded = true, .changes_when_casemapped = true, .math = false, .id_start = true, .id_continue = true, .xid_start = true, .xid_continue = true, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
         // 'a': Ll, the Lowercase counterpart.
-        .{ .cp = 'a', .category = .ll, .alphabetic = true, .lowercase = true, .uppercase = false, .cased = true, .case_ignorable = false, .math = false, .id_start = true, .id_continue = true, .xid_start = true, .xid_continue = true, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        .{ .cp = 'a', .category = .ll, .alphabetic = true, .lowercase = true, .uppercase = false, .cased = true, .case_ignorable = false, .changes_when_lowercased = false, .changes_when_uppercased = true, .changes_when_titlecased = true, .changes_when_casefolded = false, .changes_when_casemapped = true, .math = false, .id_start = true, .id_continue = true, .xid_start = true, .xid_continue = true, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        // U+00B5 MICRO SIGN: lowercasing leaves it alone, while case folding
+        // maps it to Greek small letter mu.
+        .{ .cp = 0x00B5, .category = .ll, .alphabetic = true, .lowercase = true, .uppercase = false, .cased = true, .case_ignorable = false, .changes_when_lowercased = false, .changes_when_uppercased = true, .changes_when_titlecased = true, .changes_when_casefolded = true, .changes_when_casemapped = true, .math = false, .id_start = true, .id_continue = true, .xid_start = true, .xid_continue = true, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        // U+00DF LATIN SMALL LETTER SHARP S: upper/title casing expands to
+        // more than one code point, and full case folding expands to "ss".
+        .{ .cp = 0x00DF, .category = .ll, .alphabetic = true, .lowercase = true, .uppercase = false, .cased = true, .case_ignorable = false, .changes_when_lowercased = false, .changes_when_uppercased = true, .changes_when_titlecased = true, .changes_when_casefolded = true, .changes_when_casemapped = true, .math = false, .id_start = true, .id_continue = true, .xid_start = true, .xid_continue = true, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
         // '0': Nd. ID_Continue but not ID_Start -- a digit cannot begin an
         // identifier under Unicode's default lexical rules.
-        .{ .cp = '0', .category = .nd, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .math = false, .id_start = false, .id_continue = true, .xid_start = false, .xid_continue = true, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        .{ .cp = '0', .category = .nd, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .changes_when_lowercased = false, .changes_when_uppercased = false, .changes_when_titlecased = false, .changes_when_casefolded = false, .changes_when_casemapped = false, .math = false, .id_start = false, .id_continue = true, .xid_start = false, .xid_continue = true, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
         // '+': Sm, and Math -- but not every Math code point is Sm; see
         // isMath's doc comment for the categories that also carry it.
-        .{ .cp = '+', .category = .sm, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .math = true, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        .{ .cp = '+', .category = .sm, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .changes_when_lowercased = false, .changes_when_uppercased = false, .changes_when_titlecased = false, .changes_when_casefolded = false, .changes_when_casemapped = false, .math = true, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
         // U+0020 SPACE: Zs, no derived boolean here is true.
-        .{ .cp = 0x0020, .category = .zs, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
+        .{ .cp = 0x0020, .category = .zs, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .changes_when_lowercased = false, .changes_when_uppercased = false, .changes_when_titlecased = false, .changes_when_casefolded = false, .changes_when_casemapped = false, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = false, .grapheme_base = true, .grapheme_extend = false },
         // U+0301 COMBINING ACUTE ACCENT: Mn, Case_Ignorable and
         // Grapheme_Extend, not Grapheme_Base -- the opposite shape from the
         // letters above.
-        .{ .cp = 0x0301, .category = .mn, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = true, .math = false, .id_start = false, .id_continue = true, .xid_start = false, .xid_continue = true, .default_ignorable = false, .grapheme_base = false, .grapheme_extend = true },
+        .{ .cp = 0x0301, .category = .mn, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = true, .changes_when_lowercased = false, .changes_when_uppercased = false, .changes_when_titlecased = false, .changes_when_casefolded = false, .changes_when_casemapped = false, .math = false, .id_start = false, .id_continue = true, .xid_start = false, .xid_continue = true, .default_ignorable = false, .grapheme_base = false, .grapheme_extend = true },
         // U+00AD SOFT HYPHEN: Cf, Default_Ignorable_Code_Point.
-        .{ .cp = 0x00AD, .category = .cf, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = true, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = true, .grapheme_base = false, .grapheme_extend = false },
+        .{ .cp = 0x00AD, .category = .cf, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = true, .changes_when_lowercased = false, .changes_when_uppercased = false, .changes_when_titlecased = false, .changes_when_casefolded = false, .changes_when_casemapped = false, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = true, .grapheme_base = false, .grapheme_extend = false },
         // U+0378: unassigned in Unicode 17.0.0, so Cn and every boolean false.
-        .{ .cp = 0x0378, .category = .cn, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = false, .grapheme_base = false, .grapheme_extend = false },
+        .{ .cp = 0x0378, .category = .cn, .alphabetic = false, .lowercase = false, .uppercase = false, .cased = false, .case_ignorable = false, .changes_when_lowercased = false, .changes_when_uppercased = false, .changes_when_titlecased = false, .changes_when_casefolded = false, .changes_when_casemapped = false, .math = false, .id_start = false, .id_continue = false, .xid_start = false, .xid_continue = false, .default_ignorable = false, .grapheme_base = false, .grapheme_extend = false },
     };
     for (cases) |want| {
         const props = codepoints.init(want.cp).general();
@@ -117,6 +128,11 @@ test "general group agrees with the pinned UCD" {
         try std.testing.expectEqual(want.uppercase, props.isUppercase);
         try std.testing.expectEqual(want.cased, props.isCased);
         try std.testing.expectEqual(want.case_ignorable, props.isCaseIgnorable);
+        try std.testing.expectEqual(want.changes_when_lowercased, props.isChangesWhenLowercased);
+        try std.testing.expectEqual(want.changes_when_uppercased, props.isChangesWhenUppercased);
+        try std.testing.expectEqual(want.changes_when_titlecased, props.isChangesWhenTitlecased);
+        try std.testing.expectEqual(want.changes_when_casefolded, props.isChangesWhenCasefolded);
+        try std.testing.expectEqual(want.changes_when_casemapped, props.isChangesWhenCasemapped);
         try std.testing.expectEqual(want.math, props.isMath);
         try std.testing.expectEqual(want.id_start, props.isIdStart);
         try std.testing.expectEqual(want.id_continue, props.isIdContinue);
@@ -126,6 +142,16 @@ test "general group agrees with the pinned UCD" {
         try std.testing.expectEqual(want.grapheme_base, props.isGraphemeBase);
         try std.testing.expectEqual(want.grapheme_extend, props.isGraphemeExtend);
     }
+
+    const sharp_s_fold = codepoints.init(0x00DF).fullCaseFold();
+    try std.testing.expectEqualSlices(u21, &[_]u21{ 's', 's' }, sharp_s_fold.slice());
+
+    const outside_unicode = codepoints.init(0x110000).general();
+    try std.testing.expect(!outside_unicode.isChangesWhenLowercased);
+    try std.testing.expect(!outside_unicode.isChangesWhenUppercased);
+    try std.testing.expect(!outside_unicode.isChangesWhenTitlecased);
+    try std.testing.expect(!outside_unicode.isChangesWhenCasefolded);
+    try std.testing.expect(!outside_unicode.isChangesWhenCasemapped);
 
     // Every Lu/Ll/Lt code point is Cased, by the property's own definition
     // (verified exhaustively by src/tools/test-general-category.py; this is
@@ -149,6 +175,11 @@ test "code-point groups preserve table facts across the complete u21 domain" {
         try std.testing.expectEqual(expected_general.is_uppercase, general.isUppercase);
         try std.testing.expectEqual(expected_general.is_cased, general.isCased);
         try std.testing.expectEqual(expected_general.is_case_ignorable, general.isCaseIgnorable);
+        try std.testing.expectEqual(expected_general.changes_when_lowercased, general.isChangesWhenLowercased);
+        try std.testing.expectEqual(expected_general.changes_when_uppercased, general.isChangesWhenUppercased);
+        try std.testing.expectEqual(expected_general.changes_when_titlecased, general.isChangesWhenTitlecased);
+        try std.testing.expectEqual(expected_general.changes_when_casefolded, general.isChangesWhenCasefolded);
+        try std.testing.expectEqual(expected_general.changes_when_casemapped, general.isChangesWhenCasemapped);
         try std.testing.expectEqual(expected_general.is_math, general.isMath);
         try std.testing.expectEqual(expected_general.is_id_start, general.isIdStart);
         try std.testing.expectEqual(expected_general.is_id_continue, general.isIdContinue);

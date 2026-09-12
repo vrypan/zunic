@@ -104,6 +104,8 @@ The boolean fields are:
 | --- | --- |
 | `isAlphabetic`, `isLowercase`, `isUppercase` | `Alphabetic`, `Lowercase`, `Uppercase` |
 | `isCased`, `isCaseIgnorable` | `Cased`, `Case_Ignorable` |
+| `isChangesWhenLowercased`, `isChangesWhenUppercased`, `isChangesWhenTitlecased` | `Changes_When_Lowercased`, `Changes_When_Uppercased`, `Changes_When_Titlecased` |
+| `isChangesWhenCasefolded`, `isChangesWhenCasemapped` | `Changes_When_Casefolded`, `Changes_When_Casemapped` |
 | `isMath` | `Math` |
 | `isIdStart`, `isIdContinue` | `ID_Start`, `ID_Continue` |
 | `isXidStart`, `isXidContinue` | `XID_Start`, `XID_Continue` |
@@ -114,6 +116,12 @@ These are independent Unicode properties. For example, `isUppercase` is not
 equivalent to `category == .lu`, and `isGraphemeExtend` is not equivalent to
 `grapheme().gcb == .extend`. Identifier properties supply character facts;
 they do not validate an entire identifier or implement a language's rules.
+
+The `isChangesWhen...` flags predict whether the corresponding default Unicode
+lowercase, uppercase, titlecase, case-folding, or case-mapping operation would
+change the code point. They report the DerivedCoreProperties facts; they do not
+perform a mapping, encode its result, or choose locale- or context-sensitive
+behavior.
 
 ### Terminal properties
 

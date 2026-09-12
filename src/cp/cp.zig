@@ -207,6 +207,21 @@ pub const GeneralProperties = packed struct(u32) {
     /// punctuation. This remains a raw property; `fullCaseFold` performs the
     /// actual default fold and does not treat this predicate as a mapping.
     isCaseIgnorable: bool,
+    /// `Changes_When_Lowercased`: whether default Unicode lowercasing changes
+    /// this code point.
+    isChangesWhenLowercased: bool,
+    /// `Changes_When_Uppercased`: whether default Unicode uppercasing changes
+    /// this code point.
+    isChangesWhenUppercased: bool,
+    /// `Changes_When_Titlecased`: whether default Unicode titlecasing changes
+    /// this code point.
+    isChangesWhenTitlecased: bool,
+    /// `Changes_When_Casefolded`: whether default Unicode case folding changes
+    /// this code point.
+    isChangesWhenCasefolded: bool,
+    /// `Changes_When_Casemapped`: whether default Unicode case mapping changes
+    /// this code point.
+    isChangesWhenCasemapped: bool,
     /// `Math`: mathematical symbols and operators. Broader than
     /// `general().category == .sm`; also true for some `Cf`/`Ll`/`Lo`/`Lu`/
     /// `Mn`/`Nd`/`Pc`/`Pd`/`Pe`/`Po`/`Ps`/`Sk`/`So` code points, verified
@@ -242,7 +257,7 @@ pub const GeneralProperties = packed struct(u32) {
     /// Unicode 17.0.0 differ between them. `Text.graphemes()` is built on
     /// `Grapheme_Cluster_Break`, not this property.
     isGraphemeExtend: bool,
-    _padding: u14 = 0,
+    _padding: u9 = 0,
 };
 
 /// Terminal-facing facts from one packed table record. For values above
