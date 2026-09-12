@@ -1,14 +1,13 @@
 //! Generated Unicode tables. No logic and no dependencies: every other module
 //! reads facts from here, and this one reads nothing.
 //!
-//! `properties` is deliberately shared rather than split per engine. Its
-//! `Record` packs grapheme, width and line-break facts into one `u32` so a
-//! scanner looks a scalar up once and answers all three questions from the
-//! same entry; see `docs/internals/README.md`. Splitting it would mean either
-//! duplicating table data or paying a lookup per question.
+//! `grapheme` is the compact scalar table used by grapheme-only consumers.
+//! `properties` keeps the wider fused record used by layout and line breaking,
+//! where one lookup must answer grapheme, width, and line-break questions.
 //!
 //! Regenerate with the scripts under `src/tools/`; never hand-edit.
 pub const properties = @import("properties.zig");
+pub const grapheme = @import("grapheme_properties.zig");
 pub const word = @import("word_properties.zig");
 pub const normalization = @import("normalization_properties.zig");
 pub const stream_safe = @import("stream_safe_properties.zig");

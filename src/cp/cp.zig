@@ -30,7 +30,7 @@ pub const CodepointView = packed struct(u32) {
     /// Raw UAX #29 classification, not a boundary decision. Use Text.graphemes()
     /// or graphemeBreak() to apply the stateful segmentation rules.
     pub fn grapheme(self: CodepointView) GraphemeProperties {
-        return @bitCast(tables.properties.graphemeProperties(self.value));
+        return @bitCast(tables.grapheme.graphemeProperties(self.value));
     }
 
     /// The terminal-cell width of one code point in isolation: `0`, `1`, or `2`.
@@ -45,7 +45,7 @@ pub const CodepointView = packed struct(u32) {
     /// produced elsewhere in a caller's own pipeline; prefer
     /// `text(bytes).width()` or `text(bytes).graphemes().measured()` for text.
     pub fn width(self: CodepointView) u2 {
-        return tables.properties.codepointWidth(self.value);
+        return tables.grapheme.codepointWidth(self.value);
     }
 
     /// Whether a code point has `East_Asian_Width` `Wide`, `Fullwidth`, or
@@ -57,7 +57,10 @@ pub const CodepointView = packed struct(u32) {
     /// Fullwidth as two columns. This is the raw property alone, for callers
     /// that want it directly rather than folded into a width decision.
     pub fn isEastAsianWide(self: CodepointView) bool {
-        return tables.properties.isEastAsianWide(self.value);
+        return switch (tables.terminal_properties.terminalProperties(self.value).east_asian_width) {
+            .wide, .fullwidth, .halfwidth => true,
+            else => false,
+        };
     }
 
     /// Unicode 17.0.0 `White_Space=Yes`: the predicate `Text.trim()`, `trimStart()`

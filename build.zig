@@ -29,11 +29,9 @@ pub fn build(b: *std.Build) void {
     // than something a reviewer has to catch. It is acyclic by construction:
     // `tables` and `types` are independent foundations with no module imports.
     //
-    // `tables` stays one module on purpose. Its `Record` fuses grapheme,
-    // width and line-break facts into a single `u32` so a scanner resolves a
-    // scalar once and answers all three questions from that entry; splitting
-    // it per engine would cost either duplicated tables or a lookup apiece.
-    // See docs/internals/README.md.
+    // `tables` stays one module, but dead-code elimination can retain its
+    // compact grapheme record independently from the wider fused layout
+    // record. See docs/internals/README.md.
     //
     // These are `createModule`, not `addModule`: only `zunic` is part of the
     // package's public surface, and a dependent must not be able to reach

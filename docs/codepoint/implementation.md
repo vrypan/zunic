@@ -16,8 +16,9 @@ bytes for every codepoint.
 
 `general()`, `terminal()`, and `grapheme()` obtain their respective packed
 table results and bitcast them to the public field layout. Each group has
-its own lookup. `width()` and `isEastAsianWide()` delegate to the existing
-property accessors. Whitespace uses a small fixed predicate shared with text
+its own lookup. `grapheme()` and `width()` share the compact grapheme/width
+record, while `isEastAsianWide()` reuses the terminal record. Codepoint-only
+calls therefore do not retain the wider line-break/layout table. Whitespace uses a small fixed predicate shared with text
 trimming. Case folding has an ASCII uppercase fast path followed by indexed
 mapping tables, returning an owned buffer of at most three values.
 

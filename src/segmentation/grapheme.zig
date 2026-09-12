@@ -1,6 +1,6 @@
 //! Default extended-grapheme boundaries (UAX #29 core rules).
 const decoded_token = @import("encoding").decoded_token;
-const properties = @import("tables").properties;
+const grapheme_properties = @import("tables").grapheme;
 
 pub const Span = struct {
     start: usize,
@@ -220,8 +220,8 @@ pub const machine = struct {
     fn classificationOfKey(key: u7) ?Classification {
         const gcb_raw: u4 = @truncate(key);
         // GraphemeClass has 14 members; 14 and 15 never occur in a record.
-        if (@as(u8, gcb_raw) >= @typeInfo(properties.GraphemeClass).@"enum".fields.len) return null;
-        const g: properties.GraphemeProperties = @bitCast(key);
+        if (@as(u8, gcb_raw) >= @typeInfo(grapheme_properties.GraphemeClass).@"enum".fields.len) return null;
+        const g: grapheme_properties.GraphemeProperties = @bitCast(key);
         const property: Property = switch (g.gcb) {
             .other => if (g.extended_pictographic) .ep else .other,
             .regional_indicator => .ri,
@@ -236,7 +236,7 @@ pub const machine = struct {
     const occurring = blk: {
         @setEvalBranchQuota(2000000);
         var seen: [128]bool = @splat(false);
-        for (properties.record_data) |raw| seen[@as(u7, @truncate(raw))] = true;
+        for (grapheme_properties.record_data) |raw| seen[@as(u7, @truncate(raw))] = true;
         break :blk seen;
     };
 
@@ -390,7 +390,7 @@ pub inline fn categoryOf(token: decoded_token.Token) u8 {
 /// Internal bridge for public streaming callers that already have a decoded
 /// code point instead of a scalar token.
 pub inline fn categoryForCodepoint(cp: u21) u8 {
-    return machine.category_of[@as(u7, @bitCast(properties.graphemeProperties(cp)))];
+    return machine.category_of[@as(u7, @bitCast(grapheme_properties.graphemeProperties(cp)))];
 }
 
 /// Table-driven cluster state. One read per scalar yields the boundary

@@ -30,12 +30,16 @@ test "ASCII arrays agree with the fused record" {
     // src/tools/test-properties.py. What that cannot see is decoded_token.at's ASCII
     // shortcut, which reads two separate arrays and hard-codes one column.
     const properties = @import("tables").properties;
+    const grapheme = @import("tables").grapheme;
     var cp: u7 = 0;
     while (true) {
         const r = properties.record(cp);
+        const g = grapheme.record(cp);
         try std.testing.expectEqual(properties.grapheme_ascii[cp], properties.graphemeOf(r));
+        try std.testing.expectEqual(grapheme.grapheme_ascii[cp], grapheme.graphemeOf(g));
         try std.testing.expectEqual(properties.line_break_ascii[cp], r.line_break);
         try std.testing.expectEqual(@as(u2, 1), r.width);
+        try std.testing.expectEqual(r.width, g.width);
         if (cp == 127) break;
         cp += 1;
     }
@@ -166,11 +170,15 @@ test "code-point groups preserve table facts across the complete u21 domain" {
         try std.testing.expectEqual(expected_terminal.emoji, terminal.isEmoji);
         try std.testing.expectEqual(expected_terminal.emoji_component, terminal.isEmojiComponent);
         const grapheme = point.grapheme();
-        const expected_grapheme = tables.properties.graphemeProperties(value);
+        const expected_grapheme = tables.grapheme.graphemeProperties(value);
+        try std.testing.expectEqual(tables.properties.graphemeProperties(value), expected_grapheme);
         try std.testing.expectEqual(expected_grapheme.gcb, grapheme.gcb);
         try std.testing.expectEqual(expected_grapheme.incb, grapheme.incb);
         try std.testing.expectEqual(expected_grapheme.extended_pictographic, grapheme.extendedPictographic);
+        try std.testing.expectEqual(tables.grapheme.codepointWidth(value), point.width());
         try std.testing.expectEqual(tables.properties.codepointWidth(value), point.width());
+        const eaw = tables.terminal_properties.terminalProperties(value).east_asian_width;
+        try std.testing.expectEqual(eaw == .wide or eaw == .fullwidth or eaw == .halfwidth, point.isEastAsianWide());
         try std.testing.expectEqual(tables.properties.isEastAsianWide(value), point.isEastAsianWide());
     }
 }

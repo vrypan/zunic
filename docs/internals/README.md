@@ -27,10 +27,16 @@ are enforced. These are implementation details; applications import `zunic`.
 
 ## Look up related properties together
 
-[properties.zig](../../src/tables/properties.zig) stores grapheme, width, and line-break
-facts together in a packed record. Repeated blocks of records are stored once.
-The scanner can look up one record and reuse its fields for all three tasks.
-ASCII can skip UTF-8 decoding and use direct array access.
+[grapheme_properties.zig](../../src/tables/grapheme_properties.zig) stores the
+grapheme classification and scalar width in a compact record. Grapheme
+iteration and code-point grapheme queries use this table, so they do not retain
+line-break data.
+
+[properties.zig](../../src/tables/properties.zig) stores grapheme, width, and
+line-break facts together in a wider packed record for wrapping and line
+breaking. Their fused scanner can look up one record and reuse its fields for
+all three tasks. Both tables store repeated blocks only once, and ASCII can
+skip UTF-8 decoding with direct array access.
 
 Word and normalization data have their own generated tables because they need
 different facts. Generators and their pinned input data live under

@@ -5,8 +5,8 @@ Run from the repository root:
     python3 src/tools/test-properties.py
 
 This is deliberately an *independent* implementation. It re-derives every fact
-from the pinned UCD files and decodes src/properties.zig by parsing the emitted
-Zig, sharing no classification code with generate-properties.py. A mismatch
+from the pinned UCD files and decodes both generated property tables by parsing
+the emitted Zig, sharing no classification code with generate-properties.py. A mismatch
 means the generator is wrong; it is never something to patch in the output.
 
 It also closes plan 003's deferred exhaustive-verification follow-up.
@@ -21,6 +21,7 @@ from check_unicode_version import check as check_unicode_version
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 SOURCE = ROOT / "tables/properties.zig"
+GRAPHEME_SOURCE = ROOT / "tables/grapheme_properties.zig"
 MAXCP = 0x110000
 
 # EastAsianWidth-17.0.0.txt header: unlisted code points are "N", except
@@ -70,9 +71,13 @@ def read_categories():
 def parse_zig():
     """Decode the emitted table: enum orders, bit layout, index and data."""
     text = SOURCE.read_text(encoding="utf-8")
+    grapheme_text = GRAPHEME_SOURCE.read_text(encoding="utf-8")
 
     def enum_order(name):
-        body = re.search(rf"pub const {name} = enum\(u\d+\) \{{(.*?)\}};", text, re.S).group(1)
+        match = re.search(rf"pub const {name} = enum\(u\d+\) \{{(.*?)\}};", text, re.S)
+        if match is None:
+            match = re.search(rf"pub const {name} = enum\(u\d+\) \{{(.*?)\}};", grapheme_text, re.S)
+        body = match.group(1)
         return [item.strip() for item in body.replace("\n", " ").split(",") if item.strip()]
 
     struct = re.search(r"pub const Record = packed struct\(u32\) \{(.*?)\n\};", text, re.S).group(1)
@@ -109,6 +114,17 @@ def parse_zig():
     }
 
 
+def parse_grapheme_zig():
+    """Decode the independently retained compact grapheme/width table."""
+    text = GRAPHEME_SOURCE.read_text(encoding="utf-8")
+    shift = int(re.search(r"pub const record_block_shift = (\d+);", text).group(1))
+    index = [int(v) for v in re.findall(r"(\d+),", re.search(
+        r"pub const record_index = \[_\]u16\{(.*?)\n\};", text, re.S).group(1))]
+    data = [int(v, 16) for v in re.findall(r"(0x[0-9A-Fa-f]+),", re.search(
+        r"pub const record_data = \[_\]u16\{(.*?)\n\};", text, re.S).group(1))]
+    return {"shift": shift, "index": index, "data": data}
+
+
 def zig_name(value):
     return re.sub(r"[^a-z0-9]", "_", value.lower())
 
@@ -131,7 +147,9 @@ def main():
                 eaw[cp] = "W"
 
     table = parse_zig()
+    grapheme_table = parse_grapheme_zig()
     block_mask = (1 << table["shift"]) - 1
+    grapheme_block_mask = (1 << grapheme_table["shift"]) - 1
 
     def category_key(cp):
         raw = lb[cp]
@@ -191,11 +209,19 @@ def main():
                 failures += 1
                 if failures <= 20:
                     print(f"U+{cp:04X} {name}: table={got} expected={want}")
+        grapheme_block = grapheme_table["index"][cp >> grapheme_table["shift"]]
+        grapheme_raw = grapheme_table["data"][(grapheme_block << grapheme_table["shift"]) | (cp & grapheme_block_mask)]
+        grapheme_want = expected["gcb"] | (expected["incb"] << 4) | (expected["extended_pictographic"] << 6) | (width << 7)
+        if grapheme_raw != grapheme_want:
+            failures += 1
+            if failures <= 20:
+                print(f"U+{cp:04X} compact record: table={grapheme_raw:#x} expected={grapheme_want:#x}")
     if failures:
         sys.exit(f"{failures} mismatches over {MAXCP} code points")
     print(f"ok: {MAXCP} code points verified against the pinned UCD "
           f"({len(table['data']) // (1 << table['shift'])} blocks, "
-          f"{(len(table['index']) * 2 + len(table['data']) * 4) / 1024:.1f} KiB)")
+          f"{(len(table['index']) * 2 + len(table['data']) * 4) / 1024:.1f} KiB fused, "
+          f"{(len(grapheme_table['index']) * 2 + len(grapheme_table['data']) * 2) / 1024:.1f} KiB grapheme)")
 
 
 if __name__ == "__main__":

@@ -13,9 +13,9 @@ whitespace predicate to classify values. The same predicate backs
 `cp(value).isWhitespace()`. Grapheme, word, width, normalization, and
 line-break engines are not needed for this scan.
 
-The shared fused `Record` carries grapheme, width, and line-break facts; it has
-no `White_Space` bit, and adding one would enlarge a table that costs the
-library everywhere, for a property with 25 members. A `switch` over 11 ranges
+The fused layout `Record` carries grapheme, width, and line-break facts; it has
+no `White_Space` bit, and adding one would enlarge that table for every layout
+consumer, for a property with 25 members. A `switch` over 11 ranges
 compiles to a handful of comparisons and stays entirely in the instruction
 stream. The property is also *not* derivable from data already in the record:
 U+00A0 and U+202F are `White_Space` and non-breaking, U+200B is breaking and

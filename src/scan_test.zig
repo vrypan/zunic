@@ -4,7 +4,8 @@ const grapheme = @import("segmentation").grapheme;
 const line_break = @import("linebreak");
 const utf8 = @import("encoding").utf8;
 const decoded_token = @import("encoding").decoded_token;
-const properties = @import("tables").properties;
+const tables = @import("tables");
+const properties = tables.properties;
 const width = @import("layout").width;
 
 fn expectScannerMatchesComposedIterators(bytes: []const u8) !void {
@@ -193,7 +194,7 @@ test "grapheme table agrees with the reference transition" {
     var count: usize = 0;
     for (0..0x110000) |v| {
         if (v >= 0xd800 and v <= 0xdfff) continue;
-        const key: u7 = @bitCast(properties.graphemeProperties(@intCast(v)));
+        const key: u7 = @bitCast(tables.grapheme.graphemeProperties(@intCast(v)));
         if (seen[key]) continue;
         seen[key] = true;
         witnesses[count] = @intCast(v);
@@ -386,10 +387,8 @@ fn referenceAt(bytes: []const u8, start: usize) decoded_token.Token {
         .start = start,
         .end = start + step.len,
         .codepoint = cp,
-        .grapheme = if (cp) |v| properties.graphemeProperties(v) else .{ .gcb = .other, .incb = .none, .extended_pictographic = false },
-        .line_break = if (cp) |v| properties.lineBreak(v) else .al,
+        .grapheme = if (cp) |v| tables.grapheme.graphemeProperties(v) else .{ .gcb = .other, .incb = .none, .extended_pictographic = false },
         .cell_width = if (cp) |v| decoded_token.codepointWidth(v) else 0,
-        .east_asian_wide = if (cp) |v| properties.isEastAsianWide(v) else false,
     };
 }
 
@@ -403,12 +402,10 @@ fn expectSameToken(bytes: []const u8, start: usize) !void {
     try std.testing.expectEqual(want.start, got.start);
     try std.testing.expectEqual(want.end, got.end);
     try std.testing.expectEqual(want.codepoint, got.codepoint);
-    try std.testing.expectEqual(want.line_break, got.line_break);
     try std.testing.expectEqual(want.cell_width, got.cell_width);
     try std.testing.expectEqual(want.grapheme.gcb, got.grapheme.gcb);
     try std.testing.expectEqual(want.grapheme.incb, got.grapheme.incb);
     try std.testing.expectEqual(want.grapheme.extended_pictographic, got.grapheme.extended_pictographic);
-    try std.testing.expectEqual(want.east_asian_wide, got.east_asian_wide);
 }
 
 test "decoded_token.at ASCII shortcut matches the general path for every byte" {

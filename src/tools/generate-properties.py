@@ -18,6 +18,7 @@ from line_break_categories import category_key as line_break_category_key
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 OUT = ROOT / "tables/properties.zig"
+GRAPHEME_OUT = ROOT / "tables/grapheme_properties.zig"
 FILES = {
     "gcb": DATA / "GraphemeBreakProperty-17.0.0.txt",
     "ep": DATA / "emoji-data-17.0.0.txt",
@@ -69,6 +70,64 @@ def emit_grapheme_api(out, gcb, incb, ep):
         pictographic = value_at(ep, cp, "") == "Extended_Pictographic"
         out.write(f"    .{{ .gcb = .{zig_name(gcb_value)}, .incb = .{zig_name(incb_value.replace('InCB; ', ''))}, .extended_pictographic = {'true' if pictographic else 'false'} }},\n")
     out.write("};\n\n")
+
+
+def emit_grapheme_aliases(out):
+    out.write('const grapheme_properties = @import("grapheme_properties.zig");\n')
+    out.write("pub const GraphemeClass = grapheme_properties.GraphemeClass;\n")
+    out.write("pub const IndicConjunctBreak = grapheme_properties.IndicConjunctBreak;\n")
+    out.write("pub const GraphemeProperties = grapheme_properties.GraphemeProperties;\n")
+    out.write("pub const grapheme_ascii = grapheme_properties.grapheme_ascii;\n\n")
+
+
+def emit_grapheme_record_table(out, records, gcb, incb, ep):
+    emit_grapheme_api(out, gcb, incb, ep)
+
+    compact = [
+        (value & 0x7f) | (((value >> BIT_WIDTH) & 0x3) << 7)
+        for value in records
+    ]
+    blocks, index = {}, []
+    for base in range(0, MAXCP, BLOCK_SIZE):
+        key = tuple(compact[base:base + BLOCK_SIZE])
+        index.append(blocks.setdefault(key, len(blocks)))
+    assert len(blocks) < 65536
+
+    out.write("/// Grapheme classification and scalar width in one compact lookup.\n")
+    out.write("/// Line-break facts deliberately live in properties.zig so grapheme-only\n")
+    out.write("/// users do not retain the much larger fused layout table.\n")
+    out.write("pub const Record = packed struct(u16) {\n")
+    out.write("    gcb: GraphemeClass,\n")
+    out.write("    incb: IndicConjunctBreak,\n")
+    out.write("    extended_pictographic: bool,\n")
+    out.write("    width: u2,\n")
+    out.write("    _padding: u7 = 0,\n")
+    out.write("};\n\n")
+    out.write("pub const record_default: Record = @bitCast(@as(u16, 0x80));\n")
+    out.write(f"pub const record_block_shift = {BLOCK_SHIFT};\n\n")
+    out.write("pub const record_index = [_]u16{\n")
+    for i in range(0, len(index), 16):
+        out.write("    " + " ".join(f"{v}," for v in index[i:i + 16]) + "\n")
+    out.write("};\n\n")
+    flat = [value for key in sorted(blocks, key=blocks.get) for value in key]
+    out.write("pub const record_data = [_]u16{\n")
+    for i in range(0, len(flat), 12):
+        out.write("    " + " ".join(f"0x{v:03X}," for v in flat[i:i + 12]) + "\n")
+    out.write("};\n\n")
+    out.write("pub fn record(cp: u21) Record {\n")
+    out.write(f"    if (cp >= 0x{MAXCP:X}) {{\n")
+    out.write("        @branchHint(.unlikely);\n")
+    out.write("        return record_default;\n")
+    out.write("    }\n")
+    out.write("    const block = record_index[cp >> record_block_shift];\n")
+    out.write("    const offset = (@as(usize, block) << record_block_shift) | (cp & (@as(usize, 1) << record_block_shift) - 1);\n")
+    out.write("    return @bitCast(record_data[offset]);\n")
+    out.write("}\n\n")
+    out.write("pub fn graphemeOf(r: Record) GraphemeProperties {\n")
+    out.write("    return @bitCast(@as(u7, @truncate(@as(u16, @bitCast(r)))));\n")
+    out.write("}\n\n")
+    out.write("pub fn graphemeProperties(cp: u21) GraphemeProperties { return graphemeOf(record(cp)); }\n")
+    out.write("pub fn codepointWidth(cp: u21) u2 { return record(cp).width; }\n")
 
 
 def emit_line_break_api(out, values):
@@ -293,9 +352,13 @@ def main():
     with OUT.open("w", encoding="utf-8") as out:
         out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
         out.write("//! Run src/tools/generate-properties.py to regenerate.\n\n")
-        emit_grapheme_api(out, gcb, incb, ep)
+        emit_grapheme_aliases(out)
         emit_line_break_api(out, lb)
         emit_record_table(out, records, lb_names, malformed_category, default_category)
+    with GRAPHEME_OUT.open("w", encoding="utf-8") as out:
+        out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
+        out.write("//! Run src/tools/generate-properties.py to regenerate.\n\n")
+        emit_grapheme_record_table(out, records, gcb, incb, ep)
 
 
 if __name__ == "__main__":

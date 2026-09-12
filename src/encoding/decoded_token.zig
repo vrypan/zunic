@@ -3,20 +3,19 @@
 //! Invalid UTF-8 consumes one byte and has `codepoint == null`; its Unicode
 //! properties use the package's existing malformed-input fallbacks.
 const properties = @import("tables").properties;
+const grapheme_properties = @import("tables").grapheme;
 const utf8 = @import("utf8.zig");
 
 pub const Token = struct {
     start: usize,
     end: usize,
     codepoint: ?u21,
-    grapheme: properties.GraphemeProperties,
-    line_break: properties.LineBreak,
+    grapheme: grapheme_properties.GraphemeProperties,
     cell_width: u2,
-    east_asian_wide: bool,
 };
 
 /// Internal token used by composed scans that also need line-break predicates.
-/// Keep the public Token unchanged for consumers constructing scalar facts.
+/// Its fused record stays separate from the compact grapheme token above.
 pub const ClassifiedToken = struct {
     start: usize,
     end: usize,
@@ -29,9 +28,7 @@ pub const ClassifiedToken = struct {
             .end = self.end,
             .codepoint = self.codepoint,
             .grapheme = properties.graphemeOf(self.record),
-            .line_break = self.record.line_break,
             .cell_width = self.record.width,
-            .east_asian_wide = self.record.east_asian_wide,
         };
     }
 };
@@ -109,19 +106,14 @@ inline fn malformedRecord() properties.Record {
     };
 }
 
-/// The same facts as a public `Token`. `at` used to spell them out a second
-/// time; the two agreed only by inspection, and nothing made them stay that
-/// way.
+/// Grapheme traversal's explicit malformed-input fallback.
 inline fn malformedToken(start: usize, end: usize) Token {
-    const r = comptime malformedRecord();
     return .{
         .start = start,
         .end = end,
         .codepoint = null,
-        .grapheme = properties.graphemeOf(r),
-        .line_break = r.line_break,
-        .cell_width = r.width,
-        .east_asian_wide = r.east_asian_wide,
+        .grapheme = .{ .gcb = .other, .incb = .none, .extended_pictographic = false },
+        .cell_width = 0,
     };
 }
 
@@ -146,21 +138,16 @@ pub fn iterator(bytes: []const u8) Iterator {
 // unused token fields and property extraction can then be eliminated. The
 // iterator's token helpers and public next() must stay inline as well.
 pub inline fn at(bytes: []const u8, start: usize) Token {
-    // One record carries the grapheme, line-break and width facts, so a token
-    // costs a single two-load lookup instead of three separate searches.
+    // One compact record carries the grapheme and width facts needed here.
     // ASCII still skips the decode; it is one byte, one scalar.
-    // ASCII keeps its direct arrays. The record is one load against these two,
-    // but grapheme iteration then pays to extract line-break and width bits it
-    // never reads; measured 5.6% slower on ascii/grapheme. All ASCII is one
-    // column, which the exhaustive width check in root_test.zig pins.
+    // ASCII keeps a direct grapheme array and hard-codes one column, which the
+    // exhaustive width check in root_test.zig pins.
     if (start < bytes.len and bytes[start] < 0x80) return .{
         .start = start,
         .end = start + 1,
         .codepoint = bytes[start],
-        .grapheme = properties.grapheme_ascii[bytes[start]],
-        .line_break = properties.line_break_ascii[bytes[start]],
+        .grapheme = grapheme_properties.grapheme_ascii[bytes[start]],
         .cell_width = 1,
-        .east_asian_wide = false, // No ASCII byte is East_Asian_Wide.
     };
 
     const step = utf8.step(bytes[start..]);
@@ -172,21 +159,16 @@ pub inline fn at(bytes: []const u8, start: usize) Token {
 }
 
 fn fromCodepoint(start: usize, end: usize, cp: u21) Token {
-    return fromRecord(start, end, cp, properties.record(cp));
-}
-
-fn fromRecord(start: usize, end: usize, cp: u21, r: properties.Record) Token {
+    const r = grapheme_properties.record(cp);
     return .{
         .start = start,
         .end = end,
         .codepoint = cp,
-        .grapheme = properties.graphemeOf(r),
-        .line_break = r.line_break,
+        .grapheme = grapheme_properties.graphemeOf(r),
         .cell_width = r.width,
-        .east_asian_wide = r.east_asian_wide,
     };
 }
 
 pub fn codepointWidth(cp: u21) u2 {
-    return properties.codepointWidth(cp);
+    return grapheme_properties.codepointWidth(cp);
 }

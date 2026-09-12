@@ -66,7 +66,7 @@ pub fn Scanner(comptime instrumented: bool) type {
             const first = first_decoded.scalarToken();
             if (self.lb_consumed) self.lb_consumed = false else self.consumeLineBreak(first_decoded.record.line_break_category);
             const start = first.start;
-            const hard = line_break.isHardClass(first.line_break);
+            const hard = line_break.isHardClass(first_decoded.record.line_break);
             var state = grapheme.TableState.init(grapheme.categoryOf(first));
             var measure = grapheme.ClusterMeasure{};
             measure.add(first);

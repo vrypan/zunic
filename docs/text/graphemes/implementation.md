@@ -31,7 +31,9 @@ preserve the reference rule decisions rather than approximating common text.
 A pending token carries lookahead across calls: the scalar that establishes
 the next boundary does not have to be decoded again to start the next cluster.
 Non-ASCII classification uses the shared packed property record; ASCII skips
-UTF-8 decoding and uses direct property arrays.
+UTF-8 decoding and uses a direct property array. The compact record contains
+only grapheme classification and scalar width. Line-break facts live in the
+wider layout record and are not retained by grapheme-only programs.
 
 `ClusterMeasure` accumulates width during the same segmentation pass. The public
 measured iterator decodes that result instead of scanning the cluster again.
