@@ -1,6 +1,6 @@
 # Why terminators scan bytes
 
-[API](README.md) · [Source](../../../src/text.zig)
+[API](README.md) · [Source](../../../src/text/text.zig)
 
 Hard terminators are a fixed, small set. The iterator recognizes their exact
 UTF-8 encodings directly, avoiding Unicode property lookups and grapheme

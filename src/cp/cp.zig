@@ -1,6 +1,13 @@
 //! Lightweight code-point view. Construction stores the value without looking up data.
 const tables = @import("tables");
 const folding = @import("case_folding.zig");
+pub const CaseFold = folding.CaseFold;
+pub const isWhitespace = @import("whitespace.zig").isWhitespace;
+
+/// Construct a code-point view without decoding or property lookups.
+pub fn init(value: u21) CodepointView {
+    return .{ .value = value };
+}
 
 /// A decoded code point. No allocation, decoding, or eager property lookup.
 /// Accepts every u21; each operation retains its documented wider-input fallback.
@@ -56,7 +63,7 @@ pub const CodepointView = packed struct(u32) {
     /// Unicode 17.0.0 `White_Space=Yes`: the predicate `Text.trim()`, `trimStart()`
     /// and `trimEnd()` apply at each edge, and `Text.isWhitespace(span)` applies
     /// to a whole span. Not general category `Zs`, not `Pattern_White_Space`, and
-    /// not the zero-width set; see [trim](../docs/text/trim/README.md) for the full
+    /// not the zero-width set; see [trim](../../docs/text/trim/README.md) for the full
     /// 25-code-point table.
     ///
     /// This scalar form is exposed for code working with a code point directly
@@ -64,7 +71,7 @@ pub const CodepointView = packed struct(u32) {
     /// `text(bytes).isWhitespace(span)` instead, which also confirms the span is
     /// exactly one such scalar rather than merely starting with one.
     pub fn isWhitespace(self: CodepointView) bool {
-        return @import("text_trim.zig").isWhitespace(self.value);
+        return @import("whitespace.zig").isWhitespace(self.value);
     }
 
     /// Full default C/F mapping; excludes Turkic alternatives. Unmapped and

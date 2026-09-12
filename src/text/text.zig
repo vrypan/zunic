@@ -8,12 +8,19 @@ const width_engine = @import("layout").width;
 const normalization = @import("normalization");
 const word_engine = @import("segmentation").word;
 const wrap_engine = @import("layout").wrap;
-const text_trim = @import("text_trim.zig");
+const text_trim = @import("trim.zig");
 const ascii_scan = @import("encoding").ascii;
 const utf8 = @import("encoding").utf8;
-const CodepointView = @import("codepoint.zig").CodepointView;
+const CodepointView = @import("cp").CodepointView;
 
 const types = @import("types");
+
+/// Open a borrowed text view without scanning.
+pub fn init(bytes: []const u8) Text {
+    return .{ .bytes = bytes };
+}
+
+pub const isWhitespaceSlice = text_trim.isWhitespaceSlice;
 pub const ByteOffset = types.ByteOffset;
 pub const Column = types.Column;
 pub const Span = types.Span;

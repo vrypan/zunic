@@ -1,11 +1,12 @@
-//! Public-API tests for `zunic.isAscii` and `Text.isAscii`.
+//! Public-API tests for `ascii.isAscii` and `Text.isAscii`.
 //!
 //! `std.ascii.isAscii` checks one byte; `referenceIsAscii` below is the
 //! independent whole-slice oracle these tests check the shared detector
 //! against, built from that single-byte primitive rather than from
-//! `zunic.isAscii` itself.
+//! `ascii.isAscii` itself.
 const std = @import("std");
-const zunic = @import("zunic");
+const text_module = @import("text");
+const ascii = @import("encoding").ascii;
 
 fn referenceIsAscii(bytes: []const u8) bool {
     for (bytes) |byte| if (!std.ascii.isAscii(byte)) return false;
@@ -15,8 +16,8 @@ fn referenceIsAscii(bytes: []const u8) bool {
 /// Both entry points, and the reference, must agree for `bytes`.
 fn expectAgree(bytes: []const u8, expected: bool) !void {
     try std.testing.expectEqual(expected, referenceIsAscii(bytes));
-    try std.testing.expectEqual(expected, zunic.isAscii(bytes));
-    try std.testing.expectEqual(expected, zunic.text(bytes).isAscii());
+    try std.testing.expectEqual(expected, ascii.isAscii(bytes));
+    try std.testing.expectEqual(expected, text_module.init(bytes).isAscii());
 }
 
 test "empty input is ASCII" {
@@ -115,16 +116,16 @@ test "escape bytes receive no special treatment" {
 
 test "const values and temporary views" {
     const bytes: []const u8 = "Hello";
-    const text_view = zunic.text(bytes);
+    const text_view = text_module.init(bytes);
     try std.testing.expect(text_view.isAscii());
     // Temporary view, never bound to a local.
-    try std.testing.expect(zunic.text("Hello").isAscii());
-    try std.testing.expect(!zunic.text("caf\u{00E9}").isAscii());
+    try std.testing.expect(text_module.init("Hello").isAscii());
+    try std.testing.expect(!text_module.init("caf\u{00E9}").isAscii());
 }
 
 test "every call re-scans: no cache across repeated calls" {
     var buffer: [4]u8 = "abcd".*;
-    const view = zunic.text(&buffer);
+    const view = text_module.init(&buffer);
     try std.testing.expect(view.isAscii());
     buffer[2] = 0x80;
     try std.testing.expect(!view.isAscii());

@@ -1,9 +1,9 @@
 const std = @import("std");
-const zunic = @import("zunic");
+const codepoints = @import("cp");
 const fixture = @embedFile("data/CaseFolding-17.0.0.txt");
 
 fn expectFold(cp: u21, expected: []const u21) !void {
-    const result = zunic.cp(cp).fullCaseFold();
+    const result = codepoints.init(cp).fullCaseFold();
     try std.testing.expectEqualSlices(u21, expected, result.slice());
     for (result.codepoints[result.len..]) |unused| try std.testing.expectEqual(@as(u21, 0), unused);
 }
@@ -20,18 +20,18 @@ test "full default case folding" {
 }
 
 test "case fold result owns its bounded storage" {
-    var result = zunic.cp(0x00df).fullCaseFold();
+    var result = codepoints.init(0x00df).fullCaseFold();
     const borrowed = result.slice();
     try std.testing.expectEqualSlices(u21, &.{ 's', 's' }, borrowed);
 }
 
 test "bounded fold results compare scalar keys without allocation" {
-    var kelvin = zunic.cp(0x212a).fullCaseFold();
-    var ascii_k = zunic.cp('K').fullCaseFold();
+    var kelvin = codepoints.init(0x212a).fullCaseFold();
+    var ascii_k = codepoints.init('K').fullCaseFold();
     try std.testing.expect(std.mem.eql(u21, kelvin.slice(), ascii_k.slice()));
 
-    var final_sigma = zunic.cp(0x03c2).fullCaseFold();
-    var capital_sigma = zunic.cp(0x03a3).fullCaseFold();
+    var final_sigma = codepoints.init(0x03c2).fullCaseFold();
+    var capital_sigma = codepoints.init(0x03a3).fullCaseFold();
     try std.testing.expect(std.mem.eql(u21, final_sigma.slice(), capital_sigma.slice()));
 }
 

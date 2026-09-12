@@ -41,18 +41,25 @@ pub fn build(b: *std.Build) void {
     const Modules = struct {
         types: *std.Build.Module,
         tables: *std.Build.Module,
+        cp: *std.Build.Module,
         encoding: *std.Build.Module,
         segmentation: *std.Build.Module,
         linebreak: *std.Build.Module,
         normalization: *std.Build.Module,
         layout: *std.Build.Module,
+        text: *std.Build.Module,
 
-        /// Grant every internal module to `module`. Tests reach past the
-        /// public API into the module they exercise, so they get the same
-        /// graph the library has rather than a private back door.
-        fn addTo(self: @This(), module: *std.Build.Module) void {
-            inline for (@typeInfo(@This()).@"struct".fields) |field|
-                module.addImport(field.name, @field(self, field.name));
+        /// Explicit facade dependencies: new internal modules are not automatically granted.
+        fn addFacadeImports(self: @This(), module: *std.Build.Module) void {
+            module.addImport("types", self.types);
+            module.addImport("tables", self.tables);
+            module.addImport("cp", self.cp);
+            module.addImport("encoding", self.encoding);
+            module.addImport("segmentation", self.segmentation);
+            module.addImport("linebreak", self.linebreak);
+            module.addImport("normalization", self.normalization);
+            module.addImport("layout", self.layout);
+            module.addImport("text", self.text);
         }
     };
 
@@ -64,6 +71,9 @@ pub fn build(b: *std.Build) void {
         fn call(owner: *std.Build, options: *std.Build.Module) Modules {
             const types = owner.createModule(.{ .root_source_file = owner.path("src/types.zig") });
             const tables = owner.createModule(.{ .root_source_file = owner.path("src/tables/tables.zig") });
+
+            const cp = owner.createModule(.{ .root_source_file = owner.path("src/cp/cp.zig") });
+            cp.addImport("tables", tables);
 
             const encoding = owner.createModule(.{ .root_source_file = owner.path("src/encoding/encoding.zig") });
             encoding.addImport("tables", tables);
@@ -88,14 +98,24 @@ pub fn build(b: *std.Build) void {
             layout.addImport("linebreak", linebreak);
             layout.addImport("build_options", options);
 
+            const text = owner.createModule(.{ .root_source_file = owner.path("src/text/text.zig") });
+            text.addImport("cp", cp);
+            text.addImport("types", types);
+            text.addImport("encoding", encoding);
+            text.addImport("segmentation", segmentation);
+            text.addImport("normalization", normalization);
+            text.addImport("layout", layout);
+
             return .{
                 .types = types,
                 .tables = tables,
+                .cp = cp,
                 .encoding = encoding,
                 .segmentation = segmentation,
                 .linebreak = linebreak,
                 .normalization = normalization,
                 .layout = layout,
+                .text = text,
             };
         }
     }.call;
@@ -110,7 +130,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
     });
     zunic.addImport("build_options", options_module);
-    internal.addTo(zunic);
+    internal.addFacadeImports(zunic);
 
     const test_step = b.step("test", "Run every test");
     const docs_step = b.step("docs-test", "Run documentation examples");
@@ -127,14 +147,17 @@ pub fn build(b: *std.Build) void {
     // Note what `zunic` costs. It re-exports every module, so any root that
     // needs the public API depends on all of them whatever this table says;
     // only the roots that test an engine directly are genuinely narrow.
-    const Grant = enum { none, api, tables, encoding, segmentation, linebreak, normalization, layout };
+    const Grant = enum { none, api, cp, text, tables, encoding, segmentation, linebreak, normalization, layout };
     const TestRoot = struct {
         path: []const u8,
         /// Step suffix: `zig build test-<group>` runs just this group.
         group: []const u8,
+        extra_group: ?[]const u8 = null,
         grants: []const Grant,
     };
     const test_roots = [_]TestRoot{
+        .{ .path = "src/cp/cp_test.zig", .group = "cp", .grants = &.{ .cp, .tables } },
+        .{ .path = "src/text/text_test.zig", .group = "text", .grants = &.{ .text, .cp, .layout } },
         .{ .path = "src/encoding/utf8.zig", .group = "encoding", .grants = &.{.none} },
         .{ .path = "src/linebreak/linebreak.zig", .group = "linebreak", .grants = &.{ .tables, .encoding } },
         .{ .path = "src/word_test.zig", .group = "segmentation", .grants = &.{ .tables, .segmentation } },
@@ -143,12 +166,12 @@ pub fn build(b: *std.Build) void {
         .{ .path = "src/wrap_regression_test.zig", .group = "layout", .grants = &.{.api} },
         .{ .path = "src/normalization_test.zig", .group = "normalization", .grants = &.{ .api, .tables, .encoding, .normalization } },
         .{ .path = "src/conformance_test.zig", .group = "conformance", .grants = &.{ .api, .segmentation, .normalization } },
-        .{ .path = "src/root_test.zig", .group = "api", .grants = &.{ .api, .tables, .layout } },
-        .{ .path = "src/unicode_properties_test.zig", .group = "unicode-properties", .grants = &.{.api} },
-        .{ .path = "src/case_folding_test.zig", .group = "case-folding", .grants = &.{.api} },
-        .{ .path = "src/grapheme_stream_test.zig", .group = "grapheme-stream", .grants = &.{.api} },
-        .{ .path = "src/trim_test.zig", .group = "trim", .grants = &.{.api} },
-        .{ .path = "src/ascii_test.zig", .group = "ascii", .grants = &.{.api} },
+        .{ .path = "src/root_test.zig", .group = "api", .grants = &.{.api} },
+        .{ .path = "src/cp/unicode_properties_test.zig", .group = "unicode-properties", .extra_group = "cp", .grants = &.{.cp} },
+        .{ .path = "src/case_folding_test.zig", .group = "case-folding", .extra_group = "cp", .grants = &.{.cp} },
+        .{ .path = "src/grapheme_stream_test.zig", .group = "grapheme-stream", .extra_group = "segmentation", .grants = &.{.segmentation} },
+        .{ .path = "src/text/trim_test.zig", .group = "trim", .extra_group = "text", .grants = &.{ .text, .cp } },
+        .{ .path = "src/text/ascii_test.zig", .group = "ascii", .extra_group = "text", .grants = &.{ .text, .encoding } },
         .{ .path = "docs/examples.zig", .group = "api", .grants = &.{.api} },
     };
 
@@ -162,6 +185,8 @@ pub fn build(b: *std.Build) void {
         for (root.grants) |grant| switch (grant) {
             .none => {},
             .api => test_mod.addImport("zunic", zunic),
+            .cp => test_mod.addImport("cp", internal.cp),
+            .text => test_mod.addImport("text", internal.text),
             .tables => test_mod.addImport("tables", internal.tables),
             .encoding => test_mod.addImport("encoding", internal.encoding),
             .segmentation => test_mod.addImport("segmentation", internal.segmentation),
@@ -173,13 +198,17 @@ pub fn build(b: *std.Build) void {
         const run_test = b.addRunArtifact(b.addTest(.{ .root_module = test_mod }));
         test_step.dependOn(&run_test.step);
 
-        const group = group_steps.get(root.group) orelse blk: {
-            const name = b.fmt("test-{s}", .{root.group});
-            const step = b.step(name, b.fmt("Run the {s} tests only", .{root.group}));
-            group_steps.put(root.group, step) catch @panic("OOM");
-            break :blk step;
-        };
-        group.dependOn(&run_test.step);
+        // Reuse each test artifact across focused targets; the aggregate runs it once.
+        for ([_]?[]const u8{ root.group, root.extra_group }) |maybe_group| {
+            const group_name = maybe_group orelse continue;
+            const group = group_steps.get(group_name) orelse blk: {
+                const name = b.fmt("test-{s}", .{group_name});
+                const step = b.step(name, b.fmt("Run the {s} tests only", .{group_name}));
+                group_steps.put(group_name, step) catch @panic("OOM");
+                break :blk step;
+            };
+            group.dependOn(&run_test.step);
+        }
 
         if (std.mem.eql(u8, root.path, "docs/examples.zig")) docs_step.dependOn(&run_test.step);
         if (std.mem.eql(u8, root.path, "src/linebreak/linebreak.zig")) transition_step.dependOn(&run_test.step);
@@ -206,10 +235,12 @@ pub fn build(b: *std.Build) void {
     const large_options = large_normalization_options.createModule();
     const large_internal = buildModules(b, large_options);
     large_normalization_mod.addImport("build_options", large_options);
-    large_internal.addTo(large_normalization_mod);
+    large_normalization_mod.addImport("tables", large_internal.tables);
+    large_normalization_mod.addImport("encoding", large_internal.encoding);
+    large_normalization_mod.addImport("normalization", large_internal.normalization);
     const large_zunic = b.createModule(.{ .root_source_file = b.path("src/root.zig") });
     large_zunic.addImport("build_options", large_options);
-    large_internal.addTo(large_zunic);
+    large_internal.addFacadeImports(large_zunic);
     large_normalization_mod.addImport("zunic", large_zunic);
     const large_normalization_test = b.addRunArtifact(b.addTest(.{
         .root_module = large_normalization_mod,
@@ -227,7 +258,6 @@ pub fn build(b: *std.Build) void {
     });
     regression_mod.addImport("zunic", zunic);
     regression_mod.addImport("build_options", options_module);
-    internal.addTo(regression_mod);
     const regression_step = b.step("wrap-regressions", "Run wrapper regression tests");
     regression_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = regression_mod })).step);
 
@@ -238,7 +268,6 @@ pub fn build(b: *std.Build) void {
     });
     exhaustive_mod.addImport("zunic", zunic);
     exhaustive_mod.addImport("build_options", options_module);
-    internal.addTo(exhaustive_mod);
     const exhaustive_step = b.step("wrap-exhaustive", "Run the full-alphabet wrapping sweep");
     exhaustive_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = exhaustive_mod })).step);
 

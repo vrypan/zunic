@@ -5,8 +5,9 @@
 ## Public views and internal modules
 
 Applications import `zunic` and open a borrowed [`Text`](../text/README.md)
-view with `zunic.text(bytes)`. The text view lives with the public facade;
-Unicode engines and tables are separated into internal build modules.
+view with `zunic.text(bytes)`. The text view lives in the internal `text` module, while individual code-point
+views live in `cp`. The public facade re-exports their APIs; Unicode engines
+and tables have their own internal build modules.
 
 ## Borrow bytes and return positions
 
@@ -74,6 +75,10 @@ build file. The old `line-break-engine` option has been removed.
 the documentation examples. More focused commands are:
 
 ```sh
+zig build test-cp
+zig build test-text
+zig build test-segmentation
+zig build test-api
 zig build docs-test
 zig build line-break-tests
 zig build wrap-regressions
@@ -89,3 +94,12 @@ correctness for every input; the known line-break issue is documented under
 Benchmark results depend on the compiler, CPU, inputs, and Unicode versions.
 These pages explain the design without treating a measurement from one run as
 a permanent speed guarantee.
+
+`test-cp` runs scalar property and case-folding checks directly against `cp`.
+`test-text` runs text iteration, trimming, and ASCII checks using internal
+modules. `test-segmentation` includes streaming fixture and replay checks.
+`test-api` keeps public construction, type integration, and documentation
+examples. Existing focused targets remain available; the aggregate `test`
+reuses each test artifact once. The two new targets are Zig-only; the existing
+`test-unicode-properties` and `test-case-folding` targets retain their additional
+generated-data verification commands.

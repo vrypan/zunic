@@ -5,7 +5,8 @@
 //! property. No host-language trim or `isspace` is used as an oracle: their
 //! definitions and Unicode versions differ from this one.
 const std = @import("std");
-const zunic = @import("zunic");
+const text_module = @import("text");
+const codepoints = @import("cp");
 
 /// `White_Space=Yes`, Unicode 17.0.0 UCD `PropList.txt`.
 /// https://www.unicode.org/Public/17.0.0/ucd/PropList.txt
@@ -62,13 +63,13 @@ test "the property set has exactly 25 code points" {
 }
 
 test "the exported predicate agrees with the pinned property data" {
-    // zunic.isWhitespace is the same function Text.trim() uses internally;
+    // The codepoint predicate is the same function Text.trim() uses internally;
     // this checks the public entry point directly rather than only through
     // trim() output, since that's the one downstream code actually calls.
     for (0..0x110000) |value| {
         if (value >= 0xD800 and value <= 0xDFFF) continue;
         const cp: u21 = @intCast(value);
-        try std.testing.expectEqual(expectedWhitespace(cp), zunic.cp(cp).isWhitespace());
+        try std.testing.expectEqual(expectedWhitespace(cp), codepoints.init(cp).isWhitespace());
     }
 }
 
@@ -86,15 +87,15 @@ test "every scalar agrees with the pinned property data" {
         padded[encoded.len] = 'x';
         @memcpy(padded[encoded.len + 1 ..][0..encoded.len], encoded);
         const whole = padded[0 .. encoded.len * 2 + 1];
-        const trimmed = zunic.text(whole).trim().bytes;
+        const trimmed = text_module.init(whole).trim().bytes;
         if (expectedWhitespace(cp)) {
             try std.testing.expectEqualStrings("x", trimmed);
-            try std.testing.expectEqualStrings(whole[encoded.len..], zunic.text(whole).trimStart().bytes);
-            try std.testing.expectEqualStrings(whole[0 .. encoded.len + 1], zunic.text(whole).trimEnd().bytes);
+            try std.testing.expectEqualStrings(whole[encoded.len..], text_module.init(whole).trimStart().bytes);
+            try std.testing.expectEqualStrings(whole[0 .. encoded.len + 1], text_module.init(whole).trimEnd().bytes);
         } else {
             try std.testing.expectEqualStrings(whole, trimmed);
-            try std.testing.expectEqualStrings(whole, zunic.text(whole).trimStart().bytes);
-            try std.testing.expectEqualStrings(whole, zunic.text(whole).trimEnd().bytes);
+            try std.testing.expectEqualStrings(whole, text_module.init(whole).trimStart().bytes);
+            try std.testing.expectEqualStrings(whole, text_module.init(whole).trimEnd().bytes);
         }
     }
 }
@@ -107,26 +108,26 @@ test "each whitespace code point alone, on each edge, for each method" {
 
         const leading = try concat(allocator, &.{ ws, "core" });
         defer allocator.free(leading);
-        try std.testing.expectEqualStrings("core", zunic.text(leading).trim().bytes);
-        try std.testing.expectEqualStrings("core", zunic.text(leading).trimStart().bytes);
-        try std.testing.expectEqualStrings(leading, zunic.text(leading).trimEnd().bytes);
+        try std.testing.expectEqualStrings("core", text_module.init(leading).trim().bytes);
+        try std.testing.expectEqualStrings("core", text_module.init(leading).trimStart().bytes);
+        try std.testing.expectEqualStrings(leading, text_module.init(leading).trimEnd().bytes);
 
         const trailing = try concat(allocator, &.{ "core", ws });
         defer allocator.free(trailing);
-        try std.testing.expectEqualStrings("core", zunic.text(trailing).trim().bytes);
-        try std.testing.expectEqualStrings(trailing, zunic.text(trailing).trimStart().bytes);
-        try std.testing.expectEqualStrings("core", zunic.text(trailing).trimEnd().bytes);
+        try std.testing.expectEqualStrings("core", text_module.init(trailing).trim().bytes);
+        try std.testing.expectEqualStrings(trailing, text_module.init(trailing).trimStart().bytes);
+        try std.testing.expectEqualStrings("core", text_module.init(trailing).trimEnd().bytes);
 
         const both = try concat(allocator, &.{ ws, "core", ws });
         defer allocator.free(both);
-        try std.testing.expectEqualStrings("core", zunic.text(both).trim().bytes);
-        try std.testing.expectEqualStrings("core" ++ "", zunic.text(both).trimStart().bytes[0 .. both.len - ws.len * 2]);
-        try std.testing.expectEqualStrings(both[0 .. both.len - ws.len], zunic.text(both).trimEnd().bytes);
+        try std.testing.expectEqualStrings("core", text_module.init(both).trim().bytes);
+        try std.testing.expectEqualStrings("core" ++ "", text_module.init(both).trimStart().bytes[0 .. both.len - ws.len * 2]);
+        try std.testing.expectEqualStrings(both[0 .. both.len - ws.len], text_module.init(both).trimEnd().bytes);
 
         // A whitespace scalar on its own is removed entirely.
-        try std.testing.expectEqualStrings("", zunic.text(ws).trim().bytes);
-        try std.testing.expectEqualStrings("", zunic.text(ws).trimStart().bytes);
-        try std.testing.expectEqualStrings("", zunic.text(ws).trimEnd().bytes);
+        try std.testing.expectEqualStrings("", text_module.init(ws).trim().bytes);
+        try std.testing.expectEqualStrings("", text_module.init(ws).trimStart().bytes);
+        try std.testing.expectEqualStrings("", text_module.init(ws).trimEnd().bytes);
     }
 }
 
@@ -147,25 +148,25 @@ test "mixed runs of every whitespace code point" {
 
     const padded = try concat(allocator, &.{ run.items, "middle here", reversed.items });
     defer allocator.free(padded);
-    try std.testing.expectEqualStrings("middle here", zunic.text(padded).trim().bytes);
-    try std.testing.expectEqualStrings("middle here" ++ "", zunic.text(padded).trimStart().bytes[0..11]);
-    try std.testing.expectEqual(run.items.len + 11, zunic.text(padded).trimEnd().bytes.len);
+    try std.testing.expectEqualStrings("middle here", text_module.init(padded).trim().bytes);
+    try std.testing.expectEqualStrings("middle here" ++ "", text_module.init(padded).trimStart().bytes[0..11]);
+    try std.testing.expectEqual(run.items.len + 11, text_module.init(padded).trimEnd().bytes.len);
 
     const only = try concat(allocator, &.{ run.items, reversed.items });
     defer allocator.free(only);
-    try std.testing.expectEqual(@as(usize, 0), zunic.text(only).trim().bytes.len);
-    try std.testing.expectEqual(@as(usize, 0), zunic.text(only).trimStart().bytes.len);
-    try std.testing.expectEqual(@as(usize, 0), zunic.text(only).trimEnd().bytes.len);
+    try std.testing.expectEqual(@as(usize, 0), text_module.init(only).trim().bytes.len);
+    try std.testing.expectEqual(@as(usize, 0), text_module.init(only).trimStart().bytes.len);
+    try std.testing.expectEqual(@as(usize, 0), text_module.init(only).trimEnd().bytes.len);
 }
 
 test "empty and all-whitespace input keep their slice locations" {
-    const empty = zunic.text("");
+    const empty = text_module.init("");
     try std.testing.expectEqual(@as(usize, 0), empty.trim().bytes.len);
     try std.testing.expectEqual(@as(usize, 0), empty.trimStart().bytes.len);
     try std.testing.expectEqual(@as(usize, 0), empty.trimEnd().bytes.len);
 
     const spaces = "  \t\n";
-    const view = zunic.text(spaces);
+    const view = text_module.init(spaces);
     // Start-first scanning leaves `trim` and `trimStart` at the far end;
     // `trimEnd` never moves its start.
     try std.testing.expectEqual(spaces.ptr + spaces.len, view.trim().bytes.ptr);
@@ -192,7 +193,7 @@ test "unchanged text returns the original slice" {
         "\x1b[31mred\x1b[0m",
     };
     for (cases) |case| {
-        const view = zunic.text(case);
+        const view = text_module.init(case);
         for ([_][]const u8{ view.trim().bytes, view.trimStart().bytes, view.trimEnd().bytes }) |result| {
             try std.testing.expectEqual(case.ptr, result.ptr);
             try std.testing.expectEqual(case.len, result.len);
@@ -220,35 +221,35 @@ fn expectNotTrimmed(cp: u21) !void {
     padded[encoded.len] = 'x';
     @memcpy(padded[encoded.len + 1 ..][0..encoded.len], encoded);
     const whole = padded[0 .. encoded.len * 2 + 1];
-    try std.testing.expectEqualStrings(whole, zunic.text(whole).trim().bytes);
+    try std.testing.expectEqualStrings(whole, text_module.init(whole).trim().bytes);
 }
 
 test "ASCII shapes" {
-    try std.testing.expectEqualStrings("hi", zunic.text("   hi   ").trim().bytes);
-    try std.testing.expectEqualStrings("hi   ", zunic.text("   hi   ").trimStart().bytes);
-    try std.testing.expectEqualStrings("   hi", zunic.text("   hi   ").trimEnd().bytes);
-    try std.testing.expectEqualStrings("hi", zunic.text("\t\t hi \t").trim().bytes);
-    try std.testing.expectEqualStrings("hi", zunic.text("\r\n hi \r\n").trim().bytes);
-    try std.testing.expectEqualStrings("hi", zunic.text("\x0b\x0c hi \x0c\x0b").trim().bytes);
+    try std.testing.expectEqualStrings("hi", text_module.init("   hi   ").trim().bytes);
+    try std.testing.expectEqualStrings("hi   ", text_module.init("   hi   ").trimStart().bytes);
+    try std.testing.expectEqualStrings("   hi", text_module.init("   hi   ").trimEnd().bytes);
+    try std.testing.expectEqualStrings("hi", text_module.init("\t\t hi \t").trim().bytes);
+    try std.testing.expectEqualStrings("hi", text_module.init("\r\n hi \r\n").trim().bytes);
+    try std.testing.expectEqualStrings("hi", text_module.init("\x0b\x0c hi \x0c\x0b").trim().bytes);
     // NUL and DEL are not White_Space and stop the scan.
-    try std.testing.expectEqualStrings("\x00hi\x7f", zunic.text(" \x00hi\x7f ").trim().bytes);
+    try std.testing.expectEqualStrings("\x00hi\x7f", text_module.init(" \x00hi\x7f ").trim().bytes);
 }
 
 test "typographic and ideographic spaces" {
-    try std.testing.expectEqualStrings("hi", zunic.text("\u{00A0}hi\u{00A0}").trim().bytes);
-    try std.testing.expectEqualStrings("hi", zunic.text("\u{202F}hi\u{202F}").trim().bytes);
-    try std.testing.expectEqualStrings("hi", zunic.text("\u{2003}\u{2009}hi\u{205F}").trim().bytes);
-    try std.testing.expectEqualStrings("hi", zunic.text("\u{3000}hi\u{3000}").trim().bytes);
-    try std.testing.expectEqualStrings("hi", zunic.text("\u{1680}hi\u{1680}").trim().bytes);
-    try std.testing.expectEqualStrings("hi", zunic.text("\u{2028}hi\u{2029}").trim().bytes);
-    try std.testing.expectEqualStrings("hi", zunic.text("\u{0085}hi\u{0085}").trim().bytes);
+    try std.testing.expectEqualStrings("hi", text_module.init("\u{00A0}hi\u{00A0}").trim().bytes);
+    try std.testing.expectEqualStrings("hi", text_module.init("\u{202F}hi\u{202F}").trim().bytes);
+    try std.testing.expectEqualStrings("hi", text_module.init("\u{2003}\u{2009}hi\u{205F}").trim().bytes);
+    try std.testing.expectEqualStrings("hi", text_module.init("\u{3000}hi\u{3000}").trim().bytes);
+    try std.testing.expectEqualStrings("hi", text_module.init("\u{1680}hi\u{1680}").trim().bytes);
+    try std.testing.expectEqualStrings("hi", text_module.init("\u{2028}hi\u{2029}").trim().bytes);
+    try std.testing.expectEqualStrings("hi", text_module.init("\u{0085}hi\u{0085}").trim().bytes);
 }
 
 test "malformed edges stop the scan and are preserved" {
     // The plan's named case: an isolated 0xFF between two spaces.
-    try std.testing.expectEqualStrings("\xff", zunic.text(" \xff ").trim().bytes);
-    try std.testing.expectEqualStrings("\xff ", zunic.text(" \xff ").trimStart().bytes);
-    try std.testing.expectEqualStrings(" \xff", zunic.text(" \xff ").trimEnd().bytes);
+    try std.testing.expectEqualStrings("\xff", text_module.init(" \xff ").trim().bytes);
+    try std.testing.expectEqualStrings("\xff ", text_module.init(" \xff ").trimStart().bytes);
+    try std.testing.expectEqualStrings(" \xff", text_module.init(" \xff ").trimEnd().bytes);
 
     const malformed = [_][]const u8{
         "\x80", // isolated continuation byte
@@ -271,60 +272,60 @@ test "malformed edges stop the scan and are preserved" {
     for (malformed) |bad| {
         const padded = try concat(allocator, &.{ " \u{3000}", bad, "\u{00A0} " });
         defer allocator.free(padded);
-        try std.testing.expectEqualStrings(bad, zunic.text(padded).trim().bytes);
+        try std.testing.expectEqualStrings(bad, text_module.init(padded).trim().bytes);
 
         const leading = try concat(allocator, &.{ bad, " " });
         defer allocator.free(leading);
-        try std.testing.expectEqualStrings(bad, zunic.text(leading).trim().bytes);
-        try std.testing.expectEqualStrings(leading, zunic.text(leading).trimStart().bytes);
+        try std.testing.expectEqualStrings(bad, text_module.init(leading).trim().bytes);
+        try std.testing.expectEqualStrings(leading, text_module.init(leading).trimStart().bytes);
 
         const trailing = try concat(allocator, &.{ " ", bad });
         defer allocator.free(trailing);
-        try std.testing.expectEqualStrings(bad, zunic.text(trailing).trim().bytes);
-        try std.testing.expectEqualStrings(trailing, zunic.text(trailing).trimEnd().bytes);
+        try std.testing.expectEqualStrings(bad, text_module.init(trailing).trim().bytes);
+        try std.testing.expectEqualStrings(trailing, text_module.init(trailing).trimEnd().bytes);
     }
 }
 
 test "an overlong or truncated encoding is never mistaken for whitespace" {
     // \xe0\x80\xa0 is an overlong U+0020; \xc0\xa0 an overlong NBSP. Neither
     // may be trimmed, and neither may hide the valid space beside it.
-    try std.testing.expectEqualStrings("\xe0\x80\xa0", zunic.text(" \xe0\x80\xa0 ").trim().bytes);
-    try std.testing.expectEqualStrings("\xc0\xa0", zunic.text(" \xc0\xa0 ").trim().bytes);
+    try std.testing.expectEqualStrings("\xe0\x80\xa0", text_module.init(" \xe0\x80\xa0 ").trim().bytes);
+    try std.testing.expectEqualStrings("\xc0\xa0", text_module.init(" \xc0\xa0 ").trim().bytes);
     // The backward scan must not decode the trailing bytes of a valid
     // four-byte scalar as a scalar of their own.
-    try std.testing.expectEqualStrings("a\u{1F600}", zunic.text("a\u{1F600} ").trim().bytes);
+    try std.testing.expectEqualStrings("a\u{1F600}", text_module.init("a\u{1F600} ").trim().bytes);
     // A truncated four-byte lead followed by real whitespace: the whitespace
     // goes, the malformed lead stays.
-    try std.testing.expectEqualStrings("\xf0", zunic.text("\xf0\u{3000}").trim().bytes);
-    try std.testing.expectEqualStrings("\xf0", zunic.text("\xf0\u{3000}").trimEnd().bytes);
+    try std.testing.expectEqualStrings("\xf0", text_module.init("\xf0\u{3000}").trim().bytes);
+    try std.testing.expectEqualStrings("\xf0", text_module.init("\xf0\u{3000}").trimEnd().bytes);
 }
 
 test "edges are independent across a malformed middle" {
     const input = " \u{00A0}left \xff\xc0\x80 right\u{2003} ";
-    const trimmed = zunic.text(input).trim().bytes;
+    const trimmed = text_module.init(input).trim().bytes;
     try std.testing.expectEqualStrings("left \xff\xc0\x80 right", trimmed);
     // The middle was neither validated nor repaired.
-    try std.testing.expectError(error.InvalidUtf8, zunic.text(trimmed).validate());
+    try std.testing.expectError(error.InvalidUtf8, text_module.init(trimmed).validate());
     // Malformed bytes at one end do not block the other.
-    try std.testing.expectEqualStrings("\xff bytes", zunic.text("\xff bytes ").trim().bytes);
-    try std.testing.expectEqualStrings("bytes \xff", zunic.text(" bytes \xff").trim().bytes);
+    try std.testing.expectEqualStrings("\xff bytes", text_module.init("\xff bytes ").trim().bytes);
+    try std.testing.expectEqualStrings("bytes \xff", text_module.init(" bytes \xff").trim().bytes);
 }
 
 test "code points, not graphemes" {
     // A leading space followed by a combining mark: the space goes, the mark
     // stays, even though the two form one cluster for grapheme purposes.
     const input = " \u{0301}x";
-    try std.testing.expectEqualStrings("\u{0301}x", zunic.text(input).trim().bytes);
-    try std.testing.expectEqualStrings("\u{0301}x", zunic.text(input).trimStart().bytes);
+    try std.testing.expectEqualStrings("\u{0301}x", text_module.init(input).trim().bytes);
+    try std.testing.expectEqualStrings("\u{0301}x", text_module.init(input).trimStart().bytes);
     // The same at the end.
-    try std.testing.expectEqualStrings("x \u{0301}", zunic.text("x \u{0301} ").trim().bytes);
+    try std.testing.expectEqualStrings("x \u{0301}", text_module.init("x \u{0301} ").trim().bytes);
 }
 
 test "escapes receive no special treatment" {
     const input = "  \x1b[31mred\x1b[0m  ";
-    try std.testing.expectEqualStrings("\x1b[31mred\x1b[0m", zunic.text(input).trim().bytes);
+    try std.testing.expectEqualStrings("\x1b[31mred\x1b[0m", text_module.init(input).trim().bytes);
     // ESC itself ends a scan.
-    try std.testing.expectEqualStrings("\x1b", zunic.text(" \x1b ").trim().bytes);
+    try std.testing.expectEqualStrings("\x1b", text_module.init(" \x1b ").trim().bytes);
 }
 
 test "idempotence and composition" {
@@ -337,7 +338,7 @@ test "idempotence and composition" {
         "x",
     };
     for (inputs) |input| {
-        const view = zunic.text(input);
+        const view = text_module.init(input);
         const once = view.trim();
         try std.testing.expectEqualStrings(once.bytes, once.trim().bytes);
         try std.testing.expectEqualStrings(once.bytes, once.trimStart().bytes);
@@ -351,7 +352,7 @@ test "idempotence and composition" {
 test "backing storage is unchanged and slices point into it" {
     var storage = " \u{00A0}hello \n".*;
     const before = storage;
-    const view = zunic.text(&storage);
+    const view = text_module.init(&storage);
     const trimmed = view.trim();
     try std.testing.expectEqualStrings("hello", trimmed.bytes);
     try std.testing.expectEqualSlices(u8, &before, &storage);
@@ -363,9 +364,9 @@ test "substring inputs trim within their own bounds" {
     const whole = "prefix \u{2003} middle \u{2003} suffix";
     const inner = whole[7..18];
     try std.testing.expectEqualStrings("\u{2003} middle ", inner);
-    try std.testing.expectEqualStrings("middle", zunic.text(inner).trim().bytes);
+    try std.testing.expectEqualStrings("middle", text_module.init(inner).trim().bytes);
     // Offsets from the trimmed view are relative to the trimmed bytes.
-    const trimmed = zunic.text(inner).trim();
+    const trimmed = text_module.init(inner).trim();
     var it = trimmed.graphemes().iterator();
     const first = it.next().?;
     try std.testing.expectEqual(@as(usize, 0), first.start.value);
@@ -374,7 +375,7 @@ test "substring inputs trim within their own bounds" {
 
 test "offsets from later iteration index the returned view" {
     const input = "\u{00A0} Hello, \u{4E16}\u{754C}! \n";
-    const trimmed = zunic.text(input).trim();
+    const trimmed = text_module.init(input).trim();
     try std.testing.expectEqualStrings("Hello, \u{4E16}\u{754C}!", trimmed.bytes);
 
     var graphemes = trimmed.graphemes().iterator();
@@ -396,7 +397,7 @@ test "offsets from later iteration index the returned view" {
 
 test "chaining with width, wrapping and normalization" {
     const input = "  cafe\u{0301} \u{3000}";
-    const trimmed = zunic.text(input).trim();
+    const trimmed = text_module.init(input).trim();
     try std.testing.expectEqualStrings("cafe\u{0301}", trimmed.bytes);
     try std.testing.expectEqual(@as(usize, 4), trimmed.width());
     try std.testing.expect(try trimmed.eql("caf\u{00E9}", .canonical));
@@ -404,7 +405,7 @@ test "chaining with width, wrapping and normalization" {
     var buffer: [16]u8 = undefined;
     try std.testing.expectEqualStrings("caf\u{00E9}", try trimmed.normalize(.nfc).writeTo(&buffer));
 
-    const wrapped = try zunic.text("  alpha beta gamma  ").trim().wrap(.{ .max_columns = 10 });
+    const wrapped = try text_module.init("  alpha beta gamma  ").trim().wrap(.{ .max_columns = 10 });
     try std.testing.expectEqual(@as(usize, 2), wrapped.count());
 }
 
@@ -413,38 +414,38 @@ test "an already-trimmed large input is not scanned through its middle" {
     const body = try allocator.alloc(u8, 1 << 16);
     defer allocator.free(body);
     @memset(body, 'a');
-    const view = zunic.text(body);
+    const view = text_module.init(body);
     try std.testing.expectEqual(body.ptr, view.trim().bytes.ptr);
     try std.testing.expectEqual(body.len, view.trim().bytes.len);
 
     const padded = try concat(allocator, &.{ "  \u{3000}", body, "\u{00A0}\t" });
     defer allocator.free(padded);
-    try std.testing.expectEqual(body.len, zunic.text(padded).trim().bytes.len);
+    try std.testing.expectEqual(body.len, text_module.init(padded).trim().bytes.len);
 }
 
 test "isWhitespaceSlice requires the whole slice to be exactly one scalar" {
-    try std.testing.expect(zunic.isWhitespaceSlice(" "));
-    try std.testing.expect(zunic.isWhitespaceSlice("\u{3000}"));
-    try std.testing.expect(zunic.isWhitespaceSlice("\u{00A0}"));
-    try std.testing.expect(!zunic.isWhitespaceSlice(""));
-    try std.testing.expect(!zunic.isWhitespaceSlice("x"));
+    try std.testing.expect(text_module.isWhitespaceSlice(" "));
+    try std.testing.expect(text_module.isWhitespaceSlice("\u{3000}"));
+    try std.testing.expect(text_module.isWhitespaceSlice("\u{00A0}"));
+    try std.testing.expect(!text_module.isWhitespaceSlice(""));
+    try std.testing.expect(!text_module.isWhitespaceSlice("x"));
     // Starts with whitespace but is not only whitespace: a leading space
     // plus a combining mark is two scalars, matching Text.trim()'s
     // code-points-not-graphemes contract.
-    try std.testing.expect(!zunic.isWhitespaceSlice(" \u{0301}"));
-    try std.testing.expect(!zunic.isWhitespaceSlice("  "));
+    try std.testing.expect(!text_module.isWhitespaceSlice(" \u{0301}"));
+    try std.testing.expect(!text_module.isWhitespaceSlice("  "));
     // A whitespace scalar's bytes with a trailing byte appended: no longer
     // exactly one scalar's worth of bytes.
-    try std.testing.expect(!zunic.isWhitespaceSlice("\u{3000}x"));
+    try std.testing.expect(!text_module.isWhitespaceSlice("\u{3000}x"));
     // Malformed and overlong encodings never qualify.
-    try std.testing.expect(!zunic.isWhitespaceSlice("\xff"));
-    try std.testing.expect(!zunic.isWhitespaceSlice("\xc0\xa0")); // overlong NBSP
-    try std.testing.expect(!zunic.isWhitespaceSlice("\xc2")); // truncated
+    try std.testing.expect(!text_module.isWhitespaceSlice("\xff"));
+    try std.testing.expect(!text_module.isWhitespaceSlice("\xc0\xa0")); // overlong NBSP
+    try std.testing.expect(!text_module.isWhitespaceSlice("\xc2")); // truncated
 }
 
 test "Text.isWhitespace over real grapheme spans" {
     const bytes = "a \u{3000}\u{0301}";
-    const view = zunic.text(bytes);
+    const view = text_module.init(bytes);
     var it = view.graphemes().iterator();
 
     const a = it.next().?;
@@ -467,7 +468,7 @@ test "Text.isWhitespace over real grapheme spans" {
 
 test "Text.isWhitespace agrees for Span and MeasuredSpan" {
     const bytes = "x \u{00A0}y";
-    const view = zunic.text(bytes);
+    const view = text_module.init(bytes);
     var plain = view.graphemes().iterator();
     var measured = view.graphemes().measured().iterator();
     while (plain.next()) |span| {
@@ -484,7 +485,7 @@ test "Text.isWhitespace on non-grapheme spans" {
     // span answers false even though both scalars are individually
     // White_Space.
     const with_terms = "a\r\nb\u{2028}c\x0Cd";
-    const terms_view = zunic.text(with_terms);
+    const terms_view = text_module.init(with_terms);
     var terms = terms_view.terminators().iterator();
     const crlf = terms.next().?;
     try std.testing.expectEqualStrings("\r\n", with_terms[crlf.start.value..crlf.end.value]);

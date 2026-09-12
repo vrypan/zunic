@@ -278,7 +278,7 @@ DerivedCoreProperties flags in one lookup. These are scalar facts with no
 clustering or context. `isUppercase` also covers some `Nl`/`So` code points
 but not `Lt`; `isGraphemeExtend` differs from `grapheme().gcb == .extend` on
 five code points in Unicode 17.0.0. See the field comments in
-[src/codepoint.zig](../src/codepoint.zig) for details.
+[src/cp/cp.zig](../src/cp/cp.zig) for details.
 
 `cp(value).terminal()` returns East Asian width, emoji flags, and terminal
 width facts in one lookup. `standalone` follows the pinned uucode convention

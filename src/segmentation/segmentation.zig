@@ -4,3 +4,5 @@
 //! grouped because they answer the same shape of question.
 pub const grapheme = @import("grapheme.zig");
 pub const word = @import("word.zig");
+
+pub const stream = @import("grapheme_stream.zig");

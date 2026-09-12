@@ -1,4 +1,4 @@
-const grapheme = @import("segmentation").grapheme;
+const grapheme = @import("grapheme.zig");
 
 /// Incremental default UAX #29 grapheme state. Initialize with `.{};` copying
 /// the value creates a checkpoint suitable for speculative appends.

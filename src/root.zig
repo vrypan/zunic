@@ -14,9 +14,8 @@
 //! `text` reads bytes as plain text. ANSI escape sequences are ordinary bytes
 //! here, so remove them before measuring or wrapping styled input.
 pub const utf8 = @import("encoding").utf8;
-const codepoint_view = @import("codepoint.zig");
-const text_view = @import("text.zig");
-const text_trim = @import("text_trim.zig");
+const codepoint_view = @import("cp");
+const text_view = @import("text");
 const types = @import("types");
 const wrap_engine = @import("layout").wrap;
 pub const line_break = @import("linebreak");
@@ -63,14 +62,10 @@ pub const MeasuredGraphemes = text_view.MeasuredGraphemes;
 
 /// Open a text view. Borrowed and zero-cost: no scanning happens until a
 /// question is asked.
-pub fn text(bytes: []const u8) Text {
-    return .{ .bytes = bytes };
-}
+pub const text = text_view.init;
 
 /// Open a code-point view without decoding or looking up any properties.
-pub fn cp(value: u21) CodepointView {
-    return .{ .value = value };
-}
+pub const cp = codepoint_view.init;
 
 pub const CodepointView = codepoint_view.CodepointView;
 pub const GeneralProperties = codepoint_view.GeneralProperties;
@@ -80,7 +75,7 @@ pub const GeneralProperties = codepoint_view.GeneralProperties;
 /// slice that did not come from a span at all. It answers only the Unicode
 /// question; callers decide how whitespace participates in their own higher
 /// level protocols.
-pub const isWhitespaceSlice = text_trim.isWhitespaceSlice;
+pub const isWhitespaceSlice = text_view.isWhitespaceSlice;
 
 /// Whether every byte in `bytes` is below 0x80. Empty input is ASCII, and so
 /// is any ASCII control byte, including NUL, ESC, and DEL.
@@ -113,14 +108,14 @@ pub const EastAsianWidth = @import("tables").terminal_properties.EastAsianWidth;
 /// semantics and wider-`u21` fallback as the CodepointView methods.
 pub const TerminalProperties = codepoint_view.TerminalProperties;
 
-pub const CaseFold = @import("case_folding.zig").CaseFold;
+pub const CaseFold = codepoint_view.CaseFold;
 
 /// Copyable state for incremental default UAX #29 grapheme decisions.
-pub const GraphemeState = @import("grapheme_stream.zig").GraphemeState;
+pub const GraphemeState = @import("segmentation").stream.GraphemeState;
 /// Report whether a grapheme boundary occurs before `current` and advance the
 /// incremental state. See `GraphemeState` and the API documentation for the
 /// adjacent-pair calling protocol.
-pub const graphemeBreak = @import("grapheme_stream.zig").graphemeBreak;
+pub const graphemeBreak = @import("segmentation").stream.graphemeBreak;
 
 /// One code point's Unicode `General_Category`: `Lu`, `Ll`, `Nd`, `Po`, and
 /// so on, spelled in lowercase (`no` becomes `no_` to dodge the keyword).
