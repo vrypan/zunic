@@ -6,7 +6,7 @@ Compare the current Zunic working tree with
 are built with the same Zig version, target, optimization mode, and CPU model.
 The dependency hash in `build.zig.zon` verifies the fetched package.
 
-uucode and Zunic overlap in nine benchmarked operations:
+uucode and Zunic overlap in fifteen benchmarked operations:
 
 | Operation | Zunic | uucode | Timed result consumed |
 |---|---|---|---|
@@ -17,16 +17,24 @@ uucode and Zunic overlap in nine benchmarked operations:
 | Terminal properties | `cp(value).terminal()` | configured-table `getAll` | every scalar's ending offset and property values, including `Emoji` and `Emoji_Component` |
 | Fused scalar terminal lookup | `cp(value).terminal()` | configured-table `getAll` | every predecoded scalar and property value, including `Emoji` and `Emoji_Component` |
 | Full case folding | `cp(value).fullCaseFold()` | `case_folding_full` | every bounded mapping |
+| Simple uppercase | `cp(value).simpleUppercase()` | `simple_uppercase_mapping` | every predecoded scalar and mapped value |
+| Simple lowercase | `cp(value).simpleLowercase()` | `simple_lowercase_mapping` | every predecoded scalar and mapped value |
+| Simple titlecase | `cp(value).simpleTitlecase()` | `simple_titlecase_mapping` | every predecoded scalar and mapped value |
+| Numeric properties | `cp(value).numeric()` | numeric type and value fields | every exact reduced rational value and kind |
+| Combining class | `cp(value).canonicalCombiningClass()` | `canonical_combining_class` | every predecoded scalar and class |
+| Decomposition | `cp(value).decomposition()` | decomposition type and mapping | every immediate mapping and type |
 | Streaming graphemes | `graphemeBreak` | `computeGraphemeBreak` | every adjacent-pair boundary and ending offset |
 | Ghostty scalar width | public width/GCB composition | matching uucode field composition | derived width for every scalar |
 
 The UTF-8 row measures the low-level `zunic.utf8.step()` decoder, not
 `text(bytes).codepoints().iterator()`. It does not measure the public iterator's
 `CodepointView` return or sticky `err` handling. Property rows use the current
-`cp(value)` API; grapheme rows use the tolerant text iterators.
+`cp(value)` API; grapheme rows use the tolerant text iterators. Simple case
+mapping, numeric properties, combining class, and decomposition receive
+predecoded codepoints so their timings isolate lookup and result handling.
 
-uucode does not currently expose comparable line breaking, normalization,
-word boundaries, or wrapping, so those Zunic features are not
+uucode does not currently expose comparable line breaking, complete text
+normalization, word boundaries, or wrapping, so those Zunic features are not
 included. The shared corpora are the same eight multilingual files used by
 `bench-vs-rust`; the suite checks them before use and embeds them into both
 executables.
@@ -68,30 +76,38 @@ less time, below 1 means uucode took less time.
 Both implementations receive the exact same valid UTF-8 bytes, and file I/O
 is excluded from timing. The terminal-properties row includes UTF-8 decoding
 because its public contract starts from bytes. The fused scalar lookup receives
-predecoded code points and isolates the two table APIs. The adapters consume
+predecoded code points and isolates the two table APIs. The new codepoint rows
+also receive predecoded values. The adapters consume
 equivalent results and the driver compares their exact output records. Multi-result
 operations use independent field accumulators that are combined once after
 traversal, reducing checksum dependency-chain overhead. The driver also verifies
 that each timed count and checksum agrees with that peer's dump and that neither
 output nor the source corpus changes during a run.
 
+For numeric properties, Zunic returns a reduced rational directly. uucode
+returns non-decimal numeric values as strings, so its timed adapter parses and
+reduces those strings to produce the same result a caller receives from Zunic.
+
 Both peers now use Unicode 17.0.0. Their whole-grapheme terminal-width policies
 still differ, so output differences are reported per corpus rather than treated
-as benchmark failures. Terminal-property, full-fold, and Ghostty-width outputs
-must match exactly. Streaming boundaries match on the document corpora; the
+as benchmark failures. Terminal-property, case-mapping, numeric,
+normalization-fact, full-fold, and Ghostty-width outputs must match exactly.
+Streaming boundaries match on the document corpora; the
 focused corpus pins the known isolated-emoji-modifier difference between
 Zunic's default UAX #29 GB9 behavior and uucode's modifier tailoring.
 Measured traversal excludes Zunic's `renderable` result because uucode has no
-counterpart. uucode is configured with only the table fields used by the eight
-operations; unrelated Unicode properties are not built into its runtime tables.
+counterpart. uucode is configured with only the table fields used by the
+benchmarked operations; unrelated Unicode properties are not built into its
+runtime tables.
 Its `getAll("0", cp)` call returns every field assigned to generated table
 `"0"`; this suite uses that low-level fused lookup for the terminal-property
 row. The table name and returned fields depend on the consuming build's uucode
 configuration rather than forming a fixed terminal-property API.
 The eight multilingual document corpora are supplemented by a small maintained
-`features` corpus containing expanding/common folds, valid VS15/VS16 sequences,
-an emoji modifier, a ZWJ sequence, a regional-indicator pair, combining marks,
-prepend, and an Indic conjunct.
+`features` corpus containing expanding/common folds, simple case mappings,
+numeric values, canonical and compatibility decompositions, valid VS15/VS16
+sequences, an emoji modifier, a ZWJ sequence, a regional-indicator pair,
+combining marks, prepend, and an Indic conjunct.
 
 Binary size is recorded but is not directly comparable as library size: each
 standalone executable includes its adapter, timing harness, embedded corpora,

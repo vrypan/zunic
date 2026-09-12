@@ -16,4 +16,5 @@ pub const line_break_machine_data = @import("line_break_machine_data.zig");
 pub const general_category = @import("general_category.zig");
 pub const terminal_properties = @import("terminal_properties.zig");
 pub const case_folding = @import("case_folding.zig");
+pub const simple_case_mappings = @import("simple_case_mappings.zig");
 pub const numeric = @import("numeric_properties.zig");

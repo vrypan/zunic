@@ -35,6 +35,22 @@ test "bounded fold results compare scalar keys without allocation" {
     try std.testing.expect(std.mem.eql(u21, final_sigma.slice(), capital_sigma.slice()));
 }
 
+test "simple case mappings return one code point" {
+    try std.testing.expectEqual(@as(u21, 'A'), codepoints.init('a').simpleUppercase());
+    try std.testing.expectEqual(@as(u21, 'a'), codepoints.init('A').simpleLowercase());
+    try std.testing.expectEqual(@as(u21, 'A'), codepoints.init('a').simpleTitlecase());
+
+    // LATIN SMALL LETTER DZ WITH CARON has distinct titlecase and uppercase mappings.
+    try std.testing.expectEqual(@as(u21, 0x01c4), codepoints.init(0x01c6).simpleUppercase());
+    try std.testing.expectEqual(@as(u21, 0x01c5), codepoints.init(0x01c6).simpleTitlecase());
+    try std.testing.expectEqual(@as(u21, 0x01c6), codepoints.init(0x01c4).simpleLowercase());
+
+    // Sharp S has no simple uppercase mapping. Full text casing may expand it.
+    try std.testing.expectEqual(@as(u21, 0x00df), codepoints.init(0x00df).simpleUppercase());
+    try std.testing.expectEqual(@as(u21, 0x1f600), codepoints.init(0x1f600).simpleLowercase());
+    try std.testing.expectEqual(@as(u21, 0x110000), codepoints.init(0x110000).simpleUppercase());
+}
+
 test "every C and F mapping and every identity agree with CaseFolding.txt" {
     const seen = try std.testing.allocator.alloc(bool, 0x110000);
     defer std.testing.allocator.free(seen);

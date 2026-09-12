@@ -108,6 +108,117 @@ pub inline fn caseFold(bytes: []const u8) Stats {
     return .{ .units = units, .checksum = finishSums(sums) };
 }
 
+const SimpleCase = enum { uppercase, lowercase, titlecase };
+
+inline fn simpleCase(codepoints: []const u21, comptime operation: SimpleCase) Stats {
+    var sums: [2]usize = @splat(0);
+    for (codepoints) |cp| {
+        const mapped = switch (operation) {
+            .uppercase => uucode.get(.simple_uppercase_mapping, cp),
+            .lowercase => uucode.get(.simple_lowercase_mapping, cp),
+            .titlecase => uucode.get(.simple_titlecase_mapping, cp),
+        };
+        sums[0] +%= cp;
+        sums[1] +%= mapped;
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
+pub inline fn simpleUppercase(codepoints: []const u21) Stats {
+    return simpleCase(codepoints, .uppercase);
+}
+
+pub inline fn simpleLowercase(codepoints: []const u21) Stats {
+    return simpleCase(codepoints, .lowercase);
+}
+
+pub inline fn simpleTitlecase(codepoints: []const u21) Stats {
+    return simpleCase(codepoints, .titlecase);
+}
+
+const Rational = struct { numerator: i64, denominator: u16 };
+
+fn gcd(a_value: u64, b_value: u64) u64 {
+    var a = a_value;
+    var b = b_value;
+    while (b != 0) {
+        const next = a % b;
+        a = b;
+        b = next;
+    }
+    return a;
+}
+
+fn parseRational(bytes: []const u8) Rational {
+    const slash = std.mem.indexOfScalar(u8, bytes, '/');
+    var numerator = std.fmt.parseInt(i64, bytes[0 .. slash orelse bytes.len], 10) catch unreachable;
+    var denominator: u16 = if (slash) |index|
+        std.fmt.parseInt(u16, bytes[index + 1 ..], 10) catch unreachable
+    else
+        1;
+    const magnitude: u64 = @intCast(if (numerator < 0) -numerator else numerator);
+    const divisor = gcd(magnitude, denominator);
+    numerator = @divExact(numerator, @as(i64, @intCast(divisor)));
+    denominator = @intCast(@divExact(@as(u64, denominator), divisor));
+    return .{ .numerator = numerator, .denominator = denominator };
+}
+
+fn numeric(cp: u21) ?struct { kind: u2, value: Rational } {
+    const kind = uucode.get(.numeric_type, cp);
+    return switch (kind) {
+        .none => null,
+        .decimal => .{ .kind = 0, .value = .{
+            .numerator = uucode.get(.numeric_value_decimal, cp).?, .denominator = 1,
+        } },
+        .digit => .{ .kind = 1, .value = .{
+            .numerator = uucode.get(.numeric_value_digit, cp).?, .denominator = 1,
+        } },
+        .numeric => blk: {
+            const bytes = uucode.get(.numeric_value_numeric, cp);
+            break :blk .{ .kind = 2, .value = parseRational(bytes) };
+        },
+    };
+}
+
+pub inline fn numericProperties(codepoints: []const u21) Stats {
+    var sums: [4]usize = @splat(0);
+    for (codepoints) |cp| {
+        sums[0] +%= cp;
+        if (numeric(cp)) |result| {
+            sums[1] +%= result.kind + 1;
+            sums[2] +%= @as(usize, @bitCast(result.value.numerator));
+            sums[3] +%= result.value.denominator;
+        }
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
+pub inline fn combiningClass(codepoints: []const u21) Stats {
+    var sums: [2]usize = @splat(0);
+    for (codepoints) |cp| {
+        sums[0] +%= cp;
+        sums[1] +%= uucode.get(.canonical_combining_class, cp);
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
+pub inline fn decomposition(codepoints: []const u21) Stats {
+    var sums: [5]usize = @splat(0);
+    for (codepoints) |cp| {
+        sums[0] +%= cp;
+        const kind = uucode.get(.decomposition_type, cp);
+        if (kind != .default) {
+            var identity: [1]u21 = undefined;
+            const mapping = uucode.get(.decomposition_mapping, cp).with(&identity, cp);
+            sums[1] +%= 1;
+            sums[2] +%= @intFromEnum(kind) - 1;
+            sums[3] +%= mapping.len;
+            for (mapping) |mapped| sums[4] +%= mapped;
+        }
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
 pub inline fn graphemeStream(bytes: []const u8) Stats {
     var it = uucode.utf8.Iterator.init(bytes);
     const first = it.next() orelse return .{ .units = 0, .checksum = 0xcbf29ce484222325 };
@@ -215,6 +326,57 @@ pub fn dumpCaseFold(out: *std.Io.Writer, bytes: []const u8) !void {
         try out.print("{d}:", .{it.i});
         for (folded) |value| try out.print("{x}.", .{value});
         try out.writeByte(',');
+    }
+}
+
+fn dumpSimpleCase(out: *std.Io.Writer, codepoints: []const u21, comptime operation: SimpleCase) !void {
+    for (codepoints) |cp| {
+        const mapped = switch (operation) {
+            .uppercase => uucode.get(.simple_uppercase_mapping, cp),
+            .lowercase => uucode.get(.simple_lowercase_mapping, cp),
+            .titlecase => uucode.get(.simple_titlecase_mapping, cp),
+        };
+        try out.print("{x}:{x},", .{ cp, mapped });
+    }
+}
+
+pub fn dumpSimpleUppercase(out: *std.Io.Writer, codepoints: []const u21) !void {
+    return dumpSimpleCase(out, codepoints, .uppercase);
+}
+
+pub fn dumpSimpleLowercase(out: *std.Io.Writer, codepoints: []const u21) !void {
+    return dumpSimpleCase(out, codepoints, .lowercase);
+}
+
+pub fn dumpSimpleTitlecase(out: *std.Io.Writer, codepoints: []const u21) !void {
+    return dumpSimpleCase(out, codepoints, .titlecase);
+}
+
+pub fn dumpNumericProperties(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp| {
+        if (numeric(cp)) |result| {
+            try out.print("{x}:{d}:{d}:{d},", .{
+                cp, result.kind, result.value.numerator, result.value.denominator,
+            });
+        } else try out.print("{x}:n,", .{cp});
+    }
+}
+
+pub fn dumpCombiningClass(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp|
+        try out.print("{x}:{d},", .{ cp, uucode.get(.canonical_combining_class, cp) });
+}
+
+pub fn dumpDecomposition(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp| {
+        const kind = uucode.get(.decomposition_type, cp);
+        if (kind != .default) {
+            var identity: [1]u21 = undefined;
+            const mapping = uucode.get(.decomposition_mapping, cp).with(&identity, cp);
+            try out.print("{x}:{d}:", .{ cp, @intFromEnum(kind) - 1 });
+            for (mapping) |mapped| try out.print("{x}.", .{mapped});
+            try out.writeByte(',');
+        } else try out.print("{x}:n,", .{cp});
     }
 }
 

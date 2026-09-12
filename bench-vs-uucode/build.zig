@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         // Configure only the data used by the comparable operations.
-        .fields = @as([]const []const u8, &.{
+        .fields_0 = @as([]const []const u8, &.{
             "grapheme_break",
             "grapheme_break_no_control",
             "east_asian_width",
@@ -22,6 +22,20 @@ pub fn build(b: *std.Build) void {
             "case_folding_full",
             "wcwidth_standalone",
             "wcwidth_zero_in_grapheme",
+        }),
+        .fields_1 = @as([]const []const u8, &.{"simple_uppercase_mapping"}),
+        .fields_2 = @as([]const []const u8, &.{"simple_lowercase_mapping"}),
+        .fields_3 = @as([]const []const u8, &.{"simple_titlecase_mapping"}),
+        .fields_4 = @as([]const []const u8, &.{
+            "numeric_type",
+            "numeric_value_decimal",
+            "numeric_value_digit",
+            "numeric_value_numeric",
+        }),
+        .fields_5 = @as([]const []const u8, &.{"canonical_combining_class"}),
+        .fields_6 = @as([]const []const u8, &.{
+            "decomposition_type",
+            "decomposition_mapping",
         }),
     });
 

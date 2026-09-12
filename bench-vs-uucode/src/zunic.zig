@@ -112,6 +112,70 @@ pub inline fn caseFold(bytes: []const u8) Stats {
     return .{ .units = units, .checksum = finishSums(sums) };
 }
 
+const SimpleCase = enum { uppercase, lowercase, titlecase };
+
+inline fn simpleCase(codepoints: []const u21, comptime operation: SimpleCase) Stats {
+    var sums: [2]usize = @splat(0);
+    for (codepoints) |cp| {
+        const mapped = switch (operation) {
+            .uppercase => zunic.cp(cp).simpleUppercase(),
+            .lowercase => zunic.cp(cp).simpleLowercase(),
+            .titlecase => zunic.cp(cp).simpleTitlecase(),
+        };
+        sums[0] +%= cp;
+        sums[1] +%= mapped;
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
+pub inline fn simpleUppercase(codepoints: []const u21) Stats {
+    return simpleCase(codepoints, .uppercase);
+}
+
+pub inline fn simpleLowercase(codepoints: []const u21) Stats {
+    return simpleCase(codepoints, .lowercase);
+}
+
+pub inline fn simpleTitlecase(codepoints: []const u21) Stats {
+    return simpleCase(codepoints, .titlecase);
+}
+
+pub inline fn numericProperties(codepoints: []const u21) Stats {
+    var sums: [4]usize = @splat(0);
+    for (codepoints) |cp| {
+        sums[0] +%= cp;
+        if (zunic.cp(cp).numeric()) |value| {
+            sums[1] +%= @intFromEnum(value.kind) + 1;
+            sums[2] +%= @as(usize, @bitCast(value.numerator));
+            sums[3] +%= value.denominator;
+        }
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
+pub inline fn combiningClass(codepoints: []const u21) Stats {
+    var sums: [2]usize = @splat(0);
+    for (codepoints) |cp| {
+        sums[0] +%= cp;
+        sums[1] +%= zunic.cp(cp).canonicalCombiningClass();
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
+pub inline fn decomposition(codepoints: []const u21) Stats {
+    var sums: [5]usize = @splat(0);
+    for (codepoints) |cp| {
+        sums[0] +%= cp;
+        if (zunic.cp(cp).decomposition()) |value| {
+            sums[1] +%= 1;
+            sums[2] +%= @intFromEnum(value.type);
+            sums[3] +%= value.mapping.len;
+            for (value.mapping) |mapped| sums[4] +%= mapped;
+        }
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
 pub inline fn graphemeStream(bytes: []const u8) Stats {
     if (bytes.len == 0) return .{ .units = 0, .checksum = 0xcbf29ce484222325 };
     const first = zunic.utf8.step(bytes);
@@ -222,6 +286,54 @@ pub fn dumpCaseFold(out: *std.Io.Writer, bytes: []const u8) !void {
         try out.print("{d}:", .{pos});
         for (folded.slice()) |cp| try out.print("{x}.", .{cp});
         try out.writeByte(',');
+    }
+}
+
+fn dumpSimpleCase(out: *std.Io.Writer, codepoints: []const u21, comptime operation: SimpleCase) !void {
+    for (codepoints) |cp| {
+        const mapped = switch (operation) {
+            .uppercase => zunic.cp(cp).simpleUppercase(),
+            .lowercase => zunic.cp(cp).simpleLowercase(),
+            .titlecase => zunic.cp(cp).simpleTitlecase(),
+        };
+        try out.print("{x}:{x},", .{ cp, mapped });
+    }
+}
+
+pub fn dumpSimpleUppercase(out: *std.Io.Writer, codepoints: []const u21) !void {
+    return dumpSimpleCase(out, codepoints, .uppercase);
+}
+
+pub fn dumpSimpleLowercase(out: *std.Io.Writer, codepoints: []const u21) !void {
+    return dumpSimpleCase(out, codepoints, .lowercase);
+}
+
+pub fn dumpSimpleTitlecase(out: *std.Io.Writer, codepoints: []const u21) !void {
+    return dumpSimpleCase(out, codepoints, .titlecase);
+}
+
+pub fn dumpNumericProperties(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp| {
+        if (zunic.cp(cp).numeric()) |value| {
+            try out.print("{x}:{d}:{d}:{d},", .{
+                cp, @intFromEnum(value.kind), value.numerator, value.denominator,
+            });
+        } else try out.print("{x}:n,", .{cp});
+    }
+}
+
+pub fn dumpCombiningClass(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp|
+        try out.print("{x}:{d},", .{ cp, zunic.cp(cp).canonicalCombiningClass() });
+}
+
+pub fn dumpDecomposition(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp| {
+        if (zunic.cp(cp).decomposition()) |value| {
+            try out.print("{x}:{d}:", .{ cp, @intFromEnum(value.type) });
+            for (value.mapping) |mapped| try out.print("{x}.", .{mapped});
+            try out.writeByte(',');
+        } else try out.print("{x}:n,", .{cp});
     }
 }
 

@@ -21,6 +21,11 @@ property accessors. Whitespace uses a small fixed predicate shared with text
 trimming. Case folding has an ASCII uppercase fast path followed by indexed
 mapping tables, returning an owned buffer of at most three values.
 
+The three simple case mappings share a class-deduplicated trie. Each class
+stores signed uppercase, lowercase, and titlecase deltas from the input value;
+ASCII letters bypass the table. Keeping this separate from full case folding
+preserves the one-codepoint result and the distinct Unicode semantics.
+
 Numeric values use a separate three-stage trie whose class records contain an
 exact reduced numerator and denominator. Keeping it separate avoids adding
 numeric data to general-property lookups. Normalization's combining class

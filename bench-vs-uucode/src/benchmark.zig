@@ -31,6 +31,12 @@ const Operation = enum {
     terminal_properties,
     terminal_lookup,
     case_fold,
+    simple_uppercase,
+    simple_lowercase,
+    simple_titlecase,
+    numeric_properties,
+    combining_class,
+    decomposition,
     grapheme_stream,
     ghostty_width,
 };
@@ -50,6 +56,12 @@ inline fn run(comptime operation: Operation, case: Case) peer.Stats {
         .terminal_properties => peer.terminalProperties(bytes),
         .terminal_lookup => peer.terminalLookup(codepoints),
         .case_fold => peer.caseFold(bytes),
+        .simple_uppercase => peer.simpleUppercase(codepoints),
+        .simple_lowercase => peer.simpleLowercase(codepoints),
+        .simple_titlecase => peer.simpleTitlecase(codepoints),
+        .numeric_properties => peer.numericProperties(codepoints),
+        .combining_class => peer.combiningClass(codepoints),
+        .decomposition => peer.decomposition(codepoints),
         .grapheme_stream => peer.graphemeStream(bytes),
         .ghostty_width => peer.ghosttyWidth(bytes),
     };
@@ -114,6 +126,12 @@ fn dumpOne(out: *std.Io.Writer, case: Case, comptime operation: Operation) !void
         .terminal_properties => try peer.dumpTerminalProperties(out, case.text),
         .terminal_lookup => try peer.dumpTerminalLookup(out, case.codepoints),
         .case_fold => try peer.dumpCaseFold(out, case.text),
+        .simple_uppercase => try peer.dumpSimpleUppercase(out, case.codepoints),
+        .simple_lowercase => try peer.dumpSimpleLowercase(out, case.codepoints),
+        .simple_titlecase => try peer.dumpSimpleTitlecase(out, case.codepoints),
+        .numeric_properties => try peer.dumpNumericProperties(out, case.codepoints),
+        .combining_class => try peer.dumpCombiningClass(out, case.codepoints),
+        .decomposition => try peer.dumpDecomposition(out, case.codepoints),
         .grapheme_stream => try peer.dumpGraphemeStream(out, case.text),
         .ghostty_width => try peer.dumpGhosttyWidth(out, case.text),
     }
@@ -154,7 +172,7 @@ pub fn main(init: std.process.Init) !void {
     if (args.len == 2 and std.mem.eql(u8, args[1], "--dump")) return printDump(out, init.arena.allocator());
     if (args.len != 2 or !std.mem.eql(u8, args[1], "--bench")) return error.UnexpectedArgument;
 
-    try out.print("protocol=5 suite=unicode peer={s} unicode={s} samples={d} calibration_ms={d} input=bytes+predecoded_codepoints consumption=operation_checksum_v5\n", .{
+    try out.print("protocol=6 suite=unicode peer={s} unicode={s} samples={d} calibration_ms={d} input=bytes+predecoded_codepoints consumption=operation_checksum_v6\n", .{
         peer.name, peer.unicode_version, sample_count, target_ns / std.time.ns_per_ms,
     });
     var cases: [source_cases.len]Case = undefined;
@@ -164,8 +182,15 @@ pub fn main(init: std.process.Init) !void {
     try out.flush();
 }
 
-test {
-    // `benchmark.py --self-test` executes both adapters and verifies every
-    // exact dump. This target still compiles the complete benchmark surface.
-    _ = main;
+test "every timed operation is instantiated" {
+    const codepoints = [_]u21{ 'A', 0x00df, 0x01c6, 0x0301, 0x2153, 0xfb01 };
+    const case: Case = .{
+        .name = "compile-test",
+        .text = "Aßǆ́⅓ﬁ",
+        .codepoints = &codepoints,
+    };
+    inline for (@typeInfo(Operation).@"enum".fields) |field| {
+        const result = run(@enumFromInt(field.value), case);
+        try std.testing.expect(result.units <= case.text.len);
+    }
 }

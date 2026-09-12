@@ -228,6 +228,25 @@ not appear here. Use [text normalization](../text/normalization/README.md) to
 produce NFC, NFD, NFKC, or NFKD output. `fullCompositionExclusion` reports
 whether a canonical mapping has Unicode's `Full_Composition_Exclusion` fact.
 
+### Simple case mappings
+
+Use `simpleUppercase()`, `simpleLowercase()`, and `simpleTitlecase()` when one
+codepoint must map to exactly one codepoint:
+
+```zig
+std.debug.print("U+{X}\n", .{zunic.cp(0x01c6).simpleUppercase()}); // ǆ → Ǆ
+std.debug.print("U+{X}\n", .{zunic.cp(0x01c6).simpleTitlecase()}); // ǆ → ǅ
+std.debug.print("U+{X}\n", .{zunic.cp(0x01c4).simpleLowercase()}); // Ǆ → ǆ
+// U+1C4
+// U+1C5
+// U+1C6
+```
+
+An unmapped value returns itself. These methods apply the simple mappings in
+`UnicodeData.txt`; they do not expand one codepoint into several or apply
+contextual and locale-sensitive rules. For example, `simpleUppercase()` leaves
+`ß` unchanged even though full uppercase conversion can produce `SS`.
+
 ### Case folding
 
 `fullCaseFold()` returns the full default Unicode case-fold mapping. One
@@ -259,6 +278,7 @@ Operations have defined fallbacks for values above `zunic.max_codepoint`:
 | `width()` | `1` |
 | `isEastAsianWide()`, `isWhitespace()` | `false` |
 | `fullCaseFold()` | The original value |
+| Simple case mappings | The original value |
 | `numeric()`, `decomposition()` | `null` |
 | `canonicalCombiningClass()` | `0` |
 

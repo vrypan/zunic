@@ -223,6 +223,8 @@ pub fn build(b: *std.Build) void {
     group_steps.get("unicode-properties").?.dependOn(&verify_numeric_properties.step);
     const verify_case_folding = b.addSystemCommand(&.{ "python3", "src/tools/test-case-folding.py" });
     group_steps.get("case-folding").?.dependOn(&verify_case_folding.step);
+    const verify_simple_case_mappings = b.addSystemCommand(&.{ "python3", "src/tools/test-simple-case-mappings.py" });
+    group_steps.get("case-folding").?.dependOn(&verify_simple_case_mappings.step);
 
     // Keep the >u16 counter regression in the normal gate without running
     // the small-buffer stress fixtures with a quarter-megabyte run limit.

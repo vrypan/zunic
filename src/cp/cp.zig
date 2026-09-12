@@ -80,6 +80,26 @@ pub const CodepointView = packed struct(u32) {
         return folding.fullCaseFold(self.value);
     }
 
+    /// Unicode simple uppercase mapping, or the original value when unmapped.
+    /// This maps one code point to one code point and applies no contextual or
+    /// locale-sensitive casing rules.
+    pub fn simpleUppercase(self: CodepointView) u21 {
+        return tables.simple_case_mappings.simpleUppercase(self.value);
+    }
+
+    /// Unicode simple lowercase mapping, or the original value when unmapped.
+    /// This maps one code point to one code point and applies no contextual or
+    /// locale-sensitive casing rules.
+    pub fn simpleLowercase(self: CodepointView) u21 {
+        return tables.simple_case_mappings.simpleLowercase(self.value);
+    }
+
+    /// Unicode simple titlecase mapping, or the original value when unmapped.
+    /// Complete titlecasing requires text and word context.
+    pub fn simpleTitlecase(self: CodepointView) u21 {
+        return tables.simple_case_mappings.simpleTitlecase(self.value);
+    }
+
     /// Unicode Canonical_Combining_Class, or zero for an unclassified or
     /// out-of-range value.
     pub fn canonicalCombiningClass(self: CodepointView) u8 {

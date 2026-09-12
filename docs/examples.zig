@@ -269,6 +269,10 @@ test "docs: code-point property groups" {
     const decomposition = zunic.cp(0x00e9).decomposition().?;
     try std.testing.expectEqual(zunic.DecompositionType.canonical, decomposition.type);
     try std.testing.expectEqualSlices(u21, &.{ 'e', 0x0301 }, decomposition.mapping);
+
+    try std.testing.expectEqual(@as(u21, 0x01c4), zunic.cp(0x01c6).simpleUppercase());
+    try std.testing.expectEqual(@as(u21, 0x01c5), zunic.cp(0x01c6).simpleTitlecase());
+    try std.testing.expectEqual(@as(u21, 0x01c6), zunic.cp(0x01c4).simpleLowercase());
 }
 
 test "docs: strict codepoint iteration exposes decoding errors after the loop" {
