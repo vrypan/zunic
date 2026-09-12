@@ -90,8 +90,6 @@ Empty input and ASCII control bytes, including NUL, ESC, and DEL, count as
 ASCII. This is not a printable-text check. Each call scans until it finds a
 non-ASCII byte or reaches the end; the result is not cached.
 
-See the [API overview](../README.md#text) for all signatures and result types.
-
 ## Use a returned Text
 
 Trimming returns a Text view over a smaller slice. Print its `.bytes`, call

@@ -141,7 +141,8 @@ the width of a whole cluster requires context.
 These facts alone do not decide a boundary. Use
 [text grapheme iteration](../text/graphemes/README.md) for UTF-8 text, or
 `zunic.graphemeBreak(previous, current, &state)` with `zunic.GraphemeState`
-for incremental codepoint input. Both apply the contextual segmentation rules.
+for [incremental codepoint input](grapheme-break.md). Both apply the contextual
+segmentation rules.
 
 ## Width, whitespace, and case folding
 

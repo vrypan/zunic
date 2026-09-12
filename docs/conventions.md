@@ -2,18 +2,31 @@
 
 [Documentation index](README.md)
 
-```zig
-pub fn text(bytes: []const u8) Text;
-```
+Use these conventions when working with Zunic views, iterators, and results.
+Operation pages describe their specific return types and error behavior.
 
-`zunic.text(bytes)` constructs a view without scanning, validating, copying, or
-allocating. It exposes the borrowed slice as `.bytes`. Keep its storage alive
-and unchanged while using a view or iterator. A view does not own or free memory.
+## Ownership and lifetimes
+
+`zunic.cp(value)` holds a numeric value. `zunic.text(bytes)` borrows the input
+slice and exposes it as `.bytes`, without scanning, validating, copying, or
+allocating. Keep that storage alive and unchanged while using a Text view or
+its iterators. A view does not own or free memory.
+
+Results that contain byte offsets refer to the original input; they contain
+no copied text. Results that own inline storage, such as `CaseFold`, have their
+own lifetime rules described on the relevant API page.
+
+## Iteration and copying
 
 Every `.iterator()` call creates independent traversal state at the beginning
 of its view. Call `next()` on a mutable iterator until it returns `null`.
-Copying an iterator copies its current position and inline state, not its input.
-Counting or measuring runs a traversal; results are not cached in the view.
+[Normalization](text/normalization/README.md) returns an iterator directly,
+and its `next()` also returns errors.
+
+Copying an iterator copies its current position and inline state, not its
+input. The copies can advance independently over the same borrowed bytes.
+Counting or measuring performs work on each call; results are not cached in
+the view.
 
 ## Byte offsets and columns
 
@@ -25,58 +38,41 @@ pub const Span = struct { start: ByteOffset, end: ByteOffset };
 
 All spans are half-open: `bytes[span.start.value..span.end.value]`.
 Offsets index the input slice of the Text view, even when that slice is itself
-a substring. Trimming returns a new Text; its offsets index
-the retained slice, starting at zero. They count **bytes**, not scalars, graphemes, or columns.
-`Column` deliberately separates display measurements from byte offsets.
-Returned spans borrow the input indirectly; they contain no copied text.
+a substring. Trimming returns a new Text; its offsets index the retained
+slice, starting at zero. They count **bytes**, not codepoints, graphemes, or
+columns. `Column` separates display measurements from byte offsets.
 
 ## Plain text and malformed input
 
-The text view does not interpret ANSI escape sequences, expand tabs, or emulate a
-terminal cursor. Strip styling escapes before measuring or wrapping styled
-text. Width is a fixed terminal-cell policy, not font shaping or terminal
-capability detection. CR and LF have zero width; `width()` sums the text's
-columns rather than returning the widest physical line.
+Text operations do not interpret ANSI escape sequences, expand tabs, or
+emulate a terminal cursor. Width follows a fixed display-cell policy; it does
+not measure font shaping or detect terminal capabilities. See the
+[display-width policy](text/width/README.md#display-policy).
 
-Grapheme, word, width, wrap, and trim operations tolerate malformed UTF-8,
-advancing one byte at a time on decoding errors. They retain original byte
-offsets and do not rewrite the input. A span can therefore contain malformed
-bytes.
-Terminators scan for exact byte sequences and are not a UTF-8 validator. The
-trim methods stop at a malformed sequence at the edge they scan and retain it.
+Creating a Text view does not validate UTF-8. Use
+[`validate()`](text/README.md#entry-point-and-validation) to check it in
+advance. This is an additional scan, and its result is not cached.
 
-Call `try text.validate()` when an operation should require valid UTF-8. It
-checks the complete slice directly, without grapheme iteration or Unicode
-property lookups:
+| Operation | Malformed UTF-8 behavior |
+| --- | --- |
+| Graphemes, word boundaries, width, wrap | Tolerate malformed bytes, retaining original byte offsets without rewriting the input |
+| [Trim](text/trim/README.md) | Stops at a malformed sequence at the edge being scanned and retains it |
+| [Terminators](text/terminators/README.md) | Scans for exact byte sequences without validating UTF-8 |
+| [Codepoints](text/codepoints/README.md#malformed-input) | Stops and records the decoding error and byte offset on the iterator |
+| [Normalization](text/normalization/README.md#errors-and-partial-results) | Reports `InvalidUtf8` when encountered |
 
-```zig
-const text = zunic.text(input);
-try text.validate();
-```
+A returned span can contain malformed bytes. Normalization can also report
+`SequenceTooLong` when its configured
+[combining-run limit](text/normalization/README.md#combining-run-limit) is exceeded.
 
-Validation returns `InvalidUtf8` for malformed input and otherwise returns
-nothing. It does not change the view or the behavior of later operations.
+## When work happens
 
-Codepoint iteration stops at the first malformed sequence: `next()` returns
-`null`, `err` becomes `.invalid_utf8`, and `offset` identifies the start of the
-sequence. At normal exhaustion `err` is null and `offset` equals the slice
-length. It yields only valid scalar views, with no replacement values.
+Opening a Text view does not scan the input. Iterators process text as they
+advance, but may read ahead or scan for an ASCII fast path before returning
+the first result. Requesting one result does not guarantee that only that
+result's bytes will be inspected.
 
-Normalization is deliberately different: it returns `InvalidUtf8` for malformed
-input and `SequenceTooLong` when its configured combining-run limit is reached.
-See [normalization error semantics](text/normalization/README.md#errors-and-partial-results).
-
-## Laziness
-
-Constructing grapheme, word, terminator, wrap, and normalization views does no
-input traversal. `wrap` checks the width option immediately. Creating a word
-iterator reads its first character to initialize its state. Further work
-happens on `next`, `count`, `width`, or a normalization query. The trim methods
-are the exception among `Text` methods that return a view: each one scans its
-edges when called and returns the narrowed slice.
-
-Lazy does not mean zero lookahead: grapheme boundaries need a following token,
-word rules may look past ignored marks, and normalization buffers a combining
-run. Wrapping and word iteration can inspect the entire byte slice on their
-first `next()` to select an ASCII fast path, even if the caller only requests
-one result.
+Trimming scans the relevant edges when called. Validation, ASCII checks,
+counting, width measurement, and normalization queries perform their work
+when called. See each operation's implementation page for its scanning and
+buffering strategy.
