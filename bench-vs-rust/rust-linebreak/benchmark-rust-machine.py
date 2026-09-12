@@ -19,6 +19,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from benchmark_contract import parse_timing, parse_dump, check_rows, compare_operations
 from benchmark_report import create_summary, markdown_report, terminal_report as common_terminal_report
+from benchmark_progress import BenchmarkProgress
 
 ROOT = HERE.parents[1]
 CORPORA = ("arabic", "hindi", "korean", "russian", "source_code", "english", "japanese", "mandarin")
@@ -122,7 +123,7 @@ def source_paths() -> list[Path]:
               HERE / "diagnostic.zig", HERE / "diagnostic.rs", HERE / "diagnostic-rust/Cargo.toml",
               HERE / "diagnostic-rust/Cargo.lock", Path(__file__).resolve(),
               HERE.parent / "benchmark_contract.py", HERE.parent / "benchmark_report.py",
-              HERE.parent / "benchmark_table.py"]
+              HERE.parent / "benchmark_table.py", HERE.parent / "benchmark_progress.py"]
     return [path for path in paths if path.exists()]
 
 
@@ -176,13 +177,14 @@ def collect(label: str, pair_count: int) -> Path:
             "zunic_sha256": hashlib.sha256(streams["zunic"][case].encode()).hexdigest(),
             "rust_sha256": hashlib.sha256(streams["rust"][case].encode()).hexdigest(),
         }
+    progress = BenchmarkProgress(pair_count * 2)
     pairs = []
     for index in range(pair_count):
         name = chr(ord("a") + index)
         order = ("zunic", "rust") if index % 2 == 0 else ("rust", "zunic")
         pair = {"name": name}
         for peer in order:
-            print(f"starting {peer}-{name}", flush=True)
+            progress.running(f"{peer}-{name}")
             result = subprocess.run(commands[peer] + ["--bench"], cwd=HERE, capture_output=True, text=True)
             (out / f"{peer}-{name}.stdout.txt").write_text(result.stdout)
             (out / f"{peer}-{name}.stderr.txt").write_text(result.stderr)
@@ -193,7 +195,7 @@ def collect(label: str, pair_count: int) -> Path:
                 raise RuntimeError("Zunic diagnostic did not assert the machine engine")
             pair[peer] = parse_run(result.stdout)
             check_rows(pair[peer], outputs[peer], "linebreak")
-            print(f"completed {peer}-{name}", flush=True)
+            progress.advance()
         pairs.append(pair)
     for peer in ("zunic", "rust"):
         result = subprocess.run(commands[peer] + ["--dump"], cwd=HERE, capture_output=True, text=True, check=True)
@@ -234,6 +236,7 @@ def collect(label: str, pair_count: int) -> Path:
     )
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     (out / "comparison.md").write_text(markdown_report(summary))
+    progress.finish()
     print(common_terminal_report(summary), flush=True)
     print(f"saved {out}", flush=True)
     return out

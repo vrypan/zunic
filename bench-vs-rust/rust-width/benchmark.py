@@ -30,6 +30,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from benchmark_contract import fields, parse_timing
 from benchmark_report import create_summary, markdown_report, terminal_report as common_terminal_report
+from benchmark_progress import BenchmarkProgress
 
 ROOT = HERE.parents[1]
 CORPUS_DIR = HERE.parent / "texts"
@@ -126,18 +127,19 @@ def main() -> int:
                                   "zunic_count": outputs["zunic"][case], "rust_count": outputs["rust"][case]}
                            for case in CORPORA}
 
+    progress = BenchmarkProgress(args.pairs * 2)
     pairs = []
     for index in range(args.pairs):
         name = chr(ord("a") + index)
         order = ("zunic", "rust") if index % 2 == 0 else ("rust", "zunic")
         pair: dict[str, object] = {"name": name, "order": list(order)}
         for peer in order:
-            print(f"starting {peer}-{name}", flush=True)
+            progress.running(f"{peer}-{name}")
             result = run(commands[peer] + ["--bench"], HERE)
             (output / f"{peer}-{name}.stdout.txt").write_text(result.stdout)
             (output / f"{peer}-{name}.stderr.txt").write_text(result.stderr)
             pair[peer] = parse(result.stdout, peer, outputs[peer], snapshots)
-            print(f"completed {peer}-{name}", flush=True)
+            progress.advance()
         pairs.append(pair)
     for peer, command in commands.items():
         dump = run(command + ["--dump"], HERE).stdout
@@ -173,6 +175,7 @@ def main() -> int:
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     markdown = markdown_report(summary)
     (output / "comparison.md").write_text(markdown)
+    progress.finish()
     print(common_terminal_report(summary))
     print(f"Saved {output}")
     return 0

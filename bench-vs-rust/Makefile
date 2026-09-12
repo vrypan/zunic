@@ -17,6 +17,7 @@ test:
 	$(PYTHON) test_benchmark_contract.py
 	$(PYTHON) test_benchmark_table.py
 	$(PYTHON) test_benchmark_report.py
+	$(PYTHON) test_benchmark_progress.py
 	@for comparison in $(COMPARISONS); do \
 		$(MAKE) -C $$comparison test || exit $$?; \
 	done

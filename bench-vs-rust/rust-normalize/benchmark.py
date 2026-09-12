@@ -18,6 +18,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
 from benchmark_contract import fields, parse_timing
 from benchmark_report import create_summary, markdown_report, terminal_report as common_terminal_report
+from benchmark_progress import BenchmarkProgress
 TEXTS = HERE.parent / "texts"
 CORPORA = ("arabic", "hindi", "korean", "russian", "source_code", "english", "japanese", "mandarin")
 EXPECTED = {(case, form) for case in CORPORA for form in ("nfc", "nfd", "nfkc", "nfkd")}
@@ -81,7 +82,8 @@ def main():
     rust_env = dict(os.environ, RUSTFLAGS="-C target-cpu=native")
     commands = [["zig", "build", "-Doptimize=ReleaseFast", "-Dcpu=native"],
                 ["cargo", "build", "--locked", "--release"]]
-    print("Building native release peers", flush=True)
+    progress = BenchmarkProgress(args.pairs * 2)
+    progress.preparing("building peers")
     for command, env in zip(commands, (zig_env, rust_env)):
         run(command, env)
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -95,7 +97,7 @@ def main():
     harness = sources / "bench-vs-rust/rust-normalize"
     harness.mkdir(parents=True)
     shutil.copytree(TEXTS, sources / "bench-vs-rust/texts")
-    for name in ("benchmark_contract.py", "benchmark_report.py", "benchmark_table.py"):
+    for name in ("benchmark_contract.py", "benchmark_report.py", "benchmark_table.py", "benchmark_progress.py"):
         shutil.copy2(HERE.parent / name, sources / "bench-vs-rust" / name)
     for name in ("build.zig", "build.zig.zon", "Cargo.toml", "Cargo.lock", "zunic-normalize.zig", "benchmark.py", "README.md", "differential.py"):
         shutil.copy2(HERE / name, harness / name)
@@ -125,18 +127,18 @@ def main():
         before[peer] = check_dump(dump, snapshots)
     if before["zunic"] != before["rust"]:
         raise ValueError("normalized output differs before timing")
-    print(f"Verified input and output bytes; saving {dest}", flush=True)
+    progress.preparing("outputs verified")
     for index in range(args.pairs):
         name = chr(ord("a") + index)
         order = ("zunic", "rust") if index % 2 == 0 else ("rust", "zunic")
         pair = {"name": name, "order": order}
         for peer in order:
-            print(f"Starting {peer}-{name}", flush=True)
+            progress.running(f"{peer}-{name}")
             mode = "--bench-prevalidated" if peer == "rust" and args.rust_input == "prevalidated" else "--bench"
             text = run(peers[peer] + [mode])
             (dest / f"{peer}-{name}.stdout.txt").write_text(text)
             pair[peer] = parse(text, before[peer], snapshots, args.rust_input if peer == "rust" else "bytes")
-            print(f"Completed {peer}-{name}", flush=True)
+            progress.advance()
         run_state["pairs"].append(pair)
     for peer, command in peers.items():
         dump = run(command + ["--dump"])
@@ -171,6 +173,7 @@ def main():
     (dest / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     markdown = markdown_report(summary)
     (dest / "comparison.md").write_text(markdown)
+    progress.finish()
     print(common_terminal_report(summary), flush=True)
     print(f"Saved {dest}", flush=True)
 

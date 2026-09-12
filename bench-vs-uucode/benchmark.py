@@ -18,6 +18,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
+sys.path.insert(0, str(ROOT / "bench-vs-rust"))
+from benchmark_progress import BenchmarkProgress
 CORPUS_DIR = ROOT / "bench-vs-rust" / "texts"
 STANDARD_CORPORA = ("arabic", "hindi", "korean", "russian", "source_code", "english", "japanese", "mandarin")
 CORPUS_PATHS = {
@@ -248,18 +250,19 @@ def benchmark(args: argparse.Namespace) -> int:
             if not operation_outputs[operation][case]["equal"]:
                 raise RuntimeError(f"{case}/{operation}: peers produced different exact results")
 
+    progress = BenchmarkProgress(args.pairs * 2)
     pairs = []
     for index in range(args.pairs):
         pair_name = chr(ord("a") + index)
         order = ("zunic", "uucode") if index % 2 == 0 else ("uucode", "zunic")
         pair = {"name": pair_name, "order": list(order), "results": {}}
         for peer in order:
-            print(f"starting {peer}-{pair_name}", flush=True)
+            progress.running(f"{peer}-{pair_name}")
             result = run(commands[peer] + ["--bench"])
             (output / f"{peer}-{pair_name}.stdout.txt").write_text(result.stdout)
             (output / f"{peer}-{pair_name}.stderr.txt").write_text(result.stderr)
             pair["results"][peer] = parse_timing(result.stdout, peer, outputs[peer], snapshots)
-            print(f"completed {peer}-{pair_name}", flush=True)
+            progress.advance()
         pairs.append(pair)
 
     for peer in PEERS:
@@ -302,6 +305,7 @@ def benchmark(args: argparse.Namespace) -> int:
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     markdown = report(summary, True)
     (output / "comparison.md").write_text(markdown)
+    progress.finish()
     print(report(summary, False), end="")
     print(f"Saved {output}")
     return 0

@@ -19,6 +19,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from benchmark_contract import parse_timing, parse_dump, check_rows, compare_outputs, compare_operations
 from benchmark_report import create_summary, markdown_report, terminal_report as common_terminal_report
+from benchmark_progress import BenchmarkProgress
 
 ROOT = HERE.parents[1]
 CORPUS_DIR = HERE / "texts"
@@ -50,7 +51,7 @@ def source_hashes():
     paths += [ROOT / "build.zig", ROOT / "build.zig.zon"]
     paths += [HERE / name for name in ("zunic-strip-ansi.zig", "src/main.rs", "build.zig",
               "build.zig.zon", "Cargo.toml", "Cargo.lock", "benchmark.py", "cases.py")]
-    paths += [HERE.parent / name for name in ("benchmark_contract.py", "benchmark_report.py", "benchmark_table.py")]
+    paths += [HERE.parent / name for name in ("benchmark_contract.py", "benchmark_report.py", "benchmark_table.py", "benchmark_progress.py")]
     return {str(path.relative_to(ROOT)): sha256(path) for path in sorted(paths)}
 
 
@@ -104,13 +105,14 @@ def main() -> int:
                          "rust_hex": bytes(outputs["rust"][name]).hex()}
                    for name in DIAGNOSTICS}
     (output / "diagnostics.json").write_text(json.dumps(diagnostics, indent=2) + "\n")
+    progress = BenchmarkProgress(args.pairs * 2)
     pairs = []
     for index in range(args.pairs):
         name = chr(ord("a") + index)
         order = ("zunic", "rust") if index % 2 == 0 else ("rust", "zunic")
         pair: dict[str, object] = {"name": name, "order": list(order)}
         for peer in order:
-            print(f"starting {peer}-{name}", flush=True)
+            progress.running(f"{peer}-{name}")
             result = run(commands[peer] + ["--bench"], HERE)
             (output / f"{peer}-{name}.stdout.txt").write_text(result.stdout)
             (output / f"{peer}-{name}.stderr.txt").write_text(result.stderr)
@@ -119,7 +121,7 @@ def main() -> int:
             for case, operations in pair[peer].items():
                 if any(row["bytes"] != len(snapshots[case]) for row in operations.values()):
                     raise RuntimeError("timed input size differs from verified input")
-            print(f"completed {peer}-{name}", flush=True)
+            progress.advance()
         pairs.append(pair)
     for peer, command in commands.items():
         dump = run(command + ["--dump"], HERE).stdout
@@ -175,6 +177,7 @@ def main() -> int:
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     markdown = markdown_report(summary)
     (output / "comparison.md").write_text(markdown)
+    progress.finish()
     print(common_terminal_report(summary))
     print(f"Saved {output}")
     return 0
