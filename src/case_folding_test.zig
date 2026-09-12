@@ -51,6 +51,42 @@ test "simple case mappings return one code point" {
     try std.testing.expectEqual(@as(u21, 0x110000), codepoints.init(0x110000).simpleUppercase());
 }
 
+fn expectSimpleCase(value: u21, expected: [3]u21) !void {
+    const view = codepoints.init(value);
+    try std.testing.expectEqual(expected[0], view.simpleUppercase());
+    try std.testing.expectEqual(expected[1], view.simpleLowercase());
+    try std.testing.expectEqual(expected[2], view.simpleTitlecase());
+}
+
+test "simple case mappings agree with UnicodeData across the complete u21 domain" {
+    // Verify the actual accessors independently of the generated trie decoder.
+    // Gaps, surrogates, and values above Unicode must all map to themselves.
+    var lines = std.mem.splitScalar(u8, @embedFile("data/UnicodeData-17.0.0.txt"), '\n');
+    var next: usize = 0;
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        var split = std.mem.splitScalar(u8, line, ';');
+        var fields: [15][]const u8 = undefined;
+        for (&fields) |*field| field.* = split.next() orelse return error.TestUnexpectedResult;
+        const value = try std.fmt.parseInt(u21, fields[0], 16);
+        try std.testing.expect(value >= next);
+        while (next < value) : (next += 1) {
+            const identity: u21 = @intCast(next);
+            try expectSimpleCase(identity, @splat(identity));
+        }
+        var expected: [3]u21 = @splat(value);
+        for (&expected, fields[12..15]) |*mapped, field| {
+            if (field.len != 0) mapped.* = try std.fmt.parseInt(u21, field, 16);
+        }
+        try expectSimpleCase(value, expected);
+        next = @as(usize, value) + 1;
+    }
+    while (next < 0x200000) : (next += 1) {
+        const identity: u21 = @intCast(next);
+        try expectSimpleCase(identity, @splat(identity));
+    }
+}
+
 test "every C and F mapping and every identity agree with CaseFolding.txt" {
     const seen = try std.testing.allocator.alloc(bool, 0x110000);
     defer std.testing.allocator.free(seen);

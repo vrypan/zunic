@@ -21,10 +21,11 @@ property accessors. Whitespace uses a small fixed predicate shared with text
 trimming. Case folding has an ASCII uppercase fast path followed by indexed
 mapping tables, returning an owned buffer of at most three values.
 
-The three simple case mappings share a class-deduplicated trie. Each class
-stores signed uppercase, lowercase, and titlecase deltas from the input value;
-ASCII letters bypass the table. Keeping this separate from full case folding
-preserves the one-codepoint result and the distinct Unicode semantics.
+The three simple case mappings share a two-stage index. One read selects a
+leaf offset; another reads the signed delta from the uppercase, lowercase, or
+titlecase array. ASCII uses the same lookup. Separate payload arrays allow
+unused case operations to stay out of the binary. Keeping this separate from
+full case folding preserves the one-codepoint result and distinct semantics.
 
 Numeric values use a separate three-stage trie whose class records contain an
 exact reduced numerator and denominator. Keeping it separate avoids adding

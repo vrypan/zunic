@@ -14,12 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data/UnicodeData-17.0.0.txt"
 SOURCE = ROOT / "tables/simple_case_mappings.zig"
 GENERATOR = ROOT / "tools/generate-simple-case-mappings.py"
-MAXCP = 0x110000
 
 
-def array(text, name):
-    body = re.search(rf"const {name} = \[_\]u8\{{(.*?)\n\}};", text, re.S).group(1)
-    return [int(value) for value in re.findall(r"\d+", body)]
+def array(text, name, ty):
+    body = re.search(rf"const {name} = \[_\]{ty}\{{(.*?)\n\}};", text, re.S).group(1)
+    return [int(value) for value in re.findall(r"-?\d+", body)]
 
 
 def main():
@@ -39,20 +38,25 @@ def main():
                              for index in (12, 13, 14))
 
     text = SOURCE.read_text(encoding="utf-8")
-    s1 = int(re.search(r"const s1 = (\d+);", text).group(1))
-    s2 = int(re.search(r"const s2 = (\d+);", text).group(1))
-    stage1, stage2, stage3 = (array(text, name) for name in ("stage1", "stage2", "stage3"))
-    mappings = [tuple(map(int, values)) for values in re.findall(
-        r"\.uppercase = (-?\d+), \.lowercase = (-?\d+), \.titlecase = (-?\d+)", text)]
-    for cp in range(MAXCP):
-        mid = stage1[cp >> s1]
-        leaf = stage2[(mid << (s1 - s2)) | (cp >> s2 & ((1 << (s1 - s2)) - 1))]
-        mapping_id = stage3[(leaf << s2) | (cp & ((1 << s2) - 1))]
-        actual = tuple(cp + delta for delta in mappings[mapping_id])
+    shift = int(re.search(r"const shift = (\d+);", text).group(1))
+    limit = int(re.search(r"const limit = (\d+);", text).group(1))
+    stage1 = array(text, "stage1", "u16")
+    deltas = [array(text, name, "i32") for name in ("uppercase", "lowercase", "titlecase")]
+    leaf_size = 1 << shift
+    assert len(stage1) * leaf_size == limit
+    assert len(set(map(len, deltas))) == 1
+    for offset in stage1:
+        assert offset % leaf_size == 0 and offset + leaf_size <= len(deltas[0])
+    for cp in range(0x200000):
+        if cp >= limit:
+            actual = (cp, cp, cp)
+        else:
+            index = stage1[cp >> shift] + (cp & (leaf_size - 1))
+            actual = tuple(cp + values[index] for values in deltas)
         want = expected.get(cp, (cp, cp, cp))
         if actual != want:
             raise SystemExit(f"simple case mismatch at U+{cp:04X}: {actual} != {want}")
-    print(f"ok: {MAXCP} simple case-mapping records verified")
+    print("ok: all 2097152 u21 simple case-mapping records verified")
 
 
 if __name__ == "__main__":
