@@ -130,8 +130,7 @@ before a soft break. The result is not a trimmed list of words.
 ## Limits
 
 The line-break rules use Unicode 17 data. They do not include dictionary-based
-breaking for scripts that need it. The current line-break engine also has a
-known combining-mark issue described on the [implementation page](implementation.md#known-limitation).
+breaking for scripts that need it.
 ANSI escapes are ordinary input bytes, so strip them before wrapping styled text.
 
 You can stop iteration after a few lines. This avoids producing all remaining
@@ -141,7 +140,7 @@ lines, but the first call can scan the whole input to select an ASCII shortcut.
 
 `wrap()` combines three sources, using Unicode 17.0.0 data:
 
-- [UAX #14: Unicode Line Breaking Algorithm, revision 55](https://www.unicode.org/reports/tr14/tr14-55.html) supplies line-break opportunities, subject to the [known limitation](implementation.md#known-limitation).
+- [UAX #14: Unicode Line Breaking Algorithm, revision 55](https://www.unicode.org/reports/tr14/tr14-55.html) supplies line-break opportunities.
 - [UAX #29: Unicode Text Segmentation, revision 47](https://www.unicode.org/reports/tr29/tr29-47.html) supplies extended grapheme boundaries so clusters stay intact.
 - [UAX #11: East Asian Width, revision 45](https://www.unicode.org/reports/tr11/tr11-45.html) supplies width properties used by [Zunic's column policy](../width/README.md#display-policy).
 

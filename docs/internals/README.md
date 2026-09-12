@@ -94,8 +94,8 @@ zig build wrap-exhaustive
 Fixtures check published examples of the Unicode rules. Reference comparisons
 check that shortcuts preserve the rule implementation. Instrumented tests count
 decodes and buffered tokens to catch excessive repeated work. None alone proves
-correctness for every input; the known line-break issue is documented under
-[wrapping](../text/wrap/implementation.md#known-limitation).
+correctness for every input, so focused regressions supplement the standard
+fixtures where they omit relevant class combinations.
 
 Benchmark results depend on the compiler, CPU, inputs, and Unicode versions.
 These pages explain the design without treating a measurement from one run as

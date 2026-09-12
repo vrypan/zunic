@@ -38,7 +38,8 @@ were superseded before the same release are omitted.
 
 ### Fixed
 
-- Corrected normalization quick checks and repeated-ZWJ grapheme boundaries.
+- Corrected normalization quick checks, repeated-ZWJ grapheme boundaries, and
+  LB9 inheritance for `SA` combining marks.
 
 ### Removed
 

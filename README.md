@@ -140,7 +140,7 @@ Zunic uses **Unicode 17.0.0** data:
 | [UAX #44: Unicode Character Database](https://www.unicode.org/reports/tr44/tr44-37.html) | Scalar properties and the `White_Space` property used by trimming |
 
 Terminal column counts and line fitting are Zunic policies built on these rules
-and properties. See the [known line-break limitation](docs/text/wrap/implementation.md#known-limitation).
+and properties.
 
 ## Documentation
 

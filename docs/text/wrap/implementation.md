@@ -75,17 +75,6 @@ builds do not run Python. [The generator notes](../../../src/tools/line-break-ma
 document the state counts, rule mapping, and checks in detail. There is one
 production engine; the old `-Dline-break-engine` selector is no longer available.
 
-## Known limitation
-
-Some marks in the UAX #14 `SA` class are resolved as combining marks, but the
-current inheritance check still examines their original class. For example,
-the low-level engine incorrectly permits a break inside `"a\u{0e31}"` at
-byte 1. The wrapper also requires a grapheme boundary, so a low-level break
-opportunity does not automatically become a wrapped-line boundary.
-
-This is an inherited correctness issue, not an intentional speed shortcut.
-Passing the pinned line-break fixtures does not cover every possible input.
-
 See [scanner tests](../../../src/scan_test.zig),
 [wrap tests](../../../src/wrap_test.zig), and
 [regression tests](../../../src/wrap_regression_test.zig) for checks of the shared

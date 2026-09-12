@@ -107,10 +107,6 @@ streams between Iterator and direct machine State on all eight real corpora.
 These and the exhaustive Zig protocol tests check integration consistency,
 not independent rule correctness. The pinned Unicode fixtures remain the
 standard-based checks; generator tests also validate compilation/minimization.
-Rust remains a throughput peer, not the Unicode 17 correctness oracle.
-
-Known inherited limitation: SA Mn/Mc characters resolve to CM, but the current
-LB9/base-inheritance checks still use raw CM/ZWJ classes. For example,
-`a\u{0e31}` incorrectly permits the boundary at byte 1, inherited from the removed engine.
-The pinned fixtures do not expose this case. This needs a separate correctness
-fix; passing fixtures and protocol tests is not exhaustive conformance.
+Focused regressions cover relevant class combinations absent from the fixture,
+including LB1 resolution and LB9 inheritance for `SA` combining marks. Rust
+remains a throughput peer, not the Unicode 17 correctness oracle.

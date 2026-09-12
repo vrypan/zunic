@@ -196,6 +196,15 @@ test "generated machine keeps glue before alphabetics prohibited" {
     try std.testing.expectEqual(.prohibited, state.opportunityForRecord("\xc2\xa0\xe2\x8f\xa9", alphabetic_cp, alphabetic_record, .al, properties.record(0), false, 5, &classifier));
 }
 
+test "SA combining marks inherit the preceding line-break class" {
+    const bytes = "a\u{0e31}";
+    var it = iterator(bytes);
+    try std.testing.expectEqualDeep(Boundary{ .offset = 0, .opportunity = .prohibited }, it.next().?);
+    try std.testing.expectEqualDeep(Boundary{ .offset = 1, .opportunity = .prohibited }, it.next().?);
+    try std.testing.expectEqualDeep(Boundary{ .offset = bytes.len, .opportunity = .mandatory }, it.next().?);
+    try std.testing.expectEqual(null, it.next());
+}
+
 test "semantic machine exhaustive category triples and malformed tails" {
     // Select witnesses independently from the generated table: retain every
     // predicate observed by the standard, but not unrelated width/GB fields.
