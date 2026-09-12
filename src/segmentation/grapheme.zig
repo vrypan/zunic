@@ -1,5 +1,5 @@
 //! Default extended-grapheme boundaries (UAX #29 core rules).
-const scalar = @import("encoding").scalar;
+const decoded_token = @import("encoding").decoded_token;
 const properties = @import("tables").properties;
 
 pub const Span = struct {
@@ -37,7 +37,7 @@ pub const replacement_sentinel: u3 = 3;
 const Property = enum { other, cr, lf, control, extend, zwj, ri, prepend, spacing_mark, l, v, t, lv, lvt, ep };
 const InCB = enum { none, consonant, extend, linker };
 pub const Classification = struct { property: Property, incb: InCB };
-const Token = struct { scalar: scalar.Token, category: u8 };
+const Token = struct { scalar: decoded_token.Token, category: u8 };
 
 /// The reference UAX #29 transition. Since plan 019 this is no longer on the
 /// hot path: `machine` evaluates it at comptime for every reachable
@@ -123,7 +123,7 @@ pub const Iterator = struct {
         return .{ .start = start, .end = self.pos, .columns = measure.finish() };
     }
 
-    // These helpers complete the inline chain from scalar.at to the public
+    // These helpers complete the inline chain from decoded_token.at to the public
     // iterator. Inlining only the decoder can move an out-of-line call here,
     // retaining token materialization and preventing caller specialization.
     inline fn takeToken(self: *Iterator) Token {
@@ -139,7 +139,7 @@ pub const Iterator = struct {
     }
 
     inline fn decodeAt(self: *const Iterator, offset: usize) Token {
-        const token = scalar.at(self.bytes, offset);
+        const token = decoded_token.at(self.bytes, offset);
         return .{ .scalar = token, .category = categoryOf(token) };
     }
 };
@@ -155,7 +155,7 @@ pub const ClusterMeasure = struct {
     /// compare is a property bit. The C0/DEL skip cannot be widened to the GCB
     /// control class: 3804 code points share that class with width 1, C1
     /// controls among them, and they must keep their column.
-    pub fn add(self: *ClusterMeasure, token: scalar.Token) void {
+    pub fn add(self: *ClusterMeasure, token: decoded_token.Token) void {
         const cp = token.codepoint orelse return;
         if (cp < 0x20 or cp == 0x7f) return;
         if (token.cell_width != 0) {
@@ -200,7 +200,7 @@ fn breakBefore(previous: Property, current: Property, ri_count: usize, zwj_after
 /// nine bits; `ri_count` contributes only its parity, which is all
 /// `breakBefore` reads. The category is a dense id for the distinct
 /// `(Property, InCB)` pairs reachable from a `GraphemeProperties` value, and
-/// is looked up by the seven bits `scalar.at` has already unpacked.
+/// is looked up by the seven bits `decoded_token.at` has already unpacked.
 pub const machine = struct {
     const State = packed struct(u9) {
         previous: u4,
@@ -382,8 +382,8 @@ pub const machine = struct {
 };
 
 /// Category for an already-decoded scalar: one bitcast of the property bits
-/// `scalar.at` unpacked, plus one 128-byte lookup.
-pub inline fn categoryOf(token: scalar.Token) u8 {
+/// `decoded_token.at` unpacked, plus one 128-byte lookup.
+pub inline fn categoryOf(token: decoded_token.Token) u8 {
     return machine.category_of[@as(u7, @bitCast(token.grapheme))];
 }
 
@@ -414,7 +414,7 @@ fn isControl(p: Property) bool {
     return p == .cr or p == .lf or p == .control;
 }
 
-pub fn classify(token: scalar.Token) Classification {
+pub fn classify(token: decoded_token.Token) Classification {
     const property: Property = switch (token.grapheme.gcb) {
         .other => if (token.grapheme.extended_pictographic) .ep else .other,
         .regional_indicator => .ri,

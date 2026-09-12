@@ -17,7 +17,7 @@
 //! instrumented-scanner counters in tests; instrumentation is a comptime
 //! option and compiles to nothing in production builds.
 const std = @import("std");
-const scalar = @import("encoding").scalar;
+const decoded_token = @import("encoding").decoded_token;
 const grapheme = @import("segmentation").grapheme;
 const line_break = @import("linebreak");
 const properties = @import("tables").properties;
@@ -49,9 +49,9 @@ pub fn Scanner(comptime instrumented: bool) type {
     return struct {
         bytes: []const u8,
         decode_pos: usize = 0,
-        buf0: ?scalar.ClassifiedToken = null,
-        buf1: ?scalar.ClassifiedToken = null,
-        classifier: scalar.Classifier(instrumented) = .{},
+        buf0: ?decoded_token.ClassifiedToken = null,
+        buf1: ?decoded_token.ClassifiedToken = null,
+        classifier: decoded_token.Classifier(instrumented) = .{},
         lb: line_break.State = .{},
         /// The boundary step consumes the lookahead's line-break category with
         /// the same table entry that supplied its opcode. This records that the
@@ -124,7 +124,7 @@ pub fn Scanner(comptime instrumented: bool) type {
             return self.lb.consumeCategoryAndOpcode(category);
         }
 
-        fn decode(self: *Self) scalar.ClassifiedToken {
+        fn decode(self: *Self) decoded_token.ClassifiedToken {
             const token = self.classifier.at(self.bytes, self.decode_pos);
             self.updateCounters();
             self.decode_pos = token.end;
@@ -138,7 +138,7 @@ pub fn Scanner(comptime instrumented: bool) type {
             }
         }
 
-        fn take(self: *Self) ?scalar.ClassifiedToken {
+        fn take(self: *Self) ?decoded_token.ClassifiedToken {
             if (self.buf0) |token| {
                 self.buf0 = self.buf1;
                 self.buf1 = null;
@@ -148,7 +148,7 @@ pub fn Scanner(comptime instrumented: bool) type {
             return self.decode();
         }
 
-        fn peek0(self: *Self) ?scalar.ClassifiedToken {
+        fn peek0(self: *Self) ?decoded_token.ClassifiedToken {
             if (self.buf0 == null) {
                 if (self.decode_pos >= self.bytes.len) return null;
                 self.buf0 = self.decode();
@@ -162,7 +162,7 @@ pub fn Scanner(comptime instrumented: bool) type {
         /// scalar into `buf1`, and `take` would then hand them back out of
         /// order. The single caller peeks in order; the assert keeps a second
         /// one honest.
-        fn peek1(self: *Self) ?scalar.ClassifiedToken {
+        fn peek1(self: *Self) ?decoded_token.ClassifiedToken {
             std.debug.assert(self.buf0 != null);
             if (self.buf1 == null) {
                 if (self.decode_pos >= self.bytes.len) return null;

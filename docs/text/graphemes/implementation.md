@@ -25,7 +25,7 @@ Internally, width value `3` means a one-cell non-renderable replacement; public
 results expose this as `columns = 1, renderable = false`. The inline traversal
 allows the compiler to discard measurement work when only boundaries are used.
 
-The inline chain includes `scalar.at`, the engine's `decodeAt`, `peekToken`,
+The inline chain includes `decoded_token.at`, the engine's `decodeAt`, `peekToken`,
 `takeToken`, and `next`, and the public `text.Iterator(include_measure).next`.
 Keeping the whole chain visible lets the consumer eliminate unused token
 fields and keep iterator state in registers. Forcing only the decoder inline

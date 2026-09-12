@@ -3,7 +3,7 @@ const scan = @import("layout").scan;
 const grapheme = @import("segmentation").grapheme;
 const line_break = @import("linebreak");
 const utf8 = @import("encoding").utf8;
-const scalar = @import("encoding").scalar;
+const decoded_token = @import("encoding").decoded_token;
 const properties = @import("tables").properties;
 const width = @import("layout").width;
 
@@ -155,12 +155,12 @@ test "cluster spans carry the same measure a standalone measurement reports" {
 fn expectTableMatchesReference(bytes: []const u8) !void {
     var pos: usize = 0;
     while (pos < bytes.len) {
-        const first = scalar.at(bytes, pos);
+        const first = decoded_token.at(bytes, pos);
         var reference = grapheme.ClusterState.init(grapheme.classify(first));
         var table = grapheme.TableState.init(grapheme.categoryOf(first));
         var scan_pos = first.end;
         while (scan_pos < bytes.len) {
-            const token = scalar.at(bytes, scan_pos);
+            const token = decoded_token.at(bytes, scan_pos);
             const want = reference.breakBeforeNext(grapheme.classify(token));
             const got = table.step(grapheme.categoryOf(token));
             try std.testing.expectEqual(want, got);
@@ -377,9 +377,9 @@ test "ASCII detectors agree at all byte positions and slice offsets" {
     }
 }
 
-/// `scalar.at` without the ASCII shortcut, written straight from the general
+/// `decoded_token.at` without the ASCII shortcut, written straight from the general
 /// rules, so the shortcut is checked against the path it replaces.
-fn referenceAt(bytes: []const u8, start: usize) scalar.Token {
+fn referenceAt(bytes: []const u8, start: usize) decoded_token.Token {
     const step = utf8.step(bytes[start..]);
     const cp = step.cp;
     return .{
@@ -388,15 +388,15 @@ fn referenceAt(bytes: []const u8, start: usize) scalar.Token {
         .codepoint = cp,
         .grapheme = if (cp) |v| properties.graphemeProperties(v) else .{ .gcb = .other, .incb = .none, .extended_pictographic = false },
         .line_break = if (cp) |v| properties.lineBreak(v) else .al,
-        .cell_width = if (cp) |v| scalar.codepointWidth(v) else 0,
+        .cell_width = if (cp) |v| decoded_token.codepointWidth(v) else 0,
         .east_asian_wide = if (cp) |v| properties.isEastAsianWide(v) else false,
     };
 }
 
 fn expectSameToken(bytes: []const u8, start: usize) !void {
     const want = referenceAt(bytes, start);
-    const got = scalar.at(bytes, start);
-    var classifier = scalar.Classifier(true){};
+    const got = decoded_token.at(bytes, start);
+    var classifier = decoded_token.Classifier(true){};
     const classified = classifier.at(bytes, start).scalarToken();
     try std.testing.expectEqualDeep(got, classified);
     try std.testing.expectEqual(@as(usize, if (got.codepoint != null) 1 else 0), classifier.property_lookups);
@@ -411,7 +411,7 @@ fn expectSameToken(bytes: []const u8, start: usize) !void {
     try std.testing.expectEqual(want.east_asian_wide, got.east_asian_wide);
 }
 
-test "scalar.at ASCII shortcut matches the general path for every byte" {
+test "decoded_token.at ASCII shortcut matches the general path for every byte" {
     // Every byte value alone, at the end of input, and followed by bytes that
     // would change a multi-byte decode.
     const tails = [_][]const u8{ "", "a", "\x80", "\xcc\x81", "\xff", "\n" };
@@ -425,7 +425,7 @@ test "scalar.at ASCII shortcut matches the general path for every byte" {
     }
 }
 
-test "scalar.at ASCII shortcut matches the general path at every offset" {
+test "decoded_token.at ASCII shortcut matches the general path at every offset" {
     const cases = [_][]const u8{
         "plain ascii text, with punctuation 123.",
         "mixed \xce\xba\xe1\xbd\xb9 ascii and greek",

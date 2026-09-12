@@ -1,6 +1,6 @@
 //! Terminal-cell width policy shared by text measurement and rendering.
 const grapheme = @import("segmentation").grapheme;
-const scalar = @import("encoding").scalar;
+const decoded_token = @import("encoding").decoded_token;
 const ascii_scan = @import("ascii_scan.zig");
 
 pub const Measure = struct {
@@ -13,7 +13,7 @@ pub const Measure = struct {
 /// One definition of the policy, shared with the grapheme engine's in-pass
 /// accumulator so a standalone measurement and a span can never drift apart.
 pub fn measureCluster(bytes: []const u8) Measure {
-    var tokens = scalar.iterator(bytes);
+    var tokens = decoded_token.iterator(bytes);
     var measure = grapheme.ClusterMeasure{};
     while (tokens.next()) |token| measure.add(token);
     // Both fields come from the one encoding, so neither restates it here.

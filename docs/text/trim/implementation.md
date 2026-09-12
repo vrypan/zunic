@@ -20,7 +20,7 @@ stream. The property is also *not* derivable from data already in the record:
 U+00A0 and U+202F are `White_Space` and non-breaking, U+200B is breaking and
 zero-width but not `White_Space`.
 
-For the same reason the helpers do not use `scalar.at`, which resolves a record
+For the same reason the helpers do not use `decoded_token.at`, which resolves a record
 the trim scan would then discard.
 
 ## The ASCII shortcut

@@ -5,7 +5,7 @@
 //! perform dictionary segmentation for complex South East Asian text. SA
 //! letters therefore resolve to AL; SA marks resolve to CM as required by LB1.
 const properties = @import("tables").properties;
-const scalar = @import("encoding").scalar;
+const decoded_token = @import("encoding").decoded_token;
 const semantic_machine = @import("machine.zig");
 const std = @import("std");
 
@@ -14,7 +14,7 @@ pub const Boundary = struct { offset: usize, opportunity: Opportunity };
 
 const Class = properties.LineBreak;
 
-const Token = scalar.LineBreakToken;
+const Token = decoded_token.LineBreakToken;
 
 /// Generated transition state shared by the iterator and fused scanner.
 pub const State = semantic_machine.State;
@@ -62,7 +62,7 @@ pub const Iterator = struct {
                 // A lookahead that did not advance is end of text, not a
                 // scalar the rule may examine.
                 const has_following = following.end != self.pos;
-                var classifier = scalar.Classifier(false){};
+                var classifier = decoded_token.Classifier(false){};
                 break :blk State.opportunityForOpcode(opcode, self.bytes, following.record.line_break, following.record, has_following, following.end, &classifier);
             },
             else => unreachable,
@@ -83,7 +83,7 @@ pub const Iterator = struct {
     }
 
     fn decodeAt(self: *const Iterator, offset: usize) Token {
-        return scalar.lineBreakAt(self.bytes, offset);
+        return decoded_token.lineBreakAt(self.bytes, offset);
     }
 };
 
@@ -100,7 +100,7 @@ pub fn isHardClass(c: Class) bool {
 fn expectMachineProtocol(bytes: []const u8) !void {
     errdefer std.debug.print("transition input bytes: {x}\n", .{bytes});
     var it = iterator(bytes);
-    var classifier = scalar.Classifier(false){};
+    var classifier = decoded_token.Classifier(false){};
     var state = State{};
     var consume_only = State{};
     var pos: usize = 0;
@@ -192,7 +192,7 @@ test "generated machine keeps glue before alphabetics prohibited" {
     const glue_record = properties.record(glue_cp);
     const alphabetic_record = properties.record(alphabetic_cp);
     var state = State.firstWithRecord(.gl, glue_cp, glue_record);
-    var classifier = scalar.Classifier(false){};
+    var classifier = decoded_token.Classifier(false){};
     try std.testing.expectEqual(.prohibited, state.opportunityForRecord("\xc2\xa0\xe2\x8f\xa9", alphabetic_cp, alphabetic_record, .al, properties.record(0), false, 5, &classifier));
 }
 

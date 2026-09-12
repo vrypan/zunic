@@ -3,7 +3,7 @@ const codepoints = @import("cp");
 
 test "ASCII arrays agree with the fused record" {
     // The trie is verified exhaustively against the pinned UCD by
-    // src/tools/test-properties.py. What that cannot see is scalar.at's ASCII
+    // src/tools/test-properties.py. What that cannot see is decoded_token.at's ASCII
     // shortcut, which reads two separate arrays and hard-codes one column.
     const properties = @import("tables").properties;
     var cp: u7 = 0;
