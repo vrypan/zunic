@@ -2,15 +2,17 @@
 
 [Documentation index](../README.md) · [Text view](../text/README.md) · [Implementation](implementation.md)
 
-**If you have a codepoint stored as a `u21`, use `zunic.cp(value)` to ask
-questions about that value.** Query its Unicode category, whitespace and
+Use `zunic.cp(value)` if you have a codepoint stored as a `u21` and want to
+query its properties. This gives you access to its Unicode category, whitespace and
 emoji-presentation properties, isolated display width, or case-folded values.
 
 ```zig
 const value: u21 = 0x1f600; // U+1F600, 😀
 const point = zunic.cp(value);
-const uses_emoji_presentation = point.terminal().isEmojiPresentation; // true
-const columns = point.width(); // 2, measured in isolation
+std.debug.print("Emoji presentation: {}\n", .{point.terminal().isEmojiPresentation});
+std.debug.print("Isolated width: {d}\n", .{point.width()});
+// Emoji presentation: true
+// Isolated width: 2
 ```
 
 The property groups return several related answers together. For example,
@@ -20,11 +22,21 @@ The property groups return several related answers together. For example,
 If you have UTF-8 bytes, use `zunic.text(bytes).codepoints().iterator()` to
 read one codepoint at a time. Each result is already a `CodepointView` with
 the same methods as `cp(value)`. See the
-[text documentation](../text/README.md#operations).
+[codepoint iterator documentation](../text/codepoints/README.md).
 
 `cp()` allocates nothing, decodes no bytes, and performs no lookup during
 construction. Its methods use Unicode 17.0.0 data, exposed as
 `zunic.unicode_version`.
+
+## API
+
+The constructor accepts a value and returns a `CodepointView`:
+
+```zig
+pub fn cp(value: u21) CodepointView;
+// CodepointView exposes:
+value: u21,
+```
 
 ## Codepoints, bytes, and graphemes
 
@@ -49,14 +61,6 @@ rather than individual values.
 
 ## Construction and valid values
 
-The constructor accepts a value and returns a `CodepointView`:
-
-```zig
-pub fn cp(value: u21) CodepointView;
-// CodepointView exposes:
-value: u21,
-```
-
 `cp()` accepts every `u21` without validation. A `u21` can also represent
 numbers above Unicode's maximum, up to `0x1FFFFF`.
 
@@ -68,7 +72,8 @@ For an arbitrary `u21`, the scalar-value check is:
 const value: u21 = 0x1f600;
 const is_scalar = value <= zunic.max_codepoint and
     !(value >= 0xd800 and value <= 0xdfff);
-try std.testing.expect(is_scalar);
+std.debug.print("Unicode scalar: {}\n", .{is_scalar});
+// Unicode scalar: true
 ```
 
 U+FFFD, the replacement character, is a valid scalar value. Its presence does
@@ -160,12 +165,16 @@ break at that position.
 
 ### Case folding
 
-Full default folding uses the C/F mappings from the pinned `CaseFolding.txt`;
-Turkic alternatives are excluded. One codepoint may expand to several values:
+`fullCaseFold()` returns the full default Unicode case-fold mapping. One
+codepoint may expand to several values:
 
 ```zig
 const folded = zunic.cp(0x00df).fullCaseFold(); // ß → ss
-try std.testing.expectEqualSlices(u21, &.{ 's', 's' }, folded.slice());
+for (folded.slice()) |value| {
+    std.debug.print("U+{X}\n", .{value});
+}
+// U+73
+// U+73
 ```
 
 `CaseFold` owns a fixed `codepoints: [3]u21` buffer and a `len: u2`. Its

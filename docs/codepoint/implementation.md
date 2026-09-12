@@ -21,6 +21,10 @@ property accessors. Whitespace uses a small fixed predicate shared with text
 trimming. Case folding has an ASCII uppercase fast path followed by indexed
 mapping tables, returning an owned buffer of at most three values.
 
+The folding tables use the C (common) and F (full) mappings from the pinned
+`CaseFolding.txt`. They exclude the S (simple) and T (Turkic) alternatives,
+implementing full default Unicode case folding.
+
 The [text iterator](../../src/text/text.zig) decodes UTF-8 before constructing
 each view. Internal segmentation and layout instead use
 [decoded tokens](../../src/encoding/decoded_token.zig), which carry byte
