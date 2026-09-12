@@ -2,6 +2,18 @@
 
 [API](README.md) · [Source](../../../src/normalization/normalization.zig)
 
+## Follow-up: review iterator error reporting
+
+Consider changing normalization `next()` from `NormalizationError!?u21` to
+`?u21`, with a sticky `err: ?NormalizationError` field, matching the codepoint
+iterator's loop pattern. Callers could iterate normally and inspect `err`
+after `next()` returns null.
+
+Before deciding, review partial-output behavior, repeated calls after failure,
+and how `writeTo()` propagates decoding and combining-run errors. Compare
+ergonomics and generated code; do not assume the smaller return type improves
+performance. This is a review item, not a change to the current API contract.
+
 ## Buffer one combining run
 
 Normalization must see the following marks before it can finish a starter:
@@ -140,3 +152,21 @@ compatibility alike, and the conformance suite
 (`zig build test-conformance`) checks NFKC and NFKD against all 20,034 cases
 of the pinned `NormalizationTest-17.0.0.txt`, the same fixture NFC and NFD
 are checked against.
+
+## Output-capacity calculation
+
+The bound is three times the input byte length for NFC/NFD and eleven times
+for NFKC/NFKD, with checked multiplication. Compatibility decompositions can
+expand further: U+FDFA occupies three UTF-8 bytes and expands to thirty-three.
+The helper only examines the input length; it does not normalize or validate
+bytes. Callers should use `normalizedLenBound(form)` rather than duplicate
+these factors.
+
+## Quick-check property selection
+
+NFD and NFKD quick checks are binary: an applicable decomposition yields
+`no`. The composing forms can return `maybe` and require contextual work to
+settle normalization. `NFKC_QC` is a separate property from `NFC_QC`; a value
+can be NFC-normalized yet have a canonical decomposition target that still
+needs compatibility decomposition. The implementation must use the table
+for the requested form rather than derive one quick check from another.

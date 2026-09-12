@@ -2,6 +2,20 @@
 
 [API](README.md) · [Shared architecture](../../internals/README.md)
 
+## Views and iterator specialization
+
+`Graphemes` and `MeasuredGraphemes` each contain a borrowed `bytes: []const u8`.
+Their iterators are specializations of `Iterator(include_measure)` in
+[text.zig](../../../src/text/text.zig): `Iterator(false)` returns `Span`, and
+`Iterator(true)` returns `MeasuredSpan`. These concrete iterator types are
+not named exports on `zunic`.
+
+Both wrappers use the same internal grapheme iterator. The compile-time
+parameter selects the public result shape and allows unused measurement work
+to be eliminated for plain traversal.
+
+## Boundary tables and measurement
+
 The reference `ClusterState` in [grapheme.zig](../../../src/segmentation/grapheme.zig) expresses
 the boundary rules and state updates. At compile time, the engine evaluates
 them into transition tables. Runtime traversal uses a category and state ID to

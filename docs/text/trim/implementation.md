@@ -6,11 +6,12 @@ Both scans are scalar, in `src/text/trim.zig`, behind the three `Text` methods
 in `src/text/text.zig`. `Text`'s representation is unchanged: a trimmed view is the
 same struct over a narrower slice.
 
-## Only the encoding module
+## Share the scalar whitespace predicate
 
-The helpers depend on the tolerant UTF-8 decoder and nothing else. The grapheme,
-word, width, normalization, and line-break engines answer other questions, and
-none of them is needed to decide membership in a 25-code-point set.
+The helpers use `encoding.utf8` to decode bytes and the `cp` module’s
+whitespace predicate to classify values. The same predicate backs
+`cp(value).isWhitespace()`. Grapheme, word, width, normalization, and
+line-break engines are not needed for this scan.
 
 The shared fused `Record` carries grapheme, width, and line-break facts; it has
 no `White_Space` bit, and adding one would enlarge a table that costs the
@@ -92,3 +93,12 @@ and sweeps every scalar in Unicode against it, so a predicate that gains or
 loses a code point fails there rather than in a sampled case. No host-language
 `isspace` or default trim is used as an oracle; their definitions and Unicode
 versions differ from this one.
+
+## Empty-slice positions
+
+Empty input returns an empty view, and so does all-whitespace input. Removing
+nothing returns the original slice unchanged, pointer and length. The borrowed
+location of an empty result is preserved rather than replaced by an unrelated
+empty literal: because `trim()` scans the start first, `trim()` and
+`trimStart()` of all-whitespace input return `bytes[bytes.len..]`, while
+`trimEnd()` returns `bytes[0..0]`.

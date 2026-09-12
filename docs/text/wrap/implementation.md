@@ -90,3 +90,12 @@ See [scanner tests](../../../src/scan_test.zig),
 [wrap tests](../../../src/wrap_test.zig), and
 [regression tests](../../../src/wrap_regression_test.zig) for checks of the shared
 scan, output slices, and work limits.
+
+## Public iterator adapter
+
+`WrappedIterator` lives in `src/text/text.zig` and is not a named export on
+`zunic`. It converts engine spans and widths into public `Line` values.
+
+Use `Text.wrap()` to construct the view. If a `Wrapped` is constructed by hand
+with a zero width, its iterator clamps the width to one; `Text.wrap()` itself
+continues to reject zero with `InvalidWidth`.

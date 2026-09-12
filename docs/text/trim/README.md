@@ -2,17 +2,15 @@
 
 [Text view](../README.md) · [Documentation index](../../README.md) · [Implementation](implementation.md)
 
-## Unicode standards
+Use `zunic.text(bytes).trim()` to remove Unicode whitespace from both ends
+of a byte string. Use `trimStart()` or `trimEnd()` to trim only one end.
+The result is another `Text` view; read `.bytes` or call another text method
+on it.
 
-`trim()`, `trimStart()`, and `trimEnd()` remove the code points with the
-Unicode 17.0.0 `White_Space` property, as published in the UCD data file
-[PropList.txt](https://www.unicode.org/Public/17.0.0/ucd/PropList.txt) and
-described by [UAX #44](https://www.unicode.org/reports/tr44/tr44-37.html).
-
-Trimming is a Zunic operation over that property. It is not a segmentation or
-line-breaking algorithm, and neither UAX #29 nor UAX #14 prescribes it. The
-property is also not general category `Zs`, not `Pattern_White_Space`, not the
-set of zero-width characters, and not the set of permissible line breaks.
+The result borrows a sub-slice of the existing bytes. Nothing is allocated,
+copied, or modified. Scanning happens when you call the method, only at the
+requested edges. Trimming does not validate the whole input; malformed bytes
+stop an edge scan and remain in the result.
 
 ## API
 
@@ -22,22 +20,23 @@ pub fn trimStart(self: Text) Text;
 pub fn trimEnd(self: Text) Text;
 ```
 
-Each returns another `Text` borrowing a sub-slice of the same bytes. There are
-no options, no allocation, no copying, no output buffer, no iterator, and no
-errors. Print the result with `.bytes`:
+## Example
 
 ```zig
 const input = "\u{00a0} Hello, 世界! \n";
 const trimmed = zunic.text(input).trim();
-std.debug.print("{s}\n", .{trimmed.bytes}); // Hello, 世界!
-std.debug.print("width: {d}\n", .{trimmed.width()}); // 12
+std.debug.print("{s}\n", .{trimmed.bytes});
+std.debug.print("width: {d}\n", .{trimmed.width()});
+// Output:
+// Hello, 世界!
+// width: 12
 ```
 
 `trim()` removes whitespace from both ends, `trimStart()` from the beginning
 only, and `trimEnd()` from the end only. `trimStart()` never inspects the far
 end, and `trimEnd()` never scans from the beginning.
 
-### The whitespace set
+## The whitespace set
 
 Exactly 25 code points:
 
@@ -63,44 +62,37 @@ U+200B ZERO WIDTH SPACE, U+FEFF ZERO WIDTH NO-BREAK SPACE (BOM), U+180E
 MONGOLIAN VOWEL SEPARATOR, U+2060 WORD JOINER, U+0000 NUL, U+007F DEL, and
 every combining mark.
 
-### The predicate itself
+## The predicate itself
 
 ```zig
-pub fn isWhitespace(cp: u21) bool;
-pub fn isWhitespaceSlice(glyph: []const u8) bool;
-
-// Text
 pub fn isWhitespace(self: Text, span: anytype) bool;
 ```
 
-The scalar test behind all three trim methods is exported as
-`zunic.cp(value).isWhitespace()`, for code working with a decoded code point directly.
-Most span-shaped code should reach for `text(bytes).isWhitespace(span)`
-instead -- `span` can be a `Span` returned by `Graphemes.iterator()` or a
-`MeasuredSpan` from `.measured().iterator()`; anything with `start`/`end`
-byte offsets works. It slices `bytes[span.start.value..span.end.value]` and
-confirms that slice is exactly one whitespace scalar, not merely a span that
-starts with one:
+Use `view.isWhitespace(span)` to check whether a span is exactly one Unicode
+whitespace scalar. Pass a `Span` or `MeasuredSpan` from that view; the check
+uses its `start` and `end` byte offsets. A space followed by a combining mark,
+or CRLF as a pair, is not a single whitespace scalar.
+
+For a `u21` value, use
+[cp(value).isWhitespace()](../../codepoint/README.md#width-whitespace-and-case-folding).
+For a byte slice without a span, use `zunic.isWhitespaceSlice(bytes)`.
 
 ```zig
+const bytes = "a b";
 const view = zunic.text(bytes);
 var graphemes = view.graphemes().iterator();
 while (graphemes.next()) |span| {
     if (view.isWhitespace(span)) continue;
     std.debug.print("grapheme: {s}\n", .{bytes[span.start.value..span.end.value]});
 }
+// Output:
+// grapheme: a
+// grapheme: b
 ```
 
-`span` is assumed to index `self.bytes`; a span from a different byte slice
-gives a meaningless answer rather than an error. This is a correct, if not
-always interesting, question for a span that was never grapheme content:
-every single-scalar UAX #14 hard terminator (LF, VT, FF, CR, NEL, LS, PS) is
-also `White_Space`, so its `Terminators` span answers `true` -- except CRLF,
-the one terminator that is two scalars, which like any other two-scalar span
-answers `false`. `isWhitespaceSlice` is the primitive both build on, exported
-directly for a byte slice that did not come from a span at all.
+The span must index the same view’s bytes and remain within their bounds.
 
-### Borrowed lifetime and offsets
+## Borrowed lifetime and offsets
 
 The result borrows the caller's storage, exactly as `text()` does. Keep it
 alive and unchanged for as long as the trimmed view or any iterator over it is
@@ -113,22 +105,20 @@ untrimmed input:
 const trimmed = zunic.text("  hi  ").trim();
 var it = trimmed.graphemes().iterator();
 const first = it.next().?;
-// first.start.value == 0, indexing trimmed.bytes, not the padded input.
+std.debug.print("[{d}..{d}]\n", .{ first.start.value, first.end.value });
+// Output:
+// [0..1]
 ```
 
 To recover a position in the original input, compare the two slice pointers
 yourself; the view does not carry an origin offset.
 
-### Empty results
+## Empty results
 
-Empty input returns an empty view, and so does all-whitespace input. Removing
-nothing returns the original slice unchanged, pointer and length. The borrowed
-location of an empty result is preserved rather than replaced by an unrelated
-empty literal: because `trim()` scans the start first, `trim()` and
-`trimStart()` of all-whitespace input return `bytes[bytes.len..]`, while
-`trimEnd()` returns `bytes[0..0]`.
+Empty input and all-whitespace input return an empty view. Removing nothing
+returns the original slice unchanged.
 
-### Code points, not graphemes
+## Code points, not graphemes
 
 Trimming decides scalar by scalar. A leading space followed by a combining
 mark loses the space and keeps the mark, even though the two are one grapheme
@@ -136,42 +126,48 @@ cluster:
 
 ```zig
 try std.testing.expectEqualStrings("\u{0301}x", zunic.text(" \u{0301}x").trim().bytes);
+// Retained values: U+0301 followed by U+0078.
 ```
 
-### Malformed input
+## Malformed input
 
 Trimming never validates the input and never returns an error. Interior bytes
 are not examined at all, so interior whitespace and interior malformed UTF-8
 are both untouched.
 
-At each scanned edge the scan stops at the first scalar that is neither
-whitespace nor decodable. Malformed bytes are preserved: not skipped, not
-replaced, not reported.
+At each edge, scanning stops on a non-whitespace scalar or an undecodable
+sequence. Malformed bytes remain in the result without an error.
 
 ```zig
 try std.testing.expectEqualStrings("\xff", zunic.text(" \xff ").trim().bytes);
+// Retained bytes: FF. No error is returned.
 ```
 
 The two ends are independent. Invalid bytes at the start do not prevent
 `trim()` from removing valid whitespace at the end, and vice versa. Call
-`try view.validate()` explicitly when strict input is required; trimming
+[validate()](../README.md#entry-point-and-validation) when strict input is required; trimming
 introduces no validation of its own and does not change how any other
 operation treats malformed input.
 
-### Escapes
+## Escapes
 
 Escape bytes get no special treatment. `ESC` ends a scan like any other
 content, so `"  \x1b[31mred\x1b[0m  "` trims to `"\x1b[31mred\x1b[0m"` with the
 sequences intact. Remove escapes before opening the text view when working
 with styled input.
 
-## Example: chaining
+You can chain [width](../width/README.md),
+[normalization](../normalization/README.md), or iteration on the returned view.
+Their offsets and results apply to the trimmed bytes.
 
-```zig
-const trimmed = zunic.text("  cafe\u{0301} \u{3000}").trim();
-try std.testing.expectEqualStrings("cafe\u{0301}", trimmed.bytes);
-try std.testing.expectEqual(@as(usize, 4), trimmed.width());
-try std.testing.expect(try trimmed.eql("caf\u{00E9}", .canonical));
-var buffer: [16]u8 = undefined;
-try std.testing.expectEqualStrings("caf\u{00E9}", try trimmed.normalize(.nfc).writeTo(&buffer));
-```
+## Unicode standards
+
+`trim()`, `trimStart()`, and `trimEnd()` remove the code points with the
+Unicode 17.0.0 `White_Space` property, as published in the UCD data file
+[PropList.txt](https://www.unicode.org/Public/17.0.0/ucd/PropList.txt) and
+described by [UAX #44](https://www.unicode.org/reports/tr44/tr44-37.html).
+
+Trimming is a Zunic operation over that property. It is not a segmentation or
+line-breaking algorithm, and neither UAX #29 nor UAX #14 prescribes it. The
+property is also not general category `Zs`, not `Pattern_White_Space`, not the
+set of zero-width characters, and not the set of permissible line breaks.

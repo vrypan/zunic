@@ -2,14 +2,15 @@
 
 [Text view](../README.md) · [Documentation index](../../README.md) · [Implementation](implementation.md)
 
-## Unicode standards
+Use `zunic.text(bytes).width()` to measure the total display columns of a
+UTF-8 string. It measures grapheme clusters, including combining sequences
+and emoji. For a single value, see
+[codepoint width](../../codepoint/README.md#width-whitespace-and-case-folding).
 
-`width()` uses Unicode 17.0.0 East Asian Width data described in
-[UAX #11: East Asian Width, revision 45](https://www.unicode.org/reports/tr11/tr11-45.html)
-and groups characters using the extended grapheme rules from
-[UAX #29, revision 47](https://www.unicode.org/reports/tr29/tr29-47.html).
-The final column count follows Zunic's policy below. UAX #11 supplies width
-properties; it does not prescribe a complete terminal-width algorithm.
+The method scans the borrowed bytes without copying or allocating.
+It does not validate the text in advance. Malformed bytes contribute no
+width of their own; call [validate()](../README.md#entry-point-and-validation)
+first if you want to reject them.
 
 ## API
 
@@ -18,8 +19,22 @@ pub fn width(self: Text) usize;
 ```
 
 Returns the sum of terminal columns across the text's extended grapheme
-clusters. This performs a scan without allocating. Empty input measures zero.
+clusters. Empty input measures zero.
 The return value is a plain `usize`, unlike `Line.columns`, which is a `Column`.
+
+## Example
+
+```zig
+std.debug.print("{d}\n", .{zunic.text("e\u{0301}界").width()});
+std.debug.print("{d}\n", .{zunic.text("🇬🇷").width()});
+std.debug.print("{d}\n", .{zunic.text("a\nb").width()});
+std.debug.print("{d}\n", .{zunic.text("\t\xff").width()});
+// Output:
+// 3
+// 2
+// 2
+// 0
+```
 
 ## Display policy
 
@@ -54,11 +69,12 @@ CR, LF, and tab contribute zero. This is **not** the final cursor
 column or the maximum width of any line. For multiline layout, split at
 [terminators](../terminators/README.md) and measure each gap.
 
-## Example
+## Unicode standards
 
-```zig
-try std.testing.expectEqual(@as(usize, 3), zunic.text("e\u{0301}界").width());
-try std.testing.expectEqual(@as(usize, 2), zunic.text("🇬🇷").width());
-try std.testing.expectEqual(@as(usize, 2), zunic.text("a\nb").width());
-try std.testing.expectEqual(@as(usize, 0), zunic.text("\t\xff").width());
-```
+`width()` uses Unicode 17.0.0 East Asian Width data described in
+[UAX #11: East Asian Width, revision 45](https://www.unicode.org/reports/tr11/tr11-45.html)
+and groups characters using the extended grapheme rules from
+[UAX #29, revision 47](https://www.unicode.org/reports/tr29/tr29-47.html).
+The final column count follows Zunic's [display policy](#display-policy).
+UAX #11 supplies width properties; it does not prescribe a complete
+terminal-width algorithm.

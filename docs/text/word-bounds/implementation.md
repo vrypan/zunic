@@ -63,3 +63,9 @@ data preserves the documented flag without changing boundary decisions.
 
 [Word tests](../../../src/word_test.zig) cover the Unicode fixtures, the flag,
 malformed input, reference/table agreement, and lookahead work limits.
+
+## Malformed tokens
+
+Malformed UTF-8 advances one byte and receives the `Other` word class,
+without contributing a word-like flag. Normal boundary rules still apply;
+a following ignored combining mark can join that byte.

@@ -2,20 +2,23 @@
 
 [Text view](../README.md) · [Documentation index](../../README.md) · [Implementation](implementation.md)
 
-## Unicode standards
+Use `zunic.text(bytes).wordBounds().iterator()` to partition UTF-8 text into
+word segments and separators. Each result is a byte span; filter on `is_word`
+when you want only word-like segments. The boundaries follow default Unicode
+rules, without dictionary or language-specific segmentation.
 
-`wordBounds()` and its iterator use the default word-boundary rules from
-[UAX #29: Unicode Text Segmentation, revision 47](https://www.unicode.org/reports/tr29/tr29-47.html),
-for Unicode 17.0.0. They do not add dictionary or locale-specific segmentation.
-The `is_word` flag is Zunic's convenience flag; UAX #29 defines the boundaries,
-not that flag.
+The view and iterator borrow the original bytes without copying or allocating.
+Keep those bytes alive and unchanged while using them. This operation
+tolerates malformed UTF-8; call
+[validate()](../README.md#entry-point-and-validation) first if you need to
+reject it. See below for when iteration scans and what `is_word` means.
 
 ## API
 
 ```zig
 pub fn wordBounds(self: Text) WordBounds;
 
-// WordBounds { bytes: []const u8 }
+// WordBounds
 pub fn iterator(self: WordBounds) WordBoundIterator;
 
 // WordBoundIterator
@@ -29,7 +32,9 @@ pub const WordBound = struct {
 ```
 
 Returns the default, locale-independent UAX #29 word segments for Unicode 17.
-The segments cover the complete input in order, with no gaps or overlap.
+Slice each result as `bytes[segment.start.value..segment.end.value]`. The
+start is inclusive and the end is exclusive, relative to the view’s bytes.
+Segments cover the complete input in order, with no gaps or overlap.
 Punctuation and whitespace are returned too. Adjacent non-word segments are
 not merged just because they share `is_word = false`.
 
@@ -51,24 +56,36 @@ Default boundaries do not provide dictionary segmentation for Thai, Lao,
 Khmer, Myanmar, Chinese, or Japanese. Applications needing linguistic words
 in those scripts need additional language-specific processing.
 
-Malformed UTF-8 advances one byte and receives the `Other` word class, without
-the word-like flag. Boundary rules still apply; a following ignored combining
-mark may join that byte. This API is not a UTF-8 validator.
+Malformed bytes remain in the spans; iteration does not stop with a decoding
+error. They are not inherently word-like, but can share a segment with
+following combining marks.
 
-## Example: keep word-like segments
+## Example: distinguish words and separators
 
 ```zig
 const bytes = "Hello, world!";
 var it = zunic.text(bytes).wordBounds().iterator();
-const expected = [_][]const u8{ "Hello", "world" };
-var count: usize = 0;
 while (it.next()) |segment| {
-    if (!segment.is_word) continue;
-    try std.testing.expectEqualStrings(expected[count], bytes[segment.start.value..segment.end.value]);
-    count += 1;
+    const note: []const u8 = if (segment.is_word) "" else " (non-word)";
+    std.debug.print("[{s}]{s}\n", .{
+        bytes[segment.start.value..segment.end.value], note,
+    });
 }
-try std.testing.expectEqual(@as(usize, 2), count);
+// Output:
+// [Hello]
+// [,] (non-word)
+// [ ] (non-word)
+// [world]
+// [!] (non-word)
 ```
 
 There is no separate `words()` method or built-in collection/count method.
 Filter `is_word`, count, or store results in the caller as needed.
+
+## Unicode standards
+
+`wordBounds()` and its iterator use the default word-boundary rules from
+[UAX #29: Unicode Text Segmentation, revision 47](https://www.unicode.org/reports/tr29/tr29-47.html),
+for Unicode 17.0.0. They do not add dictionary or locale-specific segmentation.
+The `is_word` flag is Zunic's convenience flag; UAX #29 defines the boundaries,
+not that flag.
