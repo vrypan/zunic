@@ -139,6 +139,8 @@ test "code-point groups preserve table facts across the complete u21 domain" {
         try std.testing.expectEqual(expected_terminal.emoji_modifier_base, terminal.isEmojiModifierBase);
         try std.testing.expectEqual(expected_terminal.standalone, terminal.standalone);
         try std.testing.expectEqual(expected_terminal.zero_in_grapheme, terminal.zeroInGrapheme);
+        try std.testing.expectEqual(expected_terminal.emoji, terminal.isEmoji);
+        try std.testing.expectEqual(expected_terminal.emoji_component, terminal.isEmojiComponent);
         const grapheme = point.grapheme();
         const expected_grapheme = tables.properties.graphemeProperties(value);
         try std.testing.expectEqual(expected_grapheme.gcb, grapheme.gcb);

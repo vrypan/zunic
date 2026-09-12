@@ -81,6 +81,17 @@ def read_unicode_data():
     return ccc, canonical, compat
 
 
+def read_decomposition_types():
+    """The compatibility tag for each tagged UnicodeData decomposition."""
+    result = {}
+    for raw in FILES["ud"].read_text(encoding="utf-8").splitlines():
+        fields = raw.split(";")
+        mapping = fields[5].strip()
+        if mapping.startswith("<"):
+            result[int(fields[0], 16)] = mapping[1 : mapping.index(">")]
+    return result
+
+
 def read_derived():
     """Full_Composition_Exclusion and the quick-check properties this module needs.
 
@@ -352,7 +363,8 @@ def build_compat(compat):
 
 
 def emit(out, combining, sources, canonical, flat, offsets, full, composition, maybe,
-         factor, compat_factor, compat_max_len, classes, compat_sources, compat_flat, compat_offsets):
+         factor, compat_factor, compat_max_len, classes, compat_sources, compat_flat,
+         compat_offsets, decomposition_types):
     out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
     out.write("//! Run src/tools/generate-normalization-properties.py to regenerate.\n")
     out.write("//!\n")
@@ -459,7 +471,7 @@ def emit(out, combining, sources, canonical, flat, offsets, full, composition, m
     out.write("};\n\n")
 
     out.write("/// Immediate canonical decomposition targets, one scalar per entry.\n")
-    out.write(f"pub const decomposition_data = [_]u32{{\n")
+    out.write(f"pub const decomposition_data = [_]u21{{\n")
     for i in range(0, len(flat), 8):
         out.write("    " + " ".join(f"0x{v:06X}," for v in flat[i:i + 8]) + "\n")
     out.write("};\n\n")
@@ -486,9 +498,25 @@ def emit(out, combining, sources, canonical, flat, offsets, full, composition, m
     out.write("};\n\n")
 
     out.write("/// Immediate compatibility decomposition targets, one scalar per entry.\n")
-    out.write(f"pub const compat_decomposition_data = [_]u32{{\n")
+    out.write(f"pub const compat_decomposition_data = [_]u21{{\n")
     for i in range(0, len(compat_flat), 8):
         out.write("    " + " ".join(f"0x{v:06X}," for v in compat_flat[i:i + 8]) + "\n")
+    out.write("};\n\n")
+
+    type_names = ["font", "noBreak", "initial", "medial", "final", "isolated",
+                  "circle", "super", "sub", "vertical", "wide", "narrow",
+                  "small", "square", "fraction", "compat"]
+    type_zig = {name: ("no_break" if name == "noBreak" else name) for name in type_names}
+    assert set(decomposition_types.values()) == set(type_names)
+    out.write("pub const DecompositionType = enum(u4) {\n")
+    for name in type_names:
+        out.write(f"    {type_zig[name]},\n")
+    out.write("};\n\n")
+    out.write("/// Compatibility type parallel to `compat_decomposition_entries`.\n")
+    out.write("pub const compat_decomposition_types = [_]DecompositionType{\n")
+    for i in range(0, len(compat_sources), 12):
+        values = [f".{type_zig[decomposition_types[cp]]}," for cp in compat_sources[i:i + 12]]
+        out.write("    " + " ".join(values) + "\n")
     out.write("};\n\n")
 
     worst_nfd, nfd_witness, worst_nfc, nfc_witness, emitted = factor
@@ -569,7 +597,7 @@ pub fn combiningClass(cp: u21) u8 {
 
 pub const Decomposition = struct {
     /// One or two scalars: the immediate canonical mapping, not the recursive one.
-    scalars: []const u32,
+    scalars: []const u21,
     /// `Full_Composition_Exclusion`: NFC must never rebuild this character.
     excluded: bool,
 };
@@ -588,18 +616,40 @@ pub fn decomposition(cp: u21) ?Decomposition {
     };
 }
 
-/// The immediate compatibility decomposition of `cp`, or null if it has none.
-/// Hangul syllables are absent; the engine decomposes them arithmetically,
-/// identically under NFD and NFKD.
-pub fn compatDecomposition(cp: u21) ?[]const u32 {
+pub const CompatibilityDecomposition = struct {
+    scalars: []const u21,
+    decomposition_type: DecompositionType,
+};
+
+fn compatDecompositionIndex(cp: u21) ?usize {
     if (cp < first_compat_decomposition) return null;
-    const found = search(&compat_decomposition_entries, cp, 0x3FFFF) orelse return null;
+    return search(&compat_decomposition_entries, cp, 0x3FFFF);
+}
+
+fn compatDecompositionAt(found: usize) []const u21 {
     const offset = compat_decomposition_entries[found] >> 18 & 0x3FFF;
     const end = if (found + 1 < compat_decomposition_entries.len)
         compat_decomposition_entries[found + 1] >> 18 & 0x3FFF
     else
         compat_decomposition_data.len;
     return compat_decomposition_data[offset..end];
+}
+
+/// The immediate compatibility decomposition of `cp`, or null if it has none.
+/// Hangul syllables are absent; the engine decomposes them arithmetically,
+/// identically under NFD and NFKD.
+pub fn compatDecomposition(cp: u21) ?[]const u21 {
+    const found = compatDecompositionIndex(cp) orelse return null;
+    return compatDecompositionAt(found);
+}
+
+/// The same immediate mapping with its compatibility tag.
+pub fn compatibilityDecomposition(cp: u21) ?CompatibilityDecomposition {
+    const found = compatDecompositionIndex(cp) orelse return null;
+    return .{
+        .scalars = compatDecompositionAt(found),
+        .decomposition_type = compat_decomposition_types[found],
+    };
 }
 
 /// The primary composite of `first` and `second`, if the pair has one that is
@@ -666,6 +716,7 @@ def main():
     if zig is None:
         sys.exit("zig is required to format the generated file")
     ccc, canonical, compat = read_unicode_data()
+    decomposition_types = read_decomposition_types()
     full, nfc_qc, nfkc_qc = read_derived()
     combining, sources, flat, offsets, composition, maybe, pairs = build(ccc, canonical, full, nfc_qc)
     factor = derive_expansion_factor(canonical, pairs)
@@ -677,7 +728,8 @@ def main():
         generated = Path(tmp) / "normalization_properties.zig"
         with generated.open("w", encoding="utf-8") as out:
             emit(out, combining, sources, canonical, flat, offsets, full, composition, maybe,
-                 factor, compat_factor, compat_max_len, classes, compat_sources, compat_flat, compat_offsets)
+                 factor, compat_factor, compat_max_len, classes, compat_sources, compat_flat,
+                 compat_offsets, decomposition_types)
         subprocess.run([zig, "fmt", str(generated)], check=True, stdout=subprocess.DEVNULL)
         if args.check:
             if not OUT.exists() or generated.read_bytes() != OUT.read_bytes():
@@ -697,6 +749,7 @@ def main():
         "composition_index": len(composition) * 2,
         "compat_decomposition_entries": len(compat_sources) * 4,
         "compat_decomposition_data": len(compat_flat) * 4,
+        "compat_decomposition_types": len(compat_sources),
     }
     for name, size in sizes.items():
         print(f"{name:28} {size:6} B")

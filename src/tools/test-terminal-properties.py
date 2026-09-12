@@ -72,6 +72,8 @@ def main():
         eaw[lo : hi + 1] = bytes([EAW[value]]) * (hi + 1 - lo)
 
     presentation = boolean("emoji-data-17.0.0.txt", "Emoji_Presentation")
+    emoji = boolean("emoji-data-17.0.0.txt", "Emoji")
+    emoji_component = boolean("emoji-data-17.0.0.txt", "Emoji_Component")
     modifier = boolean("emoji-data-17.0.0.txt", "Emoji_Modifier")
     modifier_base = boolean("emoji-data-17.0.0.txt", "Emoji_Modifier_Base")
     ignorables = boolean("DerivedCoreProperties-17.0.0.txt", "Default_Ignorable_Code_Point")
@@ -113,7 +115,8 @@ def main():
         zero = standalone == 0 or modifier[cp] or cat in (5, 6) or gcb[cp] in (2, 3, 4)
         expected = (eaw[cp] | presentation[cp] << 3 | variation_base[cp] << 4 |
                     modifier[cp] << 5 | modifier_base[cp] << 6 |
-                    standalone << 7 | int(zero) << 9)
+                    standalone << 7 | int(zero) << 9 | emoji[cp] << 10 |
+                    emoji_component[cp] << 11)
         block = index[cp >> SHIFT]
         got = table[(block << SHIFT) | (cp & ((1 << SHIFT) - 1))]
         if got != expected:

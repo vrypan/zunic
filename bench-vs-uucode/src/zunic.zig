@@ -59,7 +59,7 @@ pub inline fn width(bytes: []const u8) Stats {
 pub inline fn terminalProperties(bytes: []const u8) Stats {
     var pos: usize = 0;
     var units: usize = 0;
-    var sums: [9]usize = @splat(0);
+    var sums: [10]usize = @splat(0);
     while (pos < bytes.len) : (units += 1) {
         const step = zunic.utf8.step(bytes[pos..]);
         pos += step.len;
@@ -73,13 +73,14 @@ pub inline fn terminalProperties(bytes: []const u8) Stats {
         sums[5] +%= @intFromBool(props.isEmojiModifierBase);
         sums[6] +%= props.standalone;
         sums[7] +%= @intFromBool(props.zeroInGrapheme);
-        sums[8] +%= @intFromBool(props.isEmojiModifier);
+        sums[8] +%= @intFromBool(props.isEmoji);
+        sums[9] +%= @intFromBool(props.isEmojiComponent);
     }
     return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn terminalLookup(codepoints: []const u21) Stats {
-    var sums: [8]usize = @splat(0);
+    var sums: [10]usize = @splat(0);
     for (codepoints) |cp| {
         const props = zunic.cp(cp).terminal();
         sums[0] +%= cp;
@@ -90,6 +91,8 @@ pub inline fn terminalLookup(codepoints: []const u21) Stats {
         sums[5] +%= @intFromBool(props.isEmojiModifierBase);
         sums[6] +%= props.standalone;
         sums[7] +%= @intFromBool(props.zeroInGrapheme);
+        sums[8] +%= @intFromBool(props.isEmoji);
+        sums[9] +%= @intFromBool(props.isEmojiComponent);
     }
     return .{ .units = codepoints.len, .checksum = finishSums(sums) };
 }
@@ -177,12 +180,13 @@ pub fn dumpTerminalProperties(out: *std.Io.Writer, bytes: []const u8) !void {
         pos += step.len;
         const cp = step.cp orelse 0xfffd;
         const props = zunic.cp(cp).terminal();
-        try out.print("{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
+        try out.print("{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             pos,
             @intFromEnum(props.eastAsianWidth),
             @intFromBool(props.isEmojiPresentation),
             @intFromBool(props.isEmojiVariationBase),
-            @intFromBool(props.isEmojiModifier),
+            @intFromBool(props.isEmoji),
+            @intFromBool(props.isEmojiComponent),
             @intFromBool(props.isEmojiModifierBase),
             props.standalone,
             @intFromBool(props.zeroInGrapheme),
@@ -194,7 +198,7 @@ pub fn dumpTerminalProperties(out: *std.Io.Writer, bytes: []const u8) !void {
 pub fn dumpTerminalLookup(out: *std.Io.Writer, codepoints: []const u21) !void {
     for (codepoints) |cp| {
         const props = zunic.cp(cp).terminal();
-        try out.print("{x}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
+        try out.print("{x}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             cp,
             @intFromEnum(props.eastAsianWidth),
             @intFromBool(props.isEmojiPresentation),
@@ -203,6 +207,8 @@ pub fn dumpTerminalLookup(out: *std.Io.Writer, codepoints: []const u21) !void {
             @intFromBool(props.isEmojiModifierBase),
             props.standalone,
             @intFromBool(props.zeroInGrapheme),
+            @intFromBool(props.isEmoji),
+            @intFromBool(props.isEmojiComponent),
         });
     }
 }

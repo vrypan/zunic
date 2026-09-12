@@ -79,6 +79,86 @@ pub const CodepointView = packed struct(u32) {
     pub fn fullCaseFold(self: CodepointView) folding.CaseFold {
         return folding.fullCaseFold(self.value);
     }
+
+    /// Unicode Canonical_Combining_Class, or zero for an unclassified or
+    /// out-of-range value.
+    pub fn canonicalCombiningClass(self: CodepointView) u8 {
+        return tables.normalization.combiningClass(self.value);
+    }
+
+    /// Immediate Unicode decomposition mapping and its type. This does not
+    /// recursively decompose the result; use Text.normalize() for full text.
+    pub fn decomposition(self: CodepointView) ?Decomposition {
+        if (tables.normalization.decomposition(self.value)) |result| return .{
+            .type = .canonical,
+            .mapping = result.scalars,
+            .fullCompositionExclusion = result.excluded,
+        };
+        if (tables.normalization.compatibilityDecomposition(self.value)) |result| return .{
+            .type = compatibilityType(result.decomposition_type),
+            .mapping = result.scalars,
+            .fullCompositionExclusion = false,
+        };
+        return null;
+    }
+
+    /// Exact Unicode numeric value, including fractions and non-decimal
+    /// numeric characters. Null means the code point has no numeric value.
+    pub fn numeric(self: CodepointView) ?Numeric {
+        return tables.numeric.numeric(self.value);
+    }
+};
+
+fn compatibilityType(value: tables.normalization.DecompositionType) DecompositionType {
+    return switch (value) {
+        .font => .font,
+        .no_break => .no_break,
+        .initial => .initial,
+        .medial => .medial,
+        .final => .final,
+        .isolated => .isolated,
+        .circle => .circle,
+        .super => .super,
+        .sub => .sub,
+        .vertical => .vertical,
+        .wide => .wide,
+        .narrow => .narrow,
+        .small => .small,
+        .square => .square,
+        .fraction => .fraction,
+        .compat => .compat,
+    };
+}
+
+pub const Numeric = tables.numeric.Numeric;
+pub const NumericType = tables.numeric.NumericType;
+
+pub const DecompositionType = enum(u5) {
+    canonical,
+    font,
+    no_break,
+    initial,
+    medial,
+    final,
+    isolated,
+    circle,
+    super,
+    sub,
+    vertical,
+    wide,
+    narrow,
+    small,
+    square,
+    fraction,
+    compat,
+};
+
+pub const Decomposition = struct {
+    type: DecompositionType,
+    /// Borrowed from immutable Unicode tables; valid for the program lifetime.
+    mapping: []const u21,
+    /// Unicode Full_Composition_Exclusion. Only canonical mappings can set it.
+    fullCompositionExclusion: bool,
 };
 
 /// General_Category and DerivedCoreProperties in one packed record.
@@ -149,7 +229,7 @@ pub const GeneralProperties = packed struct(u32) {
 
 /// Terminal-facing facts from one packed table record. For values above
 /// 0x10FFFF: neutral EAW, false emoji flags, standalone 1, zeroInGrapheme true.
-pub const TerminalProperties = packed struct(u10) {
+pub const TerminalProperties = packed struct(u12) {
     eastAsianWidth: tables.terminal_properties.EastAsianWidth,
     /// Whether a scalar has the Unicode `Emoji_Presentation` property.
     isEmojiPresentation: bool,
@@ -164,6 +244,10 @@ pub const TerminalProperties = packed struct(u10) {
     standalone: u2,
     /// Continuation width fact, independent of standalone width.
     zeroInGrapheme: bool,
+    /// Whether a scalar has the broad Unicode `Emoji` property.
+    isEmoji: bool,
+    /// Whether a scalar is used as a component of an emoji sequence.
+    isEmojiComponent: bool,
 };
 
 /// Raw extended grapheme clustering facts, fetched together.

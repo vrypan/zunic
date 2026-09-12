@@ -17,6 +17,8 @@ pub fn build(b: *std.Build) void {
             "is_emoji_vs_base",
             "is_emoji_modifier",
             "is_emoji_modifier_base",
+            "is_emoji",
+            "is_emoji_component",
             "case_folding_full",
             "wcwidth_standalone",
             "wcwidth_zero_in_grapheme",

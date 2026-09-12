@@ -3,8 +3,9 @@
 [Documentation index](../README.md) · [Text view](../text/README.md) · [Implementation](implementation.md)
 
 Use `zunic.cp(value)` if you have a codepoint stored as a `u21` and want to
-query its properties. This gives you access to its Unicode category, whitespace and
-emoji-presentation properties, isolated display width, or case-folded values.
+query its properties. This gives you access to its Unicode category, numeric
+value, normalization facts, emoji properties, isolated display width, or
+case-folded values.
 
 ```zig
 const value: u21 = 0x1f600; // U+1F600, 😀
@@ -125,6 +126,8 @@ they do not validate an entire identifier or implement a language's rules.
 | `isEmojiModifierBase` | `bool` | Unicode `Emoji_Modifier_Base` |
 | `standalone` | `u2` | Standalone width using the pinned uucode convention; can be 3 |
 | `zeroInGrapheme` | `bool` | Separate zero-width continuation fact for a codepoint within a grapheme |
+| `isEmoji` | `bool` | Unicode `Emoji` |
+| `isEmojiComponent` | `bool` | Unicode `Emoji_Component` |
 
 `standalone` differs from `width()`. For example, U+2E3B has `standalone == 3`,
 whereas `width()` always returns 0, 1, or 2. These are scalar facts; calculating
@@ -164,6 +167,67 @@ so `true` does not imply a width of two.
 U+200B, U+FEFF, and U+2060. The property does not decide whether a line may
 break at that position.
 
+## Numeric values
+
+Use `numeric()` when you need the exact numeric value assigned by Unicode:
+
+```zig
+const examples = [_]struct { character: []const u8, codepoint: u21 }{
+    .{ .character = "5", .codepoint = '5' },
+    .{ .character = "²", .codepoint = 0x00b2 },
+    .{ .character = "⅓", .codepoint = 0x2153 },
+};
+for (examples) |example| {
+    const value = zunic.cp(example.codepoint).numeric().?;
+    std.debug.print("{s} = {d}/{d} ({s})\n", .{
+        example.character,
+        value.numerator,
+        value.denominator,
+        @tagName(value.kind),
+    });
+}
+// 5 = 5/1 (decimal)
+// ² = 2/1 (digit)
+// ⅓ = 1/3 (numeric)
+```
+
+The result's `kind` is `.decimal`, `.digit`, or `.numeric`. Decimal values are
+the positional digits used by decimal numbering systems. Digit includes
+characters such as superscripts. Numeric covers other values, including
+fractions, negative values, and large integers. `numerator` is an `i64` and
+`denominator` is a positive `u16`; the fraction is reduced. A codepoint with no
+Unicode numeric value returns `null`.
+
+## Normalization facts
+
+`canonicalCombiningClass()` returns the codepoint's Unicode canonical
+combining class as a `u8`; zero is the default. `decomposition()` returns its
+immediate Unicode decomposition, if any:
+
+```zig
+const value = zunic.cp(0x00e9); // é
+std.debug.print("Class: {d}\n", .{value.canonicalCombiningClass()});
+const decomposition = value.decomposition().?;
+for (decomposition.mapping) |part| {
+    std.debug.print("U+{X}\n", .{part});
+}
+// Class: 0
+// U+65
+// U+301
+```
+
+`decomposition.type` distinguishes canonical mappings from the compatibility
+types `.font`, `.no_break`, `.initial`, `.medial`, `.final`, `.isolated`,
+`.circle`, `.super`, `.sub`, `.vertical`, `.wide`, `.narrow`, `.small`,
+`.square`, `.fraction`, and `.compat`. The mapping slice borrows immutable
+Unicode table data and remains valid for the program lifetime.
+
+This is the immediate mapping recorded in `UnicodeData.txt`, not recursive
+normalization. Hangul syllable decomposition is algorithmic and therefore does
+not appear here. Use [text normalization](../text/normalization/README.md) to
+produce NFC, NFD, NFKC, or NFKD output. `fullCompositionExclusion` reports
+whether a canonical mapping has Unicode's `Full_Composition_Exclusion` fact.
+
 ### Case folding
 
 `fullCaseFold()` returns the full default Unicode case-fold mapping. One
@@ -195,6 +259,8 @@ Operations have defined fallbacks for values above `zunic.max_codepoint`:
 | `width()` | `1` |
 | `isEastAsianWide()`, `isWhitespace()` | `false` |
 | `fullCaseFold()` | The original value |
+| `numeric()`, `decomposition()` | `null` |
+| `canonicalCombiningClass()` | `0` |
 
 These fallbacks do not make the input a valid scalar. Surrogates are a
 different case: they are within Unicode's range and use their table entries,

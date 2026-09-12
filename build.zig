@@ -219,6 +219,8 @@ pub fn build(b: *std.Build) void {
     // the normal Zig-only suite does not acquire a Python runtime dependency.
     const verify_terminal_properties = b.addSystemCommand(&.{ "python3", "src/tools/test-terminal-properties.py" });
     group_steps.get("unicode-properties").?.dependOn(&verify_terminal_properties.step);
+    const verify_numeric_properties = b.addSystemCommand(&.{ "python3", "src/tools/test-numeric-properties.py" });
+    group_steps.get("unicode-properties").?.dependOn(&verify_numeric_properties.step);
     const verify_case_folding = b.addSystemCommand(&.{ "python3", "src/tools/test-case-folding.py" });
     group_steps.get("case-folding").?.dependOn(&verify_case_folding.step);
 

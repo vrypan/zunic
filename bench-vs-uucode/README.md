@@ -14,8 +14,8 @@ uucode and Zunic overlap in nine benchmarked operations:
 | Grapheme segmentation | `text(...).graphemes()` | `grapheme.utf8Iterator` | every start/end byte range |
 | Measured graphemes | measured grapheme iterator | `grapheme.wcwidthNext` | every start/end range and cluster width |
 | Whole-text width | `text(...).width()` | `grapheme.utf8Wcwidth` | total columns |
-| Terminal properties | `cp(value).terminal()` | configured-table `getAll` | every scalar's ending offset and property values |
-| Fused scalar terminal lookup | `cp(value).terminal()` | configured-table `getAll` | every predecoded scalar and its property values |
+| Terminal properties | `cp(value).terminal()` | configured-table `getAll` | every scalar's ending offset and property values, including `Emoji` and `Emoji_Component` |
+| Fused scalar terminal lookup | `cp(value).terminal()` | configured-table `getAll` | every predecoded scalar and property value, including `Emoji` and `Emoji_Component` |
 | Full case folding | `cp(value).fullCaseFold()` | `case_folding_full` | every bounded mapping |
 | Streaming graphemes | `graphemeBreak` | `computeGraphemeBreak` | every adjacent-pair boundary and ending offset |
 | Ghostty scalar width | public width/GCB composition | matching uucode field composition | derived width for every scalar |

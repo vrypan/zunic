@@ -53,6 +53,17 @@ def read_unicode_data():
     return ccc, mapping, compat
 
 
+def read_decomposition_types():
+    values = {}
+    for raw in (DATA / "UnicodeData-17.0.0.txt").read_text(encoding="utf-8").splitlines():
+        fields = raw.split(";")
+        mapping = fields[5].strip()
+        if mapping.startswith("<"):
+            tag = mapping[1 : mapping.index(">")]
+            values[int(fields[0], 16)] = "no_break" if tag == "noBreak" else tag
+    return values
+
+
 def read_derived(name):
     values = {}
     for raw in (DATA / "DerivedNormalizationProps-17.0.0.txt").read_text(encoding="utf-8").splitlines():
@@ -85,6 +96,9 @@ def parse_zig():
         body = re.search(rf"pub const {name} = \[_\]u\d+\{{(.*?)\n\}};", text, re.S).group(1)
         return [int(value, base) for value in re.findall(r"(0x[0-9A-Fa-f]+|\d+),", body)]
 
+    compat_types_body = re.search(
+        r"pub const compat_decomposition_types = \[_\]DecompositionType\{(.*?)\n\};",
+        text, re.S).group(1)
     return {
         "ascii_bases": (int(re.search(r"pub const ascii_bases_high: u64 = (0x[0-9A-Fa-f]+);", text).group(1), 16) << 64)
                        | int(re.search(r"pub const ascii_bases_low: u64 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
@@ -104,6 +118,7 @@ def parse_zig():
         "first_composable": int(re.search(r"pub const first_composable: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
         "compat_decomposition": array("compat_decomposition_entries", 16),
         "compat_data": array("compat_decomposition_data", 16),
+        "compat_types": re.findall(r"\.(\w+),", compat_types_body),
         "compat_factor": int(re.search(r"pub const compat_expansion_factor: usize = (\d+);", text).group(1)),
         "max_compat_expansion": int(re.search(r"pub const max_compat_expansion: usize = (\d+);", text).group(1)),
         "first_compat_decomposition": int(re.search(r"pub const first_compat_decomposition: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
@@ -154,6 +169,7 @@ def main():
     check_regeneration()
     check_stale_source_is_preserved()
     ccc, mapping, compat = read_unicode_data()
+    decomposition_types = read_decomposition_types()
     full = {cp for cp, value in read_derived("Full_Composition_Exclusion").items() if value == "Yes"}
     nfc_qc = read_derived("NFC_QC")
     nfd_qc = read_derived("NFD_QC")
@@ -269,6 +285,8 @@ def main():
     if len(set(compat_keys)) != len(compat_keys):
         fail("compat_decomposition_entries has a duplicate code point")
     entries = table["compat_decomposition"]
+    if len(table["compat_types"]) != len(entries):
+        fail("compatibility decomposition type count differs from entry count")
     for index, entry in enumerate(entries):
         cp = entry & 0x3FFFF
         offset = entry >> 18 & 0x3FFF
@@ -277,6 +295,8 @@ def main():
             fail(f"U+{cp:04X} compat entry has a negative implied length")
             continue
         compat_decomposition[cp] = table["compat_data"][offset:end]
+        if index >= len(table["compat_types"]) or table["compat_types"][index] != decomposition_types[cp]:
+            fail(f"U+{cp:04X} compatibility type differs from UnicodeData")
     for cp in range(MAXCP):
         expected = compat.get(cp)
         got = compat_decomposition.get(cp)
@@ -460,7 +480,8 @@ def main():
             len(table["class_stage2"]) + len(table["class_stage3"]) +
             len(table["decomposition"]) * 4 + len(table["data"]) * 4 +
             len(table["composition"]) * 2 +
-            len(table["compat_decomposition"]) * 4 + len(table["compat_data"]) * 4)
+            len(table["compat_decomposition"]) * 4 + len(table["compat_data"]) * 4 +
+            len(table["compat_types"]))
     print(f"ok: {MAXCP} code points verified against the pinned UCD")
     print(f"    {len(table['class_table'])} classes, {len(table['decomposition'])} decompositions, "
           f"{len(table['composition'])} composition pairs, {len(table['compat_decomposition'])} "

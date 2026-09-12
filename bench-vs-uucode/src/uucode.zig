@@ -59,7 +59,7 @@ pub inline fn width(bytes: []const u8) Stats {
 pub inline fn terminalProperties(bytes: []const u8) Stats {
     var it = uucode.utf8.Iterator.init(bytes);
     var units: usize = 0;
-    var sums: [9]usize = @splat(0);
+    var sums: [10]usize = @splat(0);
     while (it.next()) |cp| : (units += 1) {
         const props = uucode.getAll("0", cp);
         sums[0] +%= it.i;
@@ -70,13 +70,14 @@ pub inline fn terminalProperties(bytes: []const u8) Stats {
         sums[5] +%= @intFromBool(props.is_emoji_modifier_base);
         sums[6] +%= props.wcwidth_standalone;
         sums[7] +%= @intFromBool(props.wcwidth_zero_in_grapheme);
-        sums[8] +%= @intFromBool(props.is_emoji_modifier);
+        sums[8] +%= @intFromBool(props.is_emoji);
+        sums[9] +%= @intFromBool(props.is_emoji_component);
     }
     return .{ .units = units, .checksum = finishSums(sums) };
 }
 
 pub inline fn terminalLookup(codepoints: []const u21) Stats {
-    var sums: [8]usize = @splat(0);
+    var sums: [10]usize = @splat(0);
     for (codepoints) |cp| {
         const props = uucode.getAll("0", cp);
         sums[0] +%= cp;
@@ -87,6 +88,8 @@ pub inline fn terminalLookup(codepoints: []const u21) Stats {
         sums[5] +%= @intFromBool(props.is_emoji_modifier_base);
         sums[6] +%= props.wcwidth_standalone;
         sums[7] +%= @intFromBool(props.wcwidth_zero_in_grapheme);
+        sums[8] +%= @intFromBool(props.is_emoji);
+        sums[9] +%= @intFromBool(props.is_emoji_component);
     }
     return .{ .units = codepoints.len, .checksum = finishSums(sums) };
 }
@@ -171,12 +174,13 @@ pub fn dumpTerminalProperties(out: *std.Io.Writer, bytes: []const u8) !void {
     var it = uucode.utf8.Iterator.init(bytes);
     while (it.next()) |cp| {
         const props = uucode.getAll("0", cp);
-        try out.print("{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
+        try out.print("{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             it.i,
             @intFromEnum(props.east_asian_width),
             @intFromBool(props.is_emoji_presentation),
             @intFromBool(props.is_emoji_vs_base),
-            @intFromBool(props.is_emoji_modifier),
+            @intFromBool(props.is_emoji),
+            @intFromBool(props.is_emoji_component),
             @intFromBool(props.is_emoji_modifier_base),
             props.wcwidth_standalone,
             @intFromBool(props.wcwidth_zero_in_grapheme),
@@ -188,7 +192,7 @@ pub fn dumpTerminalProperties(out: *std.Io.Writer, bytes: []const u8) !void {
 pub fn dumpTerminalLookup(out: *std.Io.Writer, codepoints: []const u21) !void {
     for (codepoints) |cp| {
         const props = uucode.getAll("0", cp);
-        try out.print("{x}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
+        try out.print("{x}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             cp,
             @intFromEnum(props.east_asian_width),
             @intFromBool(props.is_emoji_presentation),
@@ -197,6 +201,8 @@ pub fn dumpTerminalLookup(out: *std.Io.Writer, codepoints: []const u21) !void {
             @intFromBool(props.is_emoji_modifier_base),
             props.wcwidth_standalone,
             @intFromBool(props.wcwidth_zero_in_grapheme),
+            @intFromBool(props.is_emoji),
+            @intFromBool(props.is_emoji_component),
         });
     }
 }

@@ -21,6 +21,12 @@ property accessors. Whitespace uses a small fixed predicate shared with text
 trimming. Case folding has an ASCII uppercase fast path followed by indexed
 mapping tables, returning an owned buffer of at most three values.
 
+Numeric values use a separate three-stage trie whose class records contain an
+exact reduced numerator and denominator. Keeping it separate avoids adding
+numeric data to general-property lookups. Normalization's combining class
+reuses the normalizer's class trie; immediate decompositions borrow the same
+canonical and compatibility mapping arrays used by the normalization engine.
+
 The folding tables use the C (common) and F (full) mappings from the pinned
 `CaseFolding.txt`. They exclude the S (simple) and T (Turkic) alternatives,
 implementing full default Unicode case folding.

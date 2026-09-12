@@ -258,6 +258,17 @@ test "docs: code-point property groups" {
     try std.testing.expectEqual(zunic.GraphemeClass.other, g.gcb);
     try std.testing.expectEqual(zunic.IndicConjunctBreak.none, g.incb);
     try std.testing.expect(zunic.cp(' ').isWhitespace());
+    try std.testing.expect(zunic.cp('#').terminal().isEmoji);
+    try std.testing.expect(zunic.cp(0x200d).terminal().isEmojiComponent);
+
+    const numeric = zunic.cp(0x2153).numeric().?;
+    try std.testing.expectEqual(zunic.NumericType.numeric, numeric.kind);
+    try std.testing.expectEqual(@as(i64, 1), numeric.numerator);
+    try std.testing.expectEqual(@as(u16, 3), numeric.denominator);
+
+    const decomposition = zunic.cp(0x00e9).decomposition().?;
+    try std.testing.expectEqual(zunic.DecompositionType.canonical, decomposition.type);
+    try std.testing.expectEqualSlices(u21, &.{ 'e', 0x0301 }, decomposition.mapping);
 }
 
 test "docs: strict codepoint iteration exposes decoding errors after the loop" {

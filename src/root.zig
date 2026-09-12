@@ -109,6 +109,10 @@ pub const EastAsianWidth = @import("tables").terminal_properties.EastAsianWidth;
 pub const TerminalProperties = codepoint_view.TerminalProperties;
 
 pub const CaseFold = codepoint_view.CaseFold;
+pub const Decomposition = codepoint_view.Decomposition;
+pub const DecompositionType = codepoint_view.DecompositionType;
+pub const Numeric = codepoint_view.Numeric;
+pub const NumericType = codepoint_view.NumericType;
 
 /// Copyable state for incremental default UAX #29 grapheme decisions.
 pub const GraphemeState = @import("segmentation").stream.GraphemeState;
