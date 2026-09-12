@@ -39,6 +39,28 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    // A separate uucode instance containing exactly the raw fields in
+    // plans/031-ghostty-uucode-coverage.md. Keeping them in one generated
+    // table matches the way Ghostty configures uucode and avoids retaining
+    // benchmark-only numeric, decomposition, and simple-case data.
+    const ghostty_uucode = b.dependency("uucode", .{
+        .target = target,
+        .optimize = optimize,
+        .fields_0 = @as([]const []const u8, &.{
+            "general_category",
+            "east_asian_width",
+            "is_emoji_presentation",
+            "case_folding_full",
+            "wcwidth_standalone",
+            "wcwidth_zero_in_grapheme",
+            "grapheme_break_no_control",
+            "grapheme_break",
+            "is_emoji_vs_base",
+            "is_emoji_modifier",
+            "is_emoji_modifier_base",
+        }),
+    });
+
     const generated = b.addWriteFiles();
     const benchmark_source = generated.addCopyFile(b.path("src/benchmark.zig"), "benchmark.zig");
     _ = generated.addCopyDirectory(b.path("../bench-vs-rust/texts"), "texts", .{});
@@ -67,5 +89,30 @@ pub fn build(b: *std.Build) void {
 
         const tests = b.addTest(.{ .root_module = module });
         test_step.dependOn(&b.addRunArtifact(tests).step);
+    }
+
+    const size_step = b.step("ghostty-size", "Build stripped Ghostty Unicode coverage binaries");
+    const SizePeer = struct {
+        name: []const u8,
+        source: []const u8,
+        import_name: []const u8,
+        import_module: ?*std.Build.Module,
+    };
+    const size_peers = [_]SizePeer{
+        .{ .name = "ghostty-size-control", .source = "src/ghostty_size_control.zig", .import_name = "coverage", .import_module = null },
+        .{ .name = "ghostty-size-zunic", .source = "src/ghostty_size_zunic.zig", .import_name = "zunic", .import_module = zunic.module("zunic") },
+        .{ .name = "ghostty-size-uucode", .source = "src/ghostty_size_uucode.zig", .import_name = "uucode", .import_module = ghostty_uucode.module("uucode") },
+    };
+    for (size_peers) |peer| {
+        const module = b.createModule(.{
+            .root_source_file = b.path(peer.source),
+            .target = target,
+            .optimize = optimize,
+            .strip = true,
+        });
+        if (peer.import_module) |import_module|
+            module.addImport(peer.import_name, import_module);
+        const executable = b.addExecutable(.{ .name = peer.name, .root_module = module });
+        size_step.dependOn(&b.addInstallArtifact(executable, .{}).step);
     }
 }

@@ -8,7 +8,7 @@ LABEL ?= uucode
 SUMMARY ?=
 
 .DEFAULT_GOAL := all
-.PHONY: all build test bench report clean
+.PHONY: all build test bench ghostty-size report clean
 
 all: test
 
@@ -22,6 +22,10 @@ test: build
 
 bench: build
 	$(PYTHON) benchmark.py --pairs $(PAIRS) --label $(LABEL) --skip-build --operations "$(OPERATIONS)"
+
+ghostty-size:
+	$(ZIG) build ghostty-size -Doptimize=$(OPTIMIZE) -Dcpu=$(CPU) --summary all
+	@ls -lh zig-out/bin/ghostty-size-control zig-out/bin/ghostty-size-zunic zig-out/bin/ghostty-size-uucode
 
 report:
 	@test -n "$(SUMMARY)" || { echo "usage: make report SUMMARY=path/to/summary.json" >&2; exit 2; }
