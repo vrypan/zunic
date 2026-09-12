@@ -1,6 +1,30 @@
 const std = @import("std");
 const codepoints = @import("cp");
 
+test "immediate decomposition agrees with stored mappings for every u21" {
+    // Compare the public lookup with the independently searched mapping
+    // arrays, including Hangul, surrogates, and values outside Unicode.
+    // The Python normalization verifier checks these arrays against the UCD.
+    const normalization = @import("tables").normalization;
+    for (0..0x200000) |value| {
+        const cp: u21 = @intCast(value);
+        const actual = codepoints.init(cp).decomposition();
+        if (normalization.decomposition(cp)) |expected| {
+            try std.testing.expect(actual != null);
+            try std.testing.expectEqual(codepoints.DecompositionType.canonical, actual.?.type);
+            try std.testing.expectEqualSlices(u21, expected.scalars, actual.?.mapping);
+            try std.testing.expectEqual(expected.excluded, actual.?.fullCompositionExclusion);
+        } else if (normalization.compatibilityDecomposition(cp)) |expected| {
+            try std.testing.expect(actual != null);
+            try std.testing.expectEqualStrings(@tagName(expected.decomposition_type), @tagName(actual.?.type));
+            try std.testing.expectEqualSlices(u21, expected.scalars, actual.?.mapping);
+            try std.testing.expect(!actual.?.fullCompositionExclusion);
+        } else {
+            try std.testing.expect(actual == null);
+        }
+    }
+}
+
 test "ASCII arrays agree with the fused record" {
     // The trie is verified exhaustively against the pinned UCD by
     // src/tools/test-properties.py. What that cannot see is decoded_token.at's ASCII

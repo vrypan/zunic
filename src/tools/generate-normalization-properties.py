@@ -14,7 +14,9 @@ The scalar classification uses a two-stage trie of packed u16 records. It
 shares CCC, quick-check, and composition/decomposition eligibility in two
 loads. ASCII is resolved directly. Sparse mapping sequences and composition
 pairs remain in sorted arrays; the normalization engine uses class flags to
-skip searches for characters without mappings.
+skip searches for characters without mappings. The public immediate-mapping
+lookup uses a separate two-stage index into those same arrays, selecting
+canonical or compatibility data without binary searches.
 
 Canonical and compatibility mappings are kept in separate tables on purpose.
 Canonical decompositions are at most two scalars immediate, so their table
@@ -244,6 +246,31 @@ def derive_max_compat_length(canonical, compat):
 CLASS_LIMIT = 0x30000
 # 32-codepoint leaves minimize the two-stage table size for Unicode 17.
 CLASS_S1 = 5
+# 64-codepoint leaves minimize the combined index with u16 leaf offsets.
+MAPPING_S1 = 6
+
+
+def build_mapping_index(sources, compat_sources):
+    """Two-stage index for the public, combined immediate-mapping lookup.
+
+    Zero means no stored mapping. Canonical ids precede compatibility ids;
+    each indexes the existing sorted arrays, without duplicating mappings.
+    Stage one stores leaf offsets to avoid scaling after its dependent load.
+    """
+    assert not set(sources) & set(compat_sources)
+    assert len(sources) + len(compat_sources) < 65536
+    ids = [0] * CLASS_LIMIT
+    for index, cp in enumerate(sources + compat_sources, 1):
+        assert cp < CLASS_LIMIT
+        ids[cp] = index
+    leaf_size = 1 << MAPPING_S1
+    leaves, stage1 = {}, []
+    for base in range(0, CLASS_LIMIT, leaf_size):
+        row = tuple(ids[base:base + leaf_size])
+        stage1.append(leaves.setdefault(row, len(leaves) * leaf_size))
+    stage2 = [index for row in leaves for index in row]
+    assert len(stage2) <= 65536, "leaf offsets must fit u16"
+    return stage1, stage2
 
 
 def build_classes(ccc, canonical, compat, full, nfc_qc, nfkc_qc):
@@ -352,7 +379,7 @@ def build_compat(compat):
 
 def emit(out, combining, sources, canonical, flat, offsets, full, composition, maybe,
          factor, compat_factor, compat_max_len, classes, compat_sources, compat_flat,
-         compat_offsets, decomposition_types):
+         compat_offsets, decomposition_types, mapping_index):
     out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
     out.write("//! Run src/tools/generate-normalization-properties.py to regenerate.\n")
     out.write("//!\n")
@@ -364,8 +391,9 @@ def emit(out, combining, sources, canonical, flat, offsets, full, composition, m
     out.write("//! entry's offset. See the generator module docstring for why.\n")
     out.write("//!\n")
     out.write("//! Scalar normalization facts share a two-stage trie of packed u16 records.\n")
-    out.write("//! Sparse mappings and composition pairs use sorted arrays. Hangul is\n")
-    out.write("//! algorithmic and has no mapping entries.\n\n")
+    out.write("//! Sparse mappings and composition pairs use sorted arrays. A separate\n")
+    out.write("//! two-stage index selects either immediate mapping kind for cp().\n")
+    out.write("//! Hangul is algorithmic and has no mapping entries.\n\n")
 
     out.write("pub const QuickCheck = enum(u2) { yes, no, maybe };\n\n")
     order, stage1, stage2, above = classes
@@ -540,7 +568,44 @@ def emit(out, combining, sources, canonical, flat, offsets, full, composition, m
     lowest_second = min(canonical[cp][1] for cp in sources
                         if len(canonical[cp]) == 2 and cp not in full)
     out.write(f"pub const first_composable: u21 = 0x{lowest_second:04X};\n\n")
-    out.write("""fn search(entries: []const u32, cp: u21, comptime mask: u32) ?usize {
+    mapping_stage1, mapping_stage2 = mapping_index
+    out.write("/// Combined immediate mappings: zero is absent; canonical ids precede compatibility ids.\n")
+    out.write(f"pub const mapping_limit: u21 = 0x{CLASS_LIMIT:X};\n")
+    out.write(f"pub const mapping_s1 = {MAPPING_S1};\n")
+    for name, values in (("mapping_stage1", mapping_stage1), ("mapping_stage2", mapping_stage2)):
+        out.write(f"pub const {name} = [_]u16{{\n")
+        for i in range(0, len(values), 16):
+            out.write("    " + " ".join(f"{value}," for value in values[i:i + 16]) + "\n")
+        out.write("};\n\n")
+
+    out.write("""pub const ImmediateDecomposition = struct {
+    scalars: []const u21,
+    /// Null denotes a canonical mapping.
+    decomposition_type: ?DecompositionType,
+    excluded: bool,
+};
+
+/// One lookup selects either stored mapping kind. Hangul remains algorithmic
+/// in the normalization engine and has no stored immediate mapping.
+pub fn immediateDecomposition(cp: u21) ?ImmediateDecomposition {
+    const value: u32 = cp;
+    if (value >= mapping_limit) return null;
+    const offset = mapping_stage1[value >> mapping_s1];
+    const id = mapping_stage2[@as(usize, offset) + (value & ((1 << mapping_s1) - 1))];
+    if (id == 0) return null;
+    if (id <= decomposition_entries.len) {
+        const result = decompositionAt(id - 1);
+        return .{ .scalars = result.scalars, .decomposition_type = null, .excluded = result.excluded };
+    }
+    const found = id - (decomposition_entries.len + 1);
+    return .{
+        .scalars = compatDecompositionAt(found),
+        .decomposition_type = compat_decomposition_types[found],
+        .excluded = false,
+    };
+}
+
+fn search(entries: []const u32, cp: u21, comptime mask: u32) ?usize {
     var low: usize = 0;
     var high: usize = entries.len;
     while (low < high) {
@@ -591,6 +656,10 @@ pub const Decomposition = struct {
 pub fn decomposition(cp: u21) ?Decomposition {
     if (cp < first_decomposition) return null;
     const found = search(&decomposition_entries, cp, 0x3FFFF) orelse return null;
+    return decompositionAt(found);
+}
+
+fn decompositionAt(found: usize) Decomposition {
     const entry = decomposition_entries[found];
     const offset = entry >> 18 & 0xFFF;
     const len: usize = if (entry >> 30 & 1 == 1) 2 else 1;
@@ -708,12 +777,13 @@ def main():
     compat_max_len = derive_max_compat_length(canonical, compat)
     classes = build_classes(ccc, canonical, compat, full, nfc_qc, nfkc_qc)
     compat_sources, compat_flat, compat_offsets = build_compat(compat)
+    mapping_index = build_mapping_index(sources, compat_sources)
     with tempfile.TemporaryDirectory() as tmp:
         generated = Path(tmp) / "normalization_properties.zig"
         with generated.open("w", encoding="utf-8") as out:
             emit(out, combining, sources, canonical, flat, offsets, full, composition, maybe,
                  factor, compat_factor, compat_max_len, classes, compat_sources, compat_flat,
-                 compat_offsets, decomposition_types)
+                 compat_offsets, decomposition_types, mapping_index)
         subprocess.run([zig, "fmt", str(generated)], check=True, stdout=subprocess.DEVNULL)
         if args.check:
             if not OUT.exists() or generated.read_bytes() != OUT.read_bytes():
@@ -733,6 +803,8 @@ def main():
         "compat_decomposition_entries": len(compat_sources) * 4,
         "compat_decomposition_data": len(compat_flat) * 4,
         "compat_decomposition_types": len(compat_sources),
+        "mapping_stage1": len(mapping_index[0]) * 2,
+        "mapping_stage2": len(mapping_index[1]) * 2,
     }
     for name, size in sizes.items():
         print(f"{name:28} {size:6} B")

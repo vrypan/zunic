@@ -31,6 +31,11 @@ exact reduced numerator and denominator. Keeping it separate avoids adding
 numeric data to general-property lookups. Normalization's combining class
 reuses the normalizer's class trie; immediate decompositions borrow the same
 canonical and compatibility mapping arrays used by the normalization engine.
+A separate two-stage index selects the mapping kind and array entry in two
+dependent reads, without binary searches. Unmapped values, including Hangul
+syllables whose decomposition is algorithmic, have a zero index. This index
+adds about 28 KiB of table data when `cp().decomposition()` is used; the text
+normalization engine retains its existing lookups.
 
 The folding tables use the C (common) and F (full) mappings from the pinned
 `CaseFolding.txt`. They exclude the S (simple) and T (Turkic) alternatives,

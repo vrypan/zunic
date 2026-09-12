@@ -117,6 +117,10 @@ def parse_zig():
         "compat_decomposition": array("compat_decomposition_entries", 16),
         "compat_data": array("compat_decomposition_data", 16),
         "compat_types": re.findall(r"\.(\w+),", compat_types_body),
+        "mapping_stage1": array("mapping_stage1", 10),
+        "mapping_stage2": array("mapping_stage2", 10),
+        "mapping_limit": int(re.search(r"pub const mapping_limit: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
+        "mapping_s1": int(re.search(r"pub const mapping_s1 = (\d+);", text).group(1)),
         "compat_factor": int(re.search(r"pub const compat_expansion_factor: usize = (\d+);", text).group(1)),
         "max_compat_expansion": int(re.search(r"pub const max_compat_expansion: usize = (\d+);", text).group(1)),
         "first_compat_decomposition": int(re.search(r"pub const first_compat_decomposition: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
@@ -314,6 +318,25 @@ def main():
         fail(f"first_compat_decomposition is 0x{table['first_compat_decomposition']:X}, "
              f"data says 0x{min(compat):X}")
 
+    # The combined lookup must select the right sorted entry, or zero for
+    # every unmapped code point (including algorithmic Hangul).
+    expected_ids = {cp: index for index, cp in
+                    enumerate(sorted(mapping) + sorted(compat), 1)}
+    shift = table["mapping_s1"]
+    leaf_size = 1 << shift
+    assert len(table["mapping_stage1"]) * leaf_size == table["mapping_limit"]
+    for offset in table["mapping_stage1"]:
+        assert offset % leaf_size == 0
+        assert offset + leaf_size <= len(table["mapping_stage2"])
+    for cp in range(MAXCP):
+        if cp >= table["mapping_limit"]:
+            got = 0
+        else:
+            offset = table["mapping_stage1"][cp >> shift]
+            got = table["mapping_stage2"][offset + (cp & (leaf_size - 1))]
+        if got != expected_ids.get(cp, 0):
+            fail(f"U+{cp:04X} immediate mapping index: got={got} expected={expected_ids.get(cp, 0)}")
+
     # --- composition pairs ------------------------------------------------
     expected_pairs = {
         tuple(parts): cp
@@ -477,7 +500,8 @@ def main():
             len(table["decomposition"]) * 4 + len(table["data"]) * 4 +
             len(table["composition"]) * 2 +
             len(table["compat_decomposition"]) * 4 + len(table["compat_data"]) * 4 +
-            len(table["compat_types"]))
+            len(table["compat_types"]) +
+            len(table["mapping_stage1"]) * 2 + len(table["mapping_stage2"]) * 2)
     print(f"ok: {MAXCP} code points verified against the pinned UCD")
     print(f"    {len(table['class_table'])} classes, {len(table['decomposition'])} decompositions, "
           f"{len(table['composition'])} composition pairs, {len(table['compat_decomposition'])} "

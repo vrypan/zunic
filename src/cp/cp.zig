@@ -109,17 +109,12 @@ pub const CodepointView = packed struct(u32) {
     /// Immediate Unicode decomposition mapping and its type. This does not
     /// recursively decompose the result; use Text.normalize() for full text.
     pub fn decomposition(self: CodepointView) ?Decomposition {
-        if (tables.normalization.decomposition(self.value)) |result| return .{
-            .type = .canonical,
+        const result = tables.normalization.immediateDecomposition(self.value) orelse return null;
+        return .{
+            .type = if (result.decomposition_type) |kind| compatibilityType(kind) else .canonical,
             .mapping = result.scalars,
             .fullCompositionExclusion = result.excluded,
         };
-        if (tables.normalization.compatibilityDecomposition(self.value)) |result| return .{
-            .type = compatibilityType(result.decomposition_type),
-            .mapping = result.scalars,
-            .fullCompositionExclusion = false,
-        };
-        return null;
     }
 
     /// Exact Unicode numeric value, including fractions and non-decimal
