@@ -1,5 +1,9 @@
 # ANSI stripping: Zunic and strip-ansi-escapes
 
+This comparison is archived: Zunic no longer exports ANSI stripping. It is
+excluded from the active suite and does not build against current Zunic.
+The sources and saved results are retained for historical reference.
+
 [All Rust comparisons](../README.md)
 
 Compare `terminal(bytes).stripAnsi(buffer)` with strip-ansi-escapes 0.2.1.

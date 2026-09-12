@@ -129,7 +129,7 @@ def main() -> int:
         pairs=pairs,
         comparisons=[{"id": z, "label": caption, "zunic": z, "rust": r}
                      for z, r, caption in PAIRED],
-        peers={"zunic": {"name": "Zunic", "unicode": "16.0.0"},
+        peers={"zunic": {"name": "Zunic", "unicode": "17.0.0"},
                "rust": {"name": "unicode-segmentation 1.13.3", "unicode": "17.0.0"}},
         contract={"input": "bytes", "consumption": "range_checksum_v1"},
         outputs=cross_peer_outputs,

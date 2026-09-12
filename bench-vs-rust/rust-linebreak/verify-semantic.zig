@@ -3,11 +3,11 @@
 const std = @import("std");
 const internal = @import("internal");
 const lb = internal.line_break;
-const scalar = internal.scalar;
+const decoded_token = internal.decoded_token;
 
 fn verify(bytes: []const u8) !usize {
     var actual = lb.iterator(bytes);
-    var classifier = scalar.Classifier(false){};
+    var classifier = decoded_token.Classifier(false){};
     var offset: usize = 0;
     var state: ?lb.State = null;
     var count: usize = 0;

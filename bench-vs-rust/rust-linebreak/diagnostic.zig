@@ -1,6 +1,6 @@
 const std = @import("std");
 const internal = @import("internal");
-const scalar = internal.scalar;
+const decoded_token = internal.decoded_token;
 const lb = internal.line_break;
 const zunic = @import("zunic");
 const cases = .{
@@ -13,7 +13,7 @@ const cases = .{
     .{ "japanese", @embedFile("texts/japanese.txt") },
     .{ "mandarin", @embedFile("texts/mandarin.txt") },
 };
-var tokens: [60000]scalar.ClassifiedToken = undefined;
+var tokens: [60000]decoded_token.ClassifiedToken = undefined;
 var token_count: usize = 0;
 
 const Result = struct {
@@ -36,7 +36,7 @@ fn kind(op: lb.Opportunity) u64 {
 fn classify(bytes: []const u8) Result {
     var input = bytes;
     std.mem.doNotOptimizeAway(&input);
-    var classifier = scalar.Classifier(false){};
+    var classifier = decoded_token.Classifier(false){};
     var pos: usize = 0;
     var result: Result = .{};
     while (pos < input.len) {
@@ -95,7 +95,7 @@ fn transitions(bytes: []const u8) Result {
     }
     const first = tokens[0];
     var state = lb.State.firstWithRecord(first.record.line_break, first.codepoint orelse 0, first.record);
-    var classifier = scalar.Classifier(false){};
+    var classifier = decoded_token.Classifier(false){};
     const eot = classifier.at(input, input.len);
     for (1..token_count) |i| {
         const token = tokens[i];
@@ -178,10 +178,10 @@ pub fn main(init: std.process.Init) !void {
     }
     if (args.len == 2 and (std.mem.eql(u8, args[1], "--dump") or std.mem.eql(u8, args[1], "--streams"))) return printStreams(out);
     if (args.len != 2 or !std.mem.eql(u8, args[1], "--bench")) return error.UnexpectedArgument;
-    try out.writeAll("protocol=1 suite=linebreak peer=zunic engine=zunic-machine unicode=16.0.0 samples=15 calibration_ms=50 input=bytes consumption=offset_status_checksum_v1\n");
+    try out.writeAll("protocol=1 suite=linebreak peer=zunic engine=zunic-machine unicode=17.0.0 samples=15 calibration_ms=50 input=bytes consumption=offset_status_checksum_v1\n");
     inline for (cases) |case| {
         const bytes = case[1];
-        var classifier = scalar.Classifier(false){};
+        var classifier = decoded_token.Classifier(false){};
         var pos: usize = 0;
         token_count = 0;
         while (pos < bytes.len) {

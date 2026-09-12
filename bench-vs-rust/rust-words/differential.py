@@ -5,12 +5,9 @@ This is the correctness half of the harness. It runs both peers with `--dump`
 and reports every place they disagree, with the offending text quoted and the
 code points named, so a difference can be judged rather than merely counted.
 
-The two are pinned to different Unicode versions -- unicode-segmentation 1.13.3
-carries Unicode 17.0.0, Zunic carries 16.0.0 -- so differences are expected and
-a nonzero count is not automatically a bug. What matters is whether each one is
-explained by a property that changed between the two releases. Use --verify to
-have every difference checked against the two UCD releases and classified;
-`--strict` then exits nonzero only if something is left unexplained.
+Both peers use Unicode 17.0.0. Differences therefore cannot be attributed to
+Unicode-version drift. Use --verify for property diagnostics; --strict exits
+nonzero when differences remain unexplained.
 """
 from __future__ import annotations
 
@@ -26,19 +23,14 @@ CORPUS_DIR = HERE.parent / "texts"
 CORPORA = ("arabic", "hindi", "korean", "russian", "source_code", "english", "japanese", "mandarin")
 ZUNIC_BIN = HERE / "zig-out/bin/zunic-words-bench"
 RUST_BIN = HERE / "target/release/unicode-words-bench"
-# Word_Break, Alphabetic and General_Category for both pinned releases. 16.0.0
-# comes from the repository's own vendored copies so no download is needed for
-# the side we ship; 17.0.0 is fetched on demand and cached beside this script.
+# Both peers use the same pinned release and the repository's vendored UCD.
+ZUNIC_UNICODE = "17.0.0"
+RUST_UNICODE = "17.0.0"
 UCD = {
-    "16.0.0": {
-        "wb": HERE.parents[1] / "src/data/WordBreakProperty-16.0.0.txt",
-        "dcp": HERE.parents[1] / "src/data/DerivedCoreProperties-16.0.0.txt",
-        "ud": HERE.parents[1] / "src/data/UnicodeData-16.0.0.txt",
-    },
     "17.0.0": {
-        "wb": HERE / ".ucd/WordBreakProperty-17.0.0.txt",
-        "dcp": HERE / ".ucd/DerivedCoreProperties-17.0.0.txt",
-        "ud": HERE / ".ucd/UnicodeData-17.0.0.txt",
+        "wb": HERE.parents[1] / "src/data/WordBreakProperty-17.0.0.txt",
+        "dcp": HERE.parents[1] / "src/data/DerivedCoreProperties-17.0.0.txt",
+        "ud": HERE.parents[1] / "src/data/UnicodeData-17.0.0.txt",
     },
 }
 URLS = {
@@ -138,7 +130,7 @@ def quote(text: str, start: int, end: int, pad: int = 12) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--max-report", type=int, default=12, help="differences to describe per kind per corpus (verification is unlimited)")
-    parser.add_argument("--verify", action="store_true", help="classify each difference against both UCD releases")
+    parser.add_argument("--verify", action="store_true", help="classify each difference against the peers’ UCD properties")
     parser.add_argument("--strict", action="store_true", help="exit nonzero if a difference is unexplained")
     args = parser.parse_args()
     if args.max_report < 0:
@@ -152,9 +144,9 @@ def main() -> int:
 
     zunic = dump(ZUNIC_BIN)
     rust = dump(RUST_BIN, str(CORPUS_DIR))
-    old, new = (load_properties("16.0.0"), load_properties("17.0.0")) if args.verify else ({}, {})
+    old, new = (load_properties(ZUNIC_UNICODE), load_properties(RUST_UNICODE)) if args.verify else ({}, {})
 
-    print("Unicode versions: Zunic 16.0.0; unicode-segmentation 17.0.0. Version differences are expected.")
+    print(f"Unicode versions: Zunic {ZUNIC_UNICODE}; unicode-segmentation {RUST_UNICODE}.")
 
     total_segments = 0
     total_boundary = 0
@@ -240,7 +232,7 @@ def main() -> int:
         f"{total_flag} flag differences"
     )
     if args.verify:
-        print(f"unexplained by the 16.0.0 -> 17.0.0 property changes: {unexplained}")
+        print(f"unexplained by peer property changes: {unexplained}")
         if args.strict and unexplained:
             return 1
     return 0

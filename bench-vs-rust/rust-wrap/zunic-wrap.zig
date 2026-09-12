@@ -156,7 +156,7 @@ pub fn main(init: std.process.Init) !void {
     if (args.len == 2 and std.mem.eql(u8, args[1], "--dump")) return printDump(out);
     if (args.len != 2 or !std.mem.eql(u8, args[1], "--bench")) return error.UnexpectedArgument;
 
-    try out.print("protocol=1 suite=wrap peer=zunic engine=zunic unicode=16.0.0 samples={d} calibration_ms={d} input=bytes consumption=line_bytes_fnv1 width={d}\n", .{ sample_count, target_ns / std.time.ns_per_ms, width });
+    try out.print("protocol=1 suite=wrap peer=zunic engine=zunic unicode=17.0.0 samples={d} calibration_ms={d} input=bytes consumption=line_bytes_fnv1 width={d}\n", .{ sample_count, target_ns / std.time.ns_per_ms, width });
     for (cases) |case| {
         try measure(init.io, out, case, "zunic_iterate", wrapIterate);
         try measure(init.io, out, case, "zunic_collect", wrapCollect);

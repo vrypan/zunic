@@ -247,8 +247,8 @@ mod tests {
     }
 
     #[test]
-    fn rust_peer_agrees_with_zunics_vendored_unicode_16_fixture() {
-        let fixture = include_str!("../../../src/data/NormalizationTest-16.0.0.txt");
+    fn rust_peer_agrees_with_pinned_unicode_16_fixture() {
+        let fixture = include_str!("../fixtures/NormalizationTest-16.0.0.txt");
         let mut cases = 0usize;
         for raw in fixture.lines() {
             let body = raw.split_once('#').map_or(raw, |(body, _)| body).trim();

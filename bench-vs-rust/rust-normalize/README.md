@@ -60,9 +60,12 @@ for verification outside the timed iterator workload.
 
 ## Versions and limits
 
-Both peers use Unicode 16.0.0. `make test` runs local regression checks and a
-Rust check against the repository's pinned normalization fixture, then compares
-the shared corpus outputs. Consult the run output for agreement; fixture counts
+Zunic uses Unicode 17.0.0; the pinned Rust peer uses Unicode 16.0.0.
+`make test` runs local regression checks and a Rust check against the local
+Unicode 16 [normalization fixture](fixtures/NormalizationTest-16.0.0.txt),
+then compares the shared corpus outputs. The fixture is retained from Zunic's
+previous Unicode 16 data so the Rust test matches its pinned library version.
+Consult the run output for agreement; fixture counts
 and historical pass summaries are not benchmark results.
 
 A separate diagnostic excludes Rust's UTF-8 validation while Zunic still

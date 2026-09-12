@@ -20,6 +20,11 @@ uucode and Zunic overlap in nine benchmarked operations:
 | Streaming graphemes | `graphemeBreak` | `computeGraphemeBreak` | every adjacent-pair boundary and ending offset |
 | Ghostty scalar width | public width/GCB composition | matching uucode field composition | derived width for every scalar |
 
+The UTF-8 row measures the low-level `zunic.utf8.step()` decoder, not
+`text(bytes).codepoints().iterator()`. It does not measure the public iterator's
+`CodepointView` return or sticky `err` handling. Property rows use the current
+`cp(value)` API; grapheme rows use the tolerant text iterators.
+
 uucode does not currently expose comparable line breaking, normalization,
 word boundaries, or wrapping, so those Zunic features are not
 included. The shared corpora are the same eight multilingual files used by

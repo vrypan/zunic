@@ -89,7 +89,7 @@ the first-24 comparison uses only the prefix shown here.
 
 ## Versions and limits
 
-Zunic uses Unicode 16.0.0. The pinned Rust dependencies use Unicode 15.0.0 for
+Zunic uses Unicode 17.0.0. The pinned Rust dependencies use Unicode 15.0.0 for
 line breaking and 17.0.0 for width. Width, word splitting, whitespace, and
 final-line policies can also differ. Textwrap handles some ANSI sequences;
 Zunic's Text view treats the input as plain text. Reports compare exact output

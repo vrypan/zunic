@@ -120,7 +120,7 @@ def main() -> int:
     summary = create_summary(
         suite="wrap", title="Wrapping: textwrap vs Zunic", label=args.label, pairs=pairs,
         comparisons=comparisons,
-        peers={"zunic": {"name": "Zunic", "unicode": "16.0.0"},
+        peers={"zunic": {"name": "Zunic", "unicode": "17.0.0"},
                "rust": {"name": "textwrap 0.16.2", "unicode": "linebreak 15.0.0; width 17.0.0"}},
         contract={"input": "bytes", "consumption": "line_bytes_fnv1"}, outputs=cross_peer_outputs,
         operation_outputs=compare_operations(outputs, "wrap", comparisons, CORPORA),

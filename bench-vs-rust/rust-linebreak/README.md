@@ -53,7 +53,7 @@ that peer's stream.
 
 ## Versions and limits
 
-Zunic uses Unicode 16.0.0. The Rust crate uses Unicode 15.0.0 and resolves some
+Zunic uses Unicode 17.0.0. The Rust crate uses Unicode 15.0.0 and resolves some
 script-dependent line-break classes differently. Reports state both versions
 and show actual output agreement. Neither a count match nor a version mismatch
 alone explains a boundary difference.

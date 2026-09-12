@@ -212,7 +212,7 @@ def collect(label: str, pair_count: int) -> Path:
         suite="linebreak", title="Line breaking: unicode-linebreak vs Zunic", label=label, pairs=pairs,
         comparisons=[{"id": "opportunities", "label": "Line-break opportunities",
                       "zunic": "opportunities_only", "rust": "opportunities_only"}],
-        peers={"zunic": {"name": "Zunic", "unicode": "16.0.0"},
+        peers={"zunic": {"name": "Zunic", "unicode": "17.0.0"},
                "rust": {"name": "unicode-linebreak 0.1.5", "unicode": "15.0.0 with SA tailoring"}},
         contract={"input": "bytes", "consumption": "offset_status_checksum_v1"}, outputs=cross,
         operation_outputs=compare_operations(outputs, "linebreak", [

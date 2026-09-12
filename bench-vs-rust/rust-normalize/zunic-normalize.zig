@@ -113,7 +113,7 @@ fn measure(io: std.Io, out: *std.Io.Writer, case: Case, comptime form: zunic.For
 }
 
 fn printBench(io: std.Io, out: *std.Io.Writer) !void {
-    try out.writeAll("protocol=1 suite=normalize peer=zunic engine=zunic unicode=16.0.0 samples=15 calibration_ms=50 input=bytes consumption=scalar_sum_v1\n");
+    try out.writeAll("protocol=1 suite=normalize peer=zunic engine=zunic unicode=17.0.0 samples=15 calibration_ms=50 input=bytes consumption=scalar_sum_v1\n");
     for (cases) |case| {
         try measure(io, out, case, .nfc);
         try measure(io, out, case, .nfd);

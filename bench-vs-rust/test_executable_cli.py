@@ -9,7 +9,6 @@ SUITES = {
     'rust-normalize': ('zunic-normalize', 'target/release/unicode-normalization-zunic'),
     'rust-words': ('zunic-words-bench', 'target/release/unicode-words-bench'),
     'rust-wrap': ('zunic-wrap-bench', 'target/release/cellwidth-wrap-bench'),
-    'rust-strip-ansi': ('zunic-strip-ansi-bench', 'target/release/rust-strip-ansi-bench'),
     'rust-width': ('zunic-width-bench', 'target/release/unicode-width-bench'),
 }
 
@@ -35,7 +34,7 @@ class ExecutableCliTests(unittest.TestCase):
                         result = subprocess.run([str(binary), *args], cwd='/', capture_output=True, text=True, timeout=5)
                         self.assertNotEqual(result.returncode, 0)
                         self.assertNotIn('protocol=1', result.stdout)
-                    corpus = HERE / suite / 'texts' if suite == 'rust-strip-ansi' else HERE / 'texts'
+                    corpus = HERE / 'texts'
                     args = ['--dump'] if peer == 'zunic' else [str(corpus), '--dump']
                     result = subprocess.run([str(binary), *args], capture_output=True, text=True, timeout=10)
                     self.assertEqual(result.returncode, 0, result.stderr)

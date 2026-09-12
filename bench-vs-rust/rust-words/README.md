@@ -59,7 +59,7 @@ predicates, which could use different Unicode data.
 
 ## Versions and limits
 
-Zunic uses Unicode 16.0.0; unicode-segmentation uses 17.0.0. Reports compare full
+Zunic uses Unicode 17.0.0; unicode-segmentation uses 17.0.0. Reports compare full
 partitions and filtered word ranges separately. Equal segment counts alone do
 not establish agreement. Differences are reported, not assumed to be bugs.
 
@@ -71,7 +71,8 @@ python3 differential.py --verify --strict
 python3 test_differential.py
 ```
 
-`--verify` fetches missing Unicode fixtures and examines property changes.
+`--verify` uses the vendored Unicode 17 fixtures for both peers. Since their
+Unicode versions match, version drift cannot explain differences.
 `--strict` fails if a difference remains unexplained. `--max-report` limits
 printed details, not verification. Property changes are clues; context and rule
 changes can also affect boundaries. No fixed agreement count is promised here.

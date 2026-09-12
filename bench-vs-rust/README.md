@@ -18,8 +18,11 @@ Rust/Cargo, Python 3, curl, and Make installed.
 | [Normalization](rust-normalize/README.md) | unicode-normalization 0.1.24 | NFC, NFD, NFKC, and NFKD iteration |
 | [Words](rust-words/README.md) | unicode-segmentation 1.13.3 | Word boundaries and word-like segments |
 | [Wrapping](rust-wrap/README.md) | textwrap 0.16.2 | Full wrapping and first 24 lines |
-| [ANSI stripping](rust-strip-ansi/README.md) | strip-ansi-escapes 0.2.1 | Reused and allocated output buffers |
 | [Display width](rust-width/README.md) | unicode-width 0.2.2 | Whole-text display width |
+
+Current Zunic uses Unicode 17.0.0; each suite documents its Rust peer's version.
+ANSI stripping is archived because Zunic no longer provides that operation.
+The recorded results below retain the versions and operations of their original runs.
 
 <!-- recorded-results:start -->
 ## Recorded results: 870043a on MacBook Pro M4
@@ -247,7 +250,10 @@ Unicode: Zunic **16.0.0**; textwrap 0.16.2 **linebreak 15.0.0; width 17.0.0**.
 </details>
 
 <details>
-<summary>ANSI stripping — per-corpus results</summary>
+<summary>Archived ANSI stripping — per-corpus results</summary>
+
+Historical comparison: ANSI stripping was removed from Zunic and is no longer
+part of the active suite. Its adapter does not build against current Zunic.
 
 Saved run: `benchmarks/20260910T203540Z-strip-ansi-22a101/summary.json`.
 
@@ -329,7 +335,7 @@ into ignored `texts/`. [corpus.lock.json](corpus.lock.json) pins the GitHub
 revision and file checksums. Existing files are checked and reused. The
 upstream attribution and license files are fetched with the texts.
 
-ANSI stripping uses its own checked-in synthetic [fixtures](rust-strip-ansi/texts/),
+The archived ANSI comparison uses checked-in synthetic [fixtures](rust-strip-ansi/texts/),
 including malformed byte sequences. Zig embeds corpus bytes at build time;
 Rust reads the same bytes before timing. Drivers check input identity.
 

@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) void {
     const linebreak = module(b, src, "src/linebreak/linebreak.zig", target, optimize);
     linebreak.addImport("tables", tables);
     linebreak.addImport("encoding", encoding);
-    const bridge = diagnostic_sources.add("src/comparison_diagnostic.zig", "pub const scalar = @import(\"encoding\").scalar;\npub const line_break = @import(\"linebreak\");\npub const transitions = @import(\"tables\").line_break_machine_data;\n");
+    const bridge = diagnostic_sources.add("src/comparison_diagnostic.zig", "pub const decoded_token = @import(\"encoding\").decoded_token;\npub const line_break = @import(\"linebreak\");\npub const transitions = @import(\"tables\").line_break_machine_data;\n");
     const internal = b.createModule(.{ .root_source_file = bridge, .target = target, .optimize = optimize });
     internal.addImport("tables", tables);
     internal.addImport("encoding", encoding);

@@ -1,4 +1,4 @@
-COMPARISONS := rust-linebreak rust-normalize rust-words rust-wrap rust-strip-ansi rust-width
+COMPARISONS := rust-linebreak rust-normalize rust-words rust-wrap rust-width
 PYTHON ?= python3
 
 .DEFAULT_GOAL := all

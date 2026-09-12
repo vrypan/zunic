@@ -2,7 +2,7 @@
 const std = @import("std");
 const internal = @import("internal");
 const lb = internal.line_break;
-const scalar = internal.scalar;
+const decoded_token = internal.decoded_token;
 const data = internal.transitions;
 
 pub fn main(init: std.process.Init) !void {
@@ -18,7 +18,7 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("state_bytes={d} transition_data_bytes={d}\n", .{ @sizeOf(lb.State), data.data_bytes });
     inline for (.{ "arabic", "english", "hindi", "japanese", "korean", "mandarin", "russian", "source_code" }) |name| {
         const bytes = @embedFile("texts/" ++ name ++ ".txt");
-        var classifier = scalar.Classifier(true){};
+        var classifier = decoded_token.Classifier(true){};
         const first = classifier.at(bytes, 0);
         var state = lb.State.firstWithRecord(first.record.line_break, first.codepoint orelse 0, first.record);
         var token = classifier.at(bytes, first.end);

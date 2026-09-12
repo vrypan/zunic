@@ -154,7 +154,7 @@ def main():
         pairs=run_state["pairs"],
         comparisons=[{"id": form, "label": form.upper(), "zunic": form, "rust": form}
                      for form in ("nfc", "nfd", "nfkc", "nfkd")],
-        peers={"zunic": {"name": "Zunic", "unicode": "16.0.0"},
+        peers={"zunic": {"name": "Zunic", "unicode": "17.0.0"},
                "rust": {"name": "unicode-normalization 0.1.24", "unicode": "16.0.0"}},
         contract={"input": "bytes" if args.rust_input == "bytes" else "zunic=bytes,rust=prevalidated",
                   "consumption": "scalar_sum_v1"}, outputs=outputs,

@@ -79,7 +79,7 @@ the run unchanged if it moved between them.
 
 ## Versions and limits
 
-Zunic uses Unicode 16.0.0. unicode-width 0.2.2 uses Unicode 17.0.0. Version and
+Zunic uses Unicode 17.0.0. unicode-width 0.2.2 uses Unicode 17.0.0. Version and
 cluster-vs-char policy differences are accepted constraints on the "same"/"diff"
 column; they are not automatically a Zunic bug or a Rust bug.
 
