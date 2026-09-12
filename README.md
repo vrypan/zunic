@@ -14,7 +14,7 @@ and normalize Unicode.
 
 ## Why zunic
 
-- **Fast.** On par with corresponding Rust libraries in our benchmarks,
+- **Fast.** On par with corresponding Zig and Rust libraries in our benchmarks,
   and faster on many workloads.
 - **No allocation.** Codepoint views store one numeric value and text views
   borrow your bytes. Text iterators return codepoint views or byte ranges;
@@ -41,7 +41,7 @@ text operations perform the work when called.
 ## Install
 
 ```sh
-zig fetch --save git+https://github.com/vrypan/zunic.git#v0.3.1
+zig fetch --save git+https://github.com/vrypan/zunic.git#v0.4.0
 ```
 
 In your application's `build.zig`:
@@ -148,7 +148,8 @@ See [docs/](docs/README.md) for signatures, return values, examples, and
 implementation decisions:
 
 [Text view](docs/text/README.md) ·
-[API overview](docs/README.md#api-overview)
+[API overview](docs/README.md#api-overview) ·
+[Changelog](CHANGELOG.md)
 
 Run `zig build test` for the test suite or `zig build docs-test` for the
 documentation examples. Build options and verification details are in

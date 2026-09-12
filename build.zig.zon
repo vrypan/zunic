@@ -1,11 +1,12 @@
 .{
     .name = .zunic,
-    .version = "0.3.1",
+    .version = "0.4.0",
     .fingerprint = 0xb6c59fb4d94ecc9,
     .minimum_zig_version = "0.16.0",
     .paths = .{
         "build.zig",
         "build.zig.zon",
+        "CHANGELOG.md",
         "Makefile",
         "README.md",
         "docs",
