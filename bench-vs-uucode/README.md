@@ -49,6 +49,33 @@ make test
 make bench
 ```
 
+Run a single operation or a comma-separated selection from the repository root:
+
+```sh
+make -C bench-vs-uucode bench OPERATIONS=combining_class
+make -C bench-vs-uucode bench OPERATIONS=combining_class,decomposition PAIRS=1
+```
+
+`OPERATIONS=all` is the default. Every operation can be selected:
+
+```text
+utf8, graphemes, measured, width,
+terminal_properties, terminal_lookup, case_fold,
+simple_uppercase, simple_lowercase, simple_titlecase,
+numeric_properties, combining_class, decomposition,
+grapheme_stream, ghostty_width
+```
+
+Use comma-separated names without spaces. Unknown names, empty selections,
+and duplicate names are rejected. Selected operations run across all corpora;
+only those operations are timed, validated, and included in the saved report.
+Both executables still include all operations, so filtering does not specialize
+the build or change what the recorded binary size represents.
+
+The Python driver accepts `--operations combining_class,decomposition`.
+The executables accept the same option after `--bench` or `--dump`, for example
+`./zig-out/bin/zunic-bench --bench --operations combining_class`.
+
 `make bench PAIRS=1` is useful for an exploratory run. The default is three
 pairs. Each pair runs the peers sequentially; the peer that runs first
 alternates. Every executable calibrates each corpus/operation to about 50 ms

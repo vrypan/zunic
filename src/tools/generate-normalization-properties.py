@@ -10,13 +10,11 @@ Normalization gets its own module for the same reason word segmentation did:
 `properties.Record` is a full u32 with two padding bits, and a combining class
 alone needs eight.
 
-The data is extremely sparse -- a few thousand of 1,114,112 code points carry
-any of these facts -- so a two-stage trie of the kind properties.zig uses costs
-more in index than the payload is worth (measured at design time: 42 KB for a
-u16 info index at the best block size, against 27 KB for the whole of this
-layout). These tables are sorted arrays searched by bisection instead. The
-lookups are O(log n), and the engine skips them entirely for the ASCII range,
-which carries no combining class and no decomposition of either kind.
+The scalar classification uses a two-stage trie of packed u16 records. It
+shares CCC, quick-check, and composition/decomposition eligibility in two
+loads. ASCII is resolved directly. Sparse mapping sequences and composition
+pairs remain in sorted arrays; the normalization engine uses class flags to
+skip searches for characters without mappings.
 
 Canonical and compatibility mappings are kept in separate tables on purpose.
 Canonical decompositions are at most two scalars immediate, so their table
@@ -244,13 +242,8 @@ def derive_max_compat_length(canonical, compat):
 
 
 CLASS_LIMIT = 0x30000
-CLASS_S1 = 9
-# 5 sufficed before the compatibility fields were added to the class key.
-# There are only 75 distinct classes now, but two more distinguishing
-# dimensions (nfkc_quick_check, compat_decomposes) fragment the leaf blocks
-# enough that a 32-entry leaf overflows the byte-sized leaf index (397
-# distinct leaves at CLASS_S2=5). 6 is the smallest block that fits under 256.
-CLASS_S2 = 6
+# 32-codepoint leaves minimize the two-stage table size for Unicode 17.
+CLASS_S1 = 5
 
 
 def build_classes(ccc, canonical, compat, full, nfc_qc, nfkc_qc):
@@ -291,20 +284,15 @@ def build_classes(ccc, canonical, compat, full, nfc_qc, nfkc_qc):
     above = {ids[cp] for cp in range(CLASS_LIMIT, MAXCP)}
     assert len(above) == 1, "the range above the trie must be a single class"
 
-    leaf_size = 1 << CLASS_S2
-    leaves, mids, stage1 = {}, {}, []
-    for base in range(0, CLASS_LIMIT, 1 << CLASS_S1):
-        row = tuple(
-            leaves.setdefault(tuple(ids[at:at + leaf_size]), len(leaves))
-            for at in range(base, base + (1 << CLASS_S1), leaf_size)
-        )
-        stage1.append(mids.setdefault(row, len(mids)))
-    assert len(mids) < 256 and len(leaves) < 256, "trie indices must fit a byte"
-
+    leaf_size = 1 << CLASS_S1
+    leaves, stage1 = {}, []
+    for base in range(0, CLASS_LIMIT, leaf_size):
+        row = tuple(ids[base:base + leaf_size])
+        stage1.append(leaves.setdefault(row, len(leaves)))
+    assert len(leaves) < 65536, "block id must fit u16"
     order = sorted(classes, key=classes.get)
-    stage2 = [leaf for row in sorted(mids, key=mids.get) for leaf in row]
-    stage3 = [cid for leaf in sorted(leaves, key=leaves.get) for cid in leaf]
-    return order, stage1, stage2, stage3, above.pop()
+    stage2 = [cid for row in leaves for cid in row]
+    return order, stage1, stage2, above.pop()
 
 
 def build(ccc, canonical, full, nfc_qc):
@@ -375,14 +363,12 @@ def emit(out, combining, sources, canonical, flat, offsets, full, composition, m
     out.write("//! immediate and instead derive each entry's length from the next\n")
     out.write("//! entry's offset. See the generator module docstring for why.\n")
     out.write("//!\n")
-    out.write("//! Only a few thousand of the 1,114,112 code points carry any of these\n")
-    out.write("//! facts, so these are sorted arrays searched by bisection rather than\n")
-    out.write("//! the two-stage trie properties.zig uses: at this density the trie's\n")
-    out.write("//! index alone costs more than this entire layout. Hangul is algorithmic\n")
-    out.write("//! and appears in no table, for either form.\n\n")
+    out.write("//! Scalar normalization facts share a two-stage trie of packed u16 records.\n")
+    out.write("//! Sparse mappings and composition pairs use sorted arrays. Hangul is\n")
+    out.write("//! algorithmic and has no mapping entries.\n\n")
 
     out.write("pub const QuickCheck = enum(u2) { yes, no, maybe };\n\n")
-    order, stage1, stage2, stage3, above = classes
+    order, stage1, stage2, above = classes
     out.write("/// Every per-character fact that is not a mapping, in one value.\n")
     out.write("///\n")
     out.write("/// `composition_base` and `composable` are the two halves of the\n")
@@ -418,13 +404,12 @@ def emit(out, combining, sources, canonical, flat, offsets, full, composition, m
     out.write("/// Every code point at or above `class_limit` shares one class.\n")
     out.write(f"pub const class_above_limit: u8 = {above};\n")
     out.write(f"const class_s1 = {CLASS_S1};\n")
-    out.write(f"const class_s2 = {CLASS_S2};\n\n")
+    out.write("\n")
     # ASCII is uniform in every field but one, so it needs no memory at all:
     # a register test beats even a single L1 load. Assert the uniformity rather
     # than assume it -- a future Unicode release could break it.
-    ascii = [order[stage3[(stage2[(stage1[cp >> CLASS_S1] << (CLASS_S1 - CLASS_S2))
-                                  | (cp >> CLASS_S2 & ((1 << (CLASS_S1 - CLASS_S2)) - 1))] << CLASS_S2)
-                          | (cp & ((1 << CLASS_S2) - 1))]] for cp in range(128)]
+    ascii = [order[stage2[(stage1[cp >> CLASS_S1] << CLASS_S1) | (cp & ((1 << CLASS_S1) - 1))]]
+             for cp in range(128)]
     assert all(k[0] == 0 and k[1] == "Y" and not k[2] and not k[4] and k[5] == "Y" and not k[6] for k in ascii), \
         "ASCII is no longer uniform outside the composition-base bit"
     mask = sum(1 << cp for cp, k in enumerate(ascii) if k[3])
@@ -436,13 +421,11 @@ def emit(out, combining, sources, canonical, flat, offsets, full, composition, m
     out.write("/// varies, over 53 characters, so it fits an immediate. The generator\n")
     out.write("/// asserts that uniformity against the data.\n")
     out.write("///\n")
-    out.write("/// This matters: the trie costs three dependent loads, a clear win\n")
-    out.write("/// against bisecting a sorted table but a loss against the range compare\n")
-    out.write("/// ASCII used to exit on -- measured at +17% NFC and +26% NFD on English.\n")
+    out.write("/// Keep ASCII ahead of the two dependent table loads.\n")
     out.write(f"pub const ascii_bases_low: u64 = 0x{mask & (1 << 64) - 1:016X};\n")
     out.write(f"pub const ascii_bases_high: u64 = 0x{mask >> 64:016X};\n\n")
-    for name, values, per_row in (("class_stage1", stage1, 24), ("class_stage2", stage2, 24), ("class_stage3", stage3, 24)):
-        out.write(f"pub const {name} = [_]u8{{\n")
+    for name, values, per_row in (("class_stage1", stage1, 24), ("class_stage2", [packed[cid] for cid in stage2], 24)):
+        out.write(f"pub const {name} = [_]u16{{\n")
         for i in range(0, len(values), per_row):
             out.write("    " + " ".join(f"{v}," for v in values[i:i + per_row]) + "\n")
         out.write("};\n\n")
@@ -568,9 +551,7 @@ def emit(out, combining, sources, canonical, flat, offsets, full, composition, m
     return null;
 }
 
-/// Three dependent loads, then one into a table small enough to stay hot.
-/// This replaces bisecting a sorted array for every character, which cost
-/// about ten unpredictable probes even to answer "nothing here".
+/// Two dependent loads return the complete packed normalization record.
 pub fn classOf(cp: u21) Class {
     if (cp < 128) return .{
         .ccc = 0,
@@ -584,15 +565,18 @@ pub fn classOf(cp: u21) Class {
         .compat_decomposes = false,
     };
     if (cp >= class_limit) return @bitCast(class_table[class_above_limit]);
-    const mid = class_stage1[cp >> class_s1];
-    const leaf = class_stage2[(@as(usize, mid) << (class_s1 - class_s2)) | (cp >> class_s2 & ((1 << (class_s1 - class_s2)) - 1))];
-    const id = class_stage3[(@as(usize, leaf) << class_s2) | (cp & ((1 << class_s2) - 1))];
-    return @bitCast(class_table[id]);
+    const block = class_stage1[cp >> class_s1];
+    return @bitCast(class_stage2[(@as(usize, block) << class_s1) | (cp & ((1 << class_s1) - 1))]);
 }
 
 /// Canonical_Combining_Class.
 pub fn combiningClass(cp: u21) u8 {
-    return classOf(cp).ccc;
+    // Use the shared records directly: an ASCII branch makes mixed and
+    // non-ASCII lookups slower, even though ASCII always has CCC zero.
+    const value: u32 = cp;
+    if (value >= class_limit) return @truncate(class_table[class_above_limit]);
+    const block = class_stage1[value >> class_s1];
+    return @truncate(class_stage2[(@as(usize, block) << class_s1) | (value & ((1 << class_s1) - 1))]);
 }
 
 pub const Decomposition = struct {
@@ -737,13 +721,12 @@ def main():
         else:
             shutil.copyfile(generated, args.output)
 
-    order, stage1, stage2, stage3, _ = classes
+    order, stage1, stage2, _ = classes
     sizes = {
         "ascii_bases": 16,
         "class_table": len(order) * 2,
-        "class_stage1": len(stage1),
-        "class_stage2": len(stage2),
-        "class_stage3": len(stage3),
+        "class_stage1": len(stage1) * 2,
+        "class_stage2": len(stage2) * 2,
         "decomposition_entries": len(sources) * 4,
         "decomposition_data": len(flat) * 4,
         "composition_index": len(composition) * 2,

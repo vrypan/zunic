@@ -105,11 +105,9 @@ def parse_zig():
         "class_table": array("class_table", 16),
         "class_stage1": array("class_stage1", 10),
         "class_stage2": array("class_stage2", 10),
-        "class_stage3": array("class_stage3", 10),
         "class_limit": int(re.search(r"pub const class_limit: u21 = (0x[0-9A-Fa-f]+);", text).group(1), 16),
         "class_above_limit": int(re.search(r"pub const class_above_limit: u8 = (\d+);", text).group(1)),
         "class_s1": int(re.search(r"const class_s1 = (\d+);", text).group(1)),
-        "class_s2": int(re.search(r"const class_s2 = (\d+);", text).group(1)),
         "decomposition": array("decomposition_entries", 16),
         "data": array("decomposition_data", 16),
         "composition": array("composition_index", 10),
@@ -191,16 +189,14 @@ def main():
         fail(f"first_decomposition is 0x{table['first_decomposition']:X}, data says 0x{lowest_decomposition:X}")
 
     # --- the class trie, decoded by walking it, over every code point -----
-    s1, s2 = table["class_s1"], table["class_s2"]
-    mid_bits = s1 - s2
+    s1 = table["class_s1"]
 
     def trie_class(cp):
         """Walk the trie only, so the ASCII shortcut can be checked against it."""
         if cp >= table["class_limit"]:
             return table["class_table"][table["class_above_limit"]]
-        mid = table["class_stage1"][cp >> s1]
-        leaf = table["class_stage2"][(mid << mid_bits) | (cp >> s2 & ((1 << mid_bits) - 1))]
-        return table["class_table"][table["class_stage3"][(leaf << s2) | (cp & ((1 << s2) - 1))]]
+        block = table["class_stage1"][cp >> s1]
+        return table["class_stage2"][(block << s1) | (cp & ((1 << s1) - 1))]
 
     # The ASCII shortcut bypasses the trie, so a wrong bit there would be
     # invisible to every other check: ASCII would simply get a wrong answer.
@@ -476,8 +472,8 @@ def main():
 
     if failures:
         sys.exit(f"{len(failures)} mismatches over {MAXCP} code points")
-    size = (16 + len(table["class_table"]) * 2 + len(table["class_stage1"]) +
-            len(table["class_stage2"]) + len(table["class_stage3"]) +
+    size = (16 + len(table["class_table"]) * 2 + len(table["class_stage1"]) * 2 +
+            len(table["class_stage2"]) * 2 +
             len(table["decomposition"]) * 4 + len(table["data"]) * 4 +
             len(table["composition"]) * 2 +
             len(table["compat_decomposition"]) * 4 + len(table["compat_data"]) * 4 +

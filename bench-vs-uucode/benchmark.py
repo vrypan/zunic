@@ -64,6 +64,17 @@ PEERS = {
 UUCODE_COMMIT = "f67fa5dbef5c9de57773dbe2f7a02bebc7e20301"
 
 
+def parse_operations(value: str) -> tuple[str, ...]:
+    if value == "all":
+        return OPERATIONS
+    names = value.split(",")
+    if any(name not in OPERATIONS for name in names):
+        raise argparse.ArgumentTypeError("expected all or comma-separated operations: " + ", ".join(OPERATIONS))
+    if len(set(names)) != len(names):
+        raise argparse.ArgumentTypeError("duplicate operation")
+    return tuple(op for op in OPERATIONS if op in names)
+
+
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -90,7 +101,7 @@ def fields(line: str) -> dict[str, str]:
     return dict(item.split("=", 1) for item in line.split() if "=" in item)
 
 
-def parse_dump(text: str, snapshots: dict[str, bytes]) -> dict[str, dict[str, dict[str, object]]]:
+def parse_dump(text: str, snapshots: dict[str, bytes], operations: tuple[str, ...] = OPERATIONS) -> dict[str, dict[str, dict[str, object]]]:
     inputs: set[str] = set()
     outputs: dict[str, dict[str, dict[str, object]]] = {}
     for line in text.splitlines():
@@ -106,7 +117,7 @@ def parse_dump(text: str, snapshots: dict[str, bytes]) -> dict[str, dict[str, di
             inputs.add(case)
         elif {"op", "units", "checksum", "output"} <= row.keys():
             operation = row["op"]
-            if operation not in OPERATIONS or operation in outputs.setdefault(case, {}):
+            if operation not in operations or operation in outputs.setdefault(case, {}):
                 raise ValueError(f"{case}: unexpected or duplicate operation {operation!r}")
             outputs[case][operation] = {
                 "units": int(row["units"]),
@@ -115,12 +126,12 @@ def parse_dump(text: str, snapshots: dict[str, bytes]) -> dict[str, dict[str, di
             }
     if inputs != set(CORPORA) or set(outputs) != set(CORPORA):
         raise ValueError("incomplete dump")
-    if any(set(rows) != set(OPERATIONS) for rows in outputs.values()):
+    if any(set(rows) != set(operations) for rows in outputs.values()):
         raise ValueError("incomplete operation dump")
     return outputs
 
 
-def parse_timing(text: str, peer: str, outputs: dict[str, dict[str, dict[str, object]]], snapshots: dict[str, bytes]) -> dict[str, dict[str, object]]:
+def parse_timing(text: str, peer: str, outputs: dict[str, dict[str, dict[str, object]]], snapshots: dict[str, bytes], operations: tuple[str, ...] = OPERATIONS) -> dict[str, dict[str, object]]:
     headers = [fields(line) for line in text.splitlines() if line.startswith("protocol=")]
     expected = {"protocol": "6", "suite": "unicode", "peer": peer, "samples": "15",
                 "calibration_ms": "50", "input": "bytes+predecoded_codepoints", "consumption": "operation_checksum_v6"}
@@ -133,7 +144,7 @@ def parse_timing(text: str, peer: str, outputs: dict[str, dict[str, dict[str, ob
         if not {"case", "op"} <= row.keys():
             continue
         key = (row["case"], row["op"])
-        if key[0] not in CORPORA or key[1] not in OPERATIONS:
+        if key[0] not in CORPORA or key[1] not in operations:
             raise ValueError(f"unexpected timing row {key}")
         if "raw_samples=" in line:
             if key in raw:
@@ -160,7 +171,7 @@ def parse_timing(text: str, peer: str, outputs: dict[str, dict[str, dict[str, ob
                 result["units"] != evidence["units"] or result["checksum"] != evidence["checksum"]):
             raise ValueError(f"{key}: timed result differs from samples or dump")
         parsed[key[0]][key[1]] = result
-    if set(parsed) != set(CORPORA) or any(set(rows) != set(OPERATIONS) for rows in parsed.values()):
+    if set(parsed) != set(CORPORA) or any(set(rows) != set(operations) for rows in parsed.values()):
         raise ValueError("incomplete timing output")
     return parsed
 
@@ -211,9 +222,29 @@ def self_test() -> int:
                 raise ValueError(f"{peer}: bad help output")
         dump = run([str(binary), "--dump"], Path("/")).stdout
         outputs[peer] = parse_dump(dump, snapshots)
-        bad = subprocess.run([str(binary), "--unknown"], cwd="/", capture_output=True, text=True)
-        if bad.returncode == 0:
-            raise ValueError(f"{peer}: unknown option succeeded")
+        selections = [(operation,) for operation in OPERATIONS]
+        selections.append(("combining_class", "decomposition"))
+        for selection in selections:
+            selected_dump = run([str(binary), "--dump", "--operations", ",".join(selection)], Path("/")).stdout
+            selected = parse_dump(selected_dump, snapshots, selection)
+            expected = {case: {op: outputs[peer][case][op] for op in selection} for case in CORPORA}
+            if selected != expected:
+                raise ValueError(f"{peer}: filtered dump differs from full dump: {selection}")
+        for bad_args in (["--unknown"], ["--bench", "--operations"],
+                         *(["--dump", "--operations", value] for value in
+                           ("", "unknown", "utf8,", "utf8,utf8", "all,utf8"))):
+            bad = subprocess.run([str(binary), *bad_args], cwd="/", capture_output=True, text=True)
+            if bad.returncode == 0:
+                raise ValueError(f"{peer}: invalid arguments succeeded: {bad_args}")
+    for value in ("", "unknown", "utf8,", "utf8,utf8", "all,utf8"):
+        try:
+            parse_operations(value)
+        except argparse.ArgumentTypeError:
+            pass
+        else:
+            raise ValueError(f"invalid Python operation selection accepted: {value!r}")
+    if parse_operations("all") != OPERATIONS or parse_operations("decomposition,combining_class") != ("combining_class", "decomposition"):
+        raise ValueError("operation selection lost canonical order")
     for case in CORPORA:
         for operation in EXACT_OPERATIONS:
             if outputs["zunic"][case][operation] != outputs["uucode"][case][operation]:
@@ -228,6 +259,8 @@ def self_test() -> int:
 
 
 def benchmark(args: argparse.Namespace) -> int:
+    operations = args.operations
+    selection_args = ["--operations", ",".join(operations)]
     env = dict(os.environ, ZIG_GLOBAL_CACHE_DIR=str(HERE / ".zig-global-cache"))
     if not args.skip_build:
         run(["zig", "build", "-Doptimize=ReleaseFast", "-Dcpu=native", "--summary", "all"], env=env)
@@ -250,15 +283,17 @@ def benchmark(args: argparse.Namespace) -> int:
 
     outputs = {}
     for peer in PEERS:
-        dump = run(commands[peer] + ["--dump"]).stdout
+        dump = run(commands[peer] + ["--dump"] + selection_args).stdout
         (output / f"{peer}-before.dump").write_text(dump)
-        outputs[peer] = parse_dump(dump, snapshots)
+        outputs[peer] = parse_dump(dump, snapshots, operations)
     operation_outputs = {operation: {case: {
         "equal": outputs["zunic"][case][operation]["output"] == outputs["uucode"][case][operation]["output"],
         "zunic_count": outputs["zunic"][case][operation]["units"],
         "uucode_count": outputs["uucode"][case][operation]["units"],
-    } for case in CORPORA} for operation in OPERATIONS}
-    for operation in EXACT_OPERATIONS:
+    } for case in CORPORA} for operation in operations}
+    for operation in operations:
+        if operation not in EXACT_OPERATIONS:
+            continue
         for case in CORPORA:
             if not operation_outputs[operation][case]["equal"]:
                 raise RuntimeError(f"{case}/{operation}: peers produced different exact results")
@@ -271,17 +306,17 @@ def benchmark(args: argparse.Namespace) -> int:
         pair = {"name": pair_name, "order": list(order), "results": {}}
         for peer in order:
             progress.running(f"{peer}-{pair_name}")
-            result = run(commands[peer] + ["--bench"])
+            result = run(commands[peer] + ["--bench"] + selection_args)
             (output / f"{peer}-{pair_name}.stdout.txt").write_text(result.stdout)
             (output / f"{peer}-{pair_name}.stderr.txt").write_text(result.stderr)
-            pair["results"][peer] = parse_timing(result.stdout, peer, outputs[peer], snapshots)
+            pair["results"][peer] = parse_timing(result.stdout, peer, outputs[peer], snapshots, operations)
             progress.advance()
         pairs.append(pair)
 
     for peer in PEERS:
-        dump = run(commands[peer] + ["--dump"]).stdout
+        dump = run(commands[peer] + ["--dump"] + selection_args).stdout
         (output / f"{peer}-after.dump").write_text(dump)
-        if parse_dump(dump, snapshots) != outputs[peer]:
+        if parse_dump(dump, snapshots, operations) != outputs[peer]:
             raise RuntimeError(f"{peer}: output changed during timing")
     corpus_hashes_after = {name: sha256(path) for name, path in corpus_paths.items()}
     if corpus_hashes_before != corpus_hashes_after:
@@ -292,7 +327,7 @@ def benchmark(args: argparse.Namespace) -> int:
     summary = {
         "schema": "zunic-uucode-benchmark/v6", "title": "Unicode primitives: uucode vs Zunic",
         "label": args.label, "pair_count": args.pairs, "cases": list(CORPORA),
-        "operations": list(OPERATIONS), "pairs": pairs,
+        "operations": list(operations), "pairs": pairs,
         "peers": {name: {"name": name if name == "zunic" else "uucode 0.2.0",
                           "unicode": metadata["unicode"]} for name, metadata in PEERS.items()},
         "contract": {"input": "bytes+predecoded_codepoints", "consumption": "operation_checksum_v6"},
@@ -328,6 +363,8 @@ def benchmark(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--operations", type=parse_operations, default=OPERATIONS,
+                        metavar="NAME[,NAME...]", help="operations to run (default: all): " + ", ".join(OPERATIONS))
     parser.add_argument("--pairs", type=int, choices=(1, 3), default=3)
     parser.add_argument("--label", default="uucode")
     parser.add_argument("--skip-build", action="store_true")

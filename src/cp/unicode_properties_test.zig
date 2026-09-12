@@ -78,6 +78,9 @@ test "numeric values are exact and preserve their Unicode kind" {
 test "normalization facts expose immediate mappings" {
     try std.testing.expectEqual(@as(u8, 230), codepoints.init(0x0301).canonicalCombiningClass());
     try std.testing.expectEqual(@as(u8, 0), codepoints.init('A').canonicalCombiningClass());
+    for ([_]u21{ 0, 127, 128, 0xd800, 0x2ffff, 0x30000, 0x10ffff, 0x110000, 0x1fffff }) |value| {
+        try std.testing.expectEqual(@as(u8, 0), codepoints.init(value).canonicalCombiningClass());
+    }
 
     const canonical = codepoints.init(0x00e9).decomposition().?;
     try std.testing.expectEqual(codepoints.DecompositionType.canonical, canonical.type);

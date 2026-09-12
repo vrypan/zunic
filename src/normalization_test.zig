@@ -666,8 +666,8 @@ test "the class trie agrees with the sorted tables it replaced" {
                 try std.testing.expect(properties.compose(cp, mark) == null);
         }
     }
-    // A class id must fit the byte the trie stores, and the table must be
-    // small enough to stay resident.
+    // The generator deduplicates the small set of normalization records;
+    // runtime leaves store those records directly in two bytes.
     try std.testing.expect(properties.class_table.len < 256);
     try std.testing.expectEqual(@as(usize, 2), @sizeOf(properties.Class));
 }

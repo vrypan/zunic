@@ -40,6 +40,20 @@ const Operation = enum {
     grapheme_stream,
     ghostty_width,
 };
+const Selection = std.EnumSet(Operation);
+
+fn parseOperations(value: []const u8) !Selection {
+    if (std.mem.eql(u8, value, "all")) return Selection.initFull();
+    var selection = Selection.initEmpty();
+    var names = std.mem.splitScalar(u8, value, ',');
+    while (names.next()) |name| {
+        const operation = std.meta.stringToEnum(Operation, name) orelse return error.UnknownOperation;
+        if (selection.contains(operation)) return error.DuplicateOperation;
+        selection.insert(operation);
+    }
+    return selection;
+}
+
 const sample_count = 15;
 const target_ns: u64 = 50 * std.time.ns_per_ms;
 
@@ -138,14 +152,14 @@ fn dumpOne(out: *std.Io.Writer, case: Case, comptime operation: Operation) !void
     try out.writeByte('\n');
 }
 
-fn printDump(out: *std.Io.Writer, allocator: std.mem.Allocator) !void {
+fn printDump(out: *std.Io.Writer, allocator: std.mem.Allocator, selection: Selection) !void {
     for (source_cases) |source| {
         const case = try prepareCase(allocator, source);
         try out.print("case={s} input=", .{case.name});
         for (case.text) |byte| try out.print("{x:0>2}", .{byte});
         try out.writeByte('\n');
         inline for (@typeInfo(Operation).@"enum".fields) |field|
-            try dumpOne(out, case, @enumFromInt(field.value));
+            if (selection.contains(@enumFromInt(field.value))) try dumpOne(out, case, @enumFromInt(field.value));
     }
     try out.flush();
 }
@@ -157,7 +171,7 @@ pub fn main(init: std.process.Init) !void {
     const args = try init.minimal.args.toSlice(init.arena.allocator());
     if (args.len == 1 or (args.len == 2 and (std.mem.eql(u8, args[1], "--help") or std.mem.eql(u8, args[1], "-h")))) {
         try out.print(
-            \\Usage: {s}-bench MODE
+            \\Usage: {s}-bench MODE [--operations NAME[,NAME...]]
             \\
             \\Modes:
             \\  --bench      Run timing benchmarks
@@ -167,10 +181,19 @@ pub fn main(init: std.process.Init) !void {
             \\No arguments prints help. Corpora are embedded at build time.
             \\
         , .{peer.name});
+        try out.writeAll("Operations (default: all):\n");
+        inline for (@typeInfo(Operation).@"enum".fields) |field|
+            try out.print("  {s}\n", .{field.name});
         return out.flush();
     }
-    if (args.len == 2 and std.mem.eql(u8, args[1], "--dump")) return printDump(out, init.arena.allocator());
-    if (args.len != 2 or !std.mem.eql(u8, args[1], "--bench")) return error.UnexpectedArgument;
+    const selection = if (args.len == 2)
+        Selection.initFull()
+    else if (args.len == 4 and std.mem.eql(u8, args[2], "--operations"))
+        try parseOperations(args[3])
+    else
+        return error.UnexpectedArgument;
+    if (std.mem.eql(u8, args[1], "--dump")) return printDump(out, init.arena.allocator(), selection);
+    if (!std.mem.eql(u8, args[1], "--bench")) return error.UnexpectedArgument;
 
     try out.print("protocol=6 suite=unicode peer={s} unicode={s} samples={d} calibration_ms={d} input=bytes+predecoded_codepoints consumption=operation_checksum_v6\n", .{
         peer.name, peer.unicode_version, sample_count, target_ns / std.time.ns_per_ms,
@@ -178,7 +201,7 @@ pub fn main(init: std.process.Init) !void {
     var cases: [source_cases.len]Case = undefined;
     for (source_cases, &cases) |source, *case| case.* = try prepareCase(init.arena.allocator(), source);
     for (cases) |case| inline for (@typeInfo(Operation).@"enum".fields) |field|
-        try measure(init.io, out, case, @enumFromInt(field.value));
+        if (selection.contains(@enumFromInt(field.value))) try measure(init.io, out, case, @enumFromInt(field.value));
     try out.flush();
 }
 
