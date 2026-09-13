@@ -91,6 +91,7 @@ does not populate or cache the others.
 | `general()` | `zunic.GeneralProperties` | General category and derived boolean properties |
 | `terminal()` | `zunic.TerminalProperties` | East Asian width, emoji flags, and terminal width facts |
 | `grapheme()` | `zunic.GraphemeProperties` | Classification used by grapheme segmentation |
+| `bidi()` | `zunic.BidiProperties` | Bidi class, mirrored status, and paired-bracket type |
 
 Script properties are separate methods: `script()` returns a `zunic.Script`,
 and `scriptExtensions()` returns the codepoint's exact set of possible scripts.
@@ -186,6 +187,29 @@ An explicit extension set replaces the default; the example therefore does
 not include `.common`. These methods provide per-codepoint facts. They do not
 detect a language, resolve `.common` or `.inherited` from surrounding text,
 segment script runs, or enforce a mixed-script policy.
+
+### Bidirectional properties
+
+`bidi()` returns three Unicode facts in one byte: `class`, `isMirrored`, and
+`pairedBracketType`. The class uses canonical long names such as
+`.left_to_right`, `.arabic_letter`, and `.pop_directional_isolate`. Bracket
+type is `.none`, `.open`, or `.close`.
+
+```zig
+const parenthesis = zunic.cp('(');
+const bidi = parenthesis.bidi();
+std.debug.print("{s}, mirrored={}, bracket={s}\n", .{
+    @tagName(bidi.class), bidi.isMirrored, @tagName(bidi.pairedBracketType),
+});
+// other_neutral, mirrored=true, bracket=open
+```
+
+`bidiMirroringGlyph()` and `bidiPairedBracket()` return the encoded mapping or
+`null` when Unicode defines none. Mirrored status does not imply an encoded
+mirror: U+2211 SUMMATION is mirrored but has no `Bidi_Mirroring_Glyph` mapping.
+These methods expose per-codepoint input facts for a bidirectional layout
+engine. They do not determine paragraph direction, embedding levels, display
+order, bracket resolution, or glyph shaping.
 
 ## Width, whitespace, and case folding
 
@@ -322,6 +346,8 @@ Operations have defined fallbacks for values above `zunic.max_codepoint`:
 | `numeric()`, `decomposition()` | `null` |
 | `canonicalCombiningClass()` | `0` |
 | `script()`, `scriptExtensions()` | `.unknown`, singleton `.unknown` |
+| `bidi()` | `.left_to_right`, mirrored false, bracket type `.none` |
+| `bidiMirroringGlyph()`, `bidiPairedBracket()` | `null` |
 
 These fallbacks do not make the input a valid scalar. Surrogates are a
 different case: they are within Unicode's range and use their table entries,

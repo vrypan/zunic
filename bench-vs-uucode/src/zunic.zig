@@ -162,6 +162,39 @@ pub inline fn script(codepoints: []const u21) Stats {
     return .{ .units = codepoints.len, .checksum = finishSums(sums) };
 }
 
+fn bidiClass(value: zunic.BidiClass) usize {
+    return @intFromEnum(value);
+}
+
+pub inline fn bidiProperties(codepoints: []const u21) Stats {
+    var sums: [4]usize = @splat(0);
+    for (codepoints) |cp| {
+        const props = zunic.cp(cp).bidi();
+        sums[0] +%= cp;
+        sums[1] +%= bidiClass(props.class);
+        sums[2] +%= @intFromBool(props.isMirrored);
+        sums[3] +%= @intFromEnum(props.pairedBracketType);
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
+pub inline fn bidiMappings(codepoints: []const u21) Stats {
+    var sums: [5]usize = @splat(0);
+    for (codepoints) |cp| {
+        const point = zunic.cp(cp);
+        sums[0] +%= cp;
+        if (point.bidiMirroringGlyph()) |value| {
+            sums[1] +%= 1;
+            sums[2] +%= value;
+        }
+        if (point.bidiPairedBracket()) |value| {
+            sums[3] +%= 1;
+            sums[4] +%= value;
+        }
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
 pub inline fn combiningClass(codepoints: []const u21) Stats {
     var sums: [2]usize = @splat(0);
     for (codepoints) |cp| {
@@ -334,6 +367,21 @@ pub fn dumpNumericProperties(out: *std.Io.Writer, codepoints: []const u21) !void
 pub fn dumpScript(out: *std.Io.Writer, codepoints: []const u21) !void {
     for (codepoints) |cp|
         try out.print("{x}:{d},", .{ cp, @intFromEnum(zunic.cp(cp).script()) });
+}
+
+pub fn dumpBidiProperties(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp| {
+        const props = zunic.cp(cp).bidi();
+        try out.print("{x}:{d}:{d}:{d},", .{ cp, bidiClass(props.class), @intFromBool(props.isMirrored), @intFromEnum(props.pairedBracketType) });
+    }
+}
+
+pub fn dumpBidiMappings(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp| {
+        const point = zunic.cp(cp);
+        if (point.bidiMirroringGlyph()) |mirror| try out.print("{x}:m{x}:", .{ cp, mirror }) else try out.print("{x}:n:", .{cp});
+        if (point.bidiPairedBracket()) |bracket| try out.print("b{x},", .{bracket}) else try out.writeAll("n,");
+    }
 }
 
 pub fn dumpCombiningClass(out: *std.Io.Writer, codepoints: []const u21) !void {

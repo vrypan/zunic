@@ -70,6 +70,9 @@ pub const cp = codepoint_view.init;
 pub const CodepointView = codepoint_view.CodepointView;
 pub const GeneralProperties = codepoint_view.GeneralProperties;
 pub const Script = codepoint_view.Script;
+pub const BidiClass = codepoint_view.BidiClass;
+pub const BidiPairedBracketType = codepoint_view.BidiPairedBracketType;
+pub const BidiProperties = codepoint_view.BidiProperties;
 
 /// Whether `glyph` is exactly one `White_Space` scalar and nothing else --
 /// the primitive behind `Text.isWhitespace`, exposed directly for a byte

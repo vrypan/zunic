@@ -221,6 +221,8 @@ pub fn build(b: *std.Build) void {
     group_steps.get("unicode-properties").?.dependOn(&verify_numeric_properties.step);
     const verify_script_properties = b.addSystemCommand(&.{ "python3", "src/tools/test-script-properties.py" });
     group_steps.get("unicode-properties").?.dependOn(&verify_script_properties.step);
+    const verify_bidi_properties = b.addSystemCommand(&.{ "python3", "src/tools/test-bidi-properties.py" });
+    group_steps.get("unicode-properties").?.dependOn(&verify_bidi_properties.step);
     const verify_case_folding = b.addSystemCommand(&.{ "python3", "src/tools/test-case-folding.py" });
     group_steps.get("case-folding").?.dependOn(&verify_case_folding.step);
     const verify_simple_case_mappings = b.addSystemCommand(&.{ "python3", "src/tools/test-simple-case-mappings.py" });
@@ -254,6 +256,17 @@ pub fn build(b: *std.Build) void {
     if (group_steps.get("normalization")) |step| step.dependOn(&large_normalization_test.step);
     b.step("test-normalization-large", "Test normalization counters beyond u16 capacity")
         .dependOn(&large_normalization_test.step);
+
+    const bidi_dump_mod = b.createModule(.{
+        .root_source_file = b.path("src/tools/dump-bidi-properties.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bidi_dump_mod.addImport("zunic", zunic);
+    const bidi_dump = b.addExecutable(.{ .name = "dump-bidi-properties", .root_module = bidi_dump_mod });
+    const run_bidi_dump = b.addRunArtifact(bidi_dump);
+    b.step("dump-bidi-properties", "Dump every public bidi result for exhaustive verification")
+        .dependOn(&run_bidi_dump.step);
 
     const regression_mod = b.createModule(.{
         .root_source_file = b.path("src/wrap_regression_test.zig"),

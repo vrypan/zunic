@@ -13,6 +13,14 @@ test "Script properties are exposed by the public facade" {
     try std.testing.expectEqualSlices(unicode.Script, &.{ .hiragana, .katakana }, unicode.cp(0x30fc).scriptExtensions());
 }
 
+test "bidirectional properties are exposed by the public facade" {
+    const props: unicode.BidiProperties = unicode.cp('(').bidi();
+    try std.testing.expectEqual(unicode.BidiClass.other_neutral, props.class);
+    try std.testing.expectEqual(unicode.BidiPairedBracketType.open, props.pairedBracketType);
+    try std.testing.expectEqual(@as(?u21, ')'), unicode.cp('(').bidiMirroringGlyph());
+    try std.testing.expectEqual(@as(?u21, ')'), unicode.cp('(').bidiPairedBracket());
+}
+
 test "word bounds partition the view and name their own types" {
     const line = "The price is $9.99 -unless you pay cash.";
 

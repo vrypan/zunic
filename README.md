@@ -29,7 +29,7 @@ Zunic has two basic entry points:
 
 - Use [`zunic.cp(value)`](docs/codepoint/README.md) when you already have a
   Unicode codepoint in a `u21` and want its properties, isolated width, case
-  mapping, numeric value, or decomposition.
+  mapping, numeric value, decomposition, or bidirectional properties.
 - Use [`zunic.text(bytes)`](docs/text/README.md) when you have UTF-8 bytes and
   want to iterate codepoints, graphemes, or words, measure or wrap text, find
   line endings, trim whitespace, or normalize the text.

@@ -1,6 +1,66 @@
 const std = @import("std");
 const codepoints = @import("cp");
 
+test "bidirectional property representatives and defaults" {
+    try std.testing.expectEqual(@as(usize, 1), @sizeOf(codepoints.BidiProperties));
+    try std.testing.expectEqual(@as(usize, 8), @bitSizeOf(codepoints.BidiProperties));
+
+    const left = codepoints.init('A').bidi();
+    try std.testing.expectEqual(codepoints.BidiClass.left_to_right, left.class);
+    try std.testing.expect(!left.isMirrored);
+    try std.testing.expectEqual(codepoints.BidiPairedBracketType.none, left.pairedBracketType);
+
+    const open = codepoints.init('(').bidi();
+    try std.testing.expectEqual(codepoints.BidiClass.other_neutral, open.class);
+    try std.testing.expect(open.isMirrored);
+    try std.testing.expectEqual(codepoints.BidiPairedBracketType.open, open.pairedBracketType);
+    try std.testing.expectEqual(@as(?u21, ')'), codepoints.init('(').bidiMirroringGlyph());
+    try std.testing.expectEqual(@as(?u21, ')'), codepoints.init('(').bidiPairedBracket());
+    try std.testing.expectEqual(codepoints.BidiPairedBracketType.close, codepoints.init(')').bidi().pairedBracketType);
+
+    try std.testing.expectEqual(@as(?u21, 0x2990), codepoints.init(0x298d).bidiPairedBracket());
+    try std.testing.expect(codepoints.init(0x2211).bidi().isMirrored);
+    try std.testing.expectEqual(@as(?u21, null), codepoints.init(0x2211).bidiMirroringGlyph());
+    for ([_]u21{ 0xfd3e, 0xfd3f }) |value| {
+        try std.testing.expect(!codepoints.init(value).bidi().isMirrored);
+        try std.testing.expectEqual(@as(?u21, null), codepoints.init(value).bidiPairedBracket());
+    }
+
+    try std.testing.expectEqual(codepoints.BidiClass.left_to_right, codepoints.init(0x0378).bidi().class);
+    try std.testing.expectEqual(codepoints.BidiClass.right_to_left, codepoints.init(0x0590).bidi().class);
+    try std.testing.expectEqual(codepoints.BidiClass.arabic_letter, codepoints.init(0x086b).bidi().class);
+    try std.testing.expectEqual(codepoints.BidiClass.european_terminator, codepoints.init(0x20c1).bidi().class);
+    try std.testing.expectEqual(codepoints.BidiClass.boundary_neutral, codepoints.init(0xffff).bidi().class);
+    try std.testing.expectEqual(codepoints.BidiClass.boundary_neutral, codepoints.init(0x10ffff).bidi().class);
+}
+
+test "bidirectional formatting classes and wider-u21 fallback" {
+    const cases = [_]struct { value: u21, class: codepoints.BidiClass }{
+        .{ .value = 0x202a, .class = .left_to_right_embedding },
+        .{ .value = 0x202b, .class = .right_to_left_embedding },
+        .{ .value = 0x202c, .class = .pop_directional_format },
+        .{ .value = 0x202d, .class = .left_to_right_override },
+        .{ .value = 0x202e, .class = .right_to_left_override },
+        .{ .value = 0x2066, .class = .left_to_right_isolate },
+        .{ .value = 0x2067, .class = .right_to_left_isolate },
+        .{ .value = 0x2068, .class = .first_strong_isolate },
+        .{ .value = 0x2069, .class = .pop_directional_isolate },
+    };
+    for (cases) |case| try std.testing.expectEqual(case.class, codepoints.init(case.value).bidi().class);
+
+    var value: u21 = 0x110000;
+    while (true) : (value += 1) {
+        const point = codepoints.init(value);
+        const props = point.bidi();
+        try std.testing.expectEqual(codepoints.BidiClass.left_to_right, props.class);
+        try std.testing.expect(!props.isMirrored);
+        try std.testing.expectEqual(codepoints.BidiPairedBracketType.none, props.pairedBracketType);
+        try std.testing.expectEqual(@as(?u21, null), point.bidiMirroringGlyph());
+        try std.testing.expectEqual(@as(?u21, null), point.bidiPairedBracket());
+        if (value == 0x1fffff) break;
+    }
+}
+
 test "Script and Script_Extensions representatives" {
     try std.testing.expectEqual(codepoints.Script.latin, codepoints.init('A').script());
     try std.testing.expectEqual(codepoints.Script.greek, codepoints.init(0x03b1).script());

@@ -33,6 +33,22 @@ pub const CodepointView = packed struct(u32) {
         return tables.script_properties.scriptExtensions(self.value);
     }
 
+    /// Bidi_Class, Bidi_Mirrored, and Bidi_Paired_Bracket_Type in one lookup.
+    /// These are scalar facts, not a resolved bidirectional layout decision.
+    pub fn bidi(self: CodepointView) BidiProperties {
+        return tables.bidi_properties.properties(self.value);
+    }
+
+    /// The encoded Bidi_Mirroring_Glyph mapping, when Unicode defines one.
+    pub fn bidiMirroringGlyph(self: CodepointView) ?u21 {
+        return tables.bidi_properties.mirroringGlyph(self.value);
+    }
+
+    /// The encoded Bidi_Paired_Bracket mapping, when Unicode defines one.
+    pub fn bidiPairedBracket(self: CodepointView) ?u21 {
+        return tables.bidi_properties.pairedBracket(self.value);
+    }
+
     /// East Asian width, emoji flags, and terminal width facts, fetched together.
     pub fn terminal(self: CodepointView) TerminalProperties {
         return @bitCast(tables.terminal_properties.terminalProperties(self.value));
@@ -162,6 +178,9 @@ fn compatibilityType(value: tables.normalization.DecompositionType) Decompositio
 pub const Numeric = tables.numeric.Numeric;
 pub const NumericType = tables.numeric.NumericType;
 pub const Script = tables.script_properties.Script;
+pub const BidiClass = tables.bidi_properties.BidiClass;
+pub const BidiPairedBracketType = tables.bidi_properties.BidiPairedBracketType;
+pub const BidiProperties = tables.bidi_properties.BidiProperties;
 
 pub const DecompositionType = enum(u5) {
     canonical,

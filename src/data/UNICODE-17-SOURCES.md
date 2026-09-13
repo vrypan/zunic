@@ -13,9 +13,12 @@ generator can reject a mixed data release.
 | File | SHA-256 |
 |---|---|
 | `Blocks-17.0.0.txt` | `c0edefaf1a19771e830a82735472716af6bf3c3975f6c2a23ffbe2580fbbcb15` |
+| `BidiBrackets-17.0.0.txt` | `dadbaf38a0d0246e5b805bf8725cb81b7c621f93d030595635f5ba2c2f179428` |
+| `BidiMirroring-17.0.0.txt` | `a2f16fb873ab4fcdf3221cb1a8a85a134ddd6ed03603181823ff5206af3741ce` |
 | `CaseFolding-17.0.0.txt` | `ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183` |
 | `CompositionExclusions-17.0.0.txt` | `2f239196ef3b5b61db5cc476e9bd80f534d15aa1b74e1be1dea5d042a344c85f` |
 | `DerivedCoreProperties-17.0.0.txt` | `24c7fed1195c482faaefd5c1e7eb821c5ee1fb6de07ecdbaa64b56a99da22c08` |
+| `DerivedBidiClass-17.0.0.txt` | `4867b4b7f0731ed1bfcd34cc6251211ff1542541fce0734b6fbda139ee80b3a4` |
 | `DerivedNormalizationProps-17.0.0.txt` | `71fd6a206a2c0cdd41feb6b7f656aa31091db45e9cedc926985d718397f9e488` |
 | `EastAsianWidth-17.0.0.txt` | `ea7ce50f3444a050333448dffef1cadd9325af55cbb764b4a2280faf52170a33` |
 | `emoji-data-17.0.0.txt` | `2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b` |

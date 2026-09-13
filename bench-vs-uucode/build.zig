@@ -40,6 +40,14 @@ pub fn build(b: *std.Build) void {
         // Primary Script is measured alone, matching Zunic's independent
         // Script trie rather than widening another configured table.
         .fields_7 = @as([]const []const u8, &.{"script"}),
+        .fields_8 = @as([]const []const u8, &.{
+            "bidi_class",
+            "is_bidi_mirrored",
+            "bidi_paired_bracket",
+        }),
+        .fields_9 = @as([]const []const u8, &.{
+            "bidi_mirroring",
+        }),
     });
 
     // A separate uucode instance containing exactly the raw fields in

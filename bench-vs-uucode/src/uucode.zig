@@ -168,10 +168,12 @@ fn numeric(cp: u21) ?struct { kind: u2, value: Rational } {
     return switch (kind) {
         .none => null,
         .decimal => .{ .kind = 0, .value = .{
-            .numerator = uucode.get(.numeric_value_decimal, cp).?, .denominator = 1,
+            .numerator = uucode.get(.numeric_value_decimal, cp).?,
+            .denominator = 1,
         } },
         .digit => .{ .kind = 1, .value = .{
-            .numerator = uucode.get(.numeric_value_digit, cp).?, .denominator = 1,
+            .numerator = uucode.get(.numeric_value_digit, cp).?,
+            .denominator = 1,
         } },
         .numeric => blk: {
             const bytes = uucode.get(.numeric_value_numeric, cp);
@@ -198,6 +200,55 @@ pub inline fn script(codepoints: []const u21) Stats {
     for (codepoints) |cp| {
         sums[0] +%= cp;
         sums[1] +%= @intFromEnum(uucode.get(.script, cp));
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
+fn bidiClass(value: anytype) usize {
+    return @intFromEnum(value);
+}
+
+fn bracketType(value: anytype) usize {
+    return switch (value) {
+        .none => 0,
+        .open => 1,
+        .close => 2,
+    };
+}
+
+fn bracketValue(value: anytype) ?u21 {
+    return switch (value) {
+        .none => null,
+        .open => |cp| cp,
+        .close => |cp| cp,
+    };
+}
+
+pub inline fn bidiProperties(codepoints: []const u21) Stats {
+    var sums: [4]usize = @splat(0);
+    for (codepoints) |cp| {
+        const props = uucode.getAll("8", cp);
+        sums[0] +%= cp;
+        sums[1] +%= bidiClass(props.bidi_class);
+        sums[2] +%= @intFromBool(props.is_bidi_mirrored);
+        sums[3] +%= bracketType(props.bidi_paired_bracket.unshift(cp));
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
+pub inline fn bidiMappings(codepoints: []const u21) Stats {
+    var sums: [5]usize = @splat(0);
+    for (codepoints) |cp| {
+        const props = uucode.getAll("9", cp);
+        sums[0] +%= cp;
+        if (props.bidi_mirroring.unshift(cp)) |value| {
+            sums[1] +%= 1;
+            sums[2] +%= value;
+        }
+        if (bracketValue(uucode.get(.bidi_paired_bracket, cp))) |value| {
+            sums[3] +%= 1;
+            sums[4] +%= value;
+        }
     }
     return .{ .units = codepoints.len, .checksum = finishSums(sums) };
 }
@@ -374,6 +425,21 @@ pub fn dumpNumericProperties(out: *std.Io.Writer, codepoints: []const u21) !void
 pub fn dumpScript(out: *std.Io.Writer, codepoints: []const u21) !void {
     for (codepoints) |cp|
         try out.print("{x}:{d},", .{ cp, @intFromEnum(uucode.get(.script, cp)) });
+}
+
+pub fn dumpBidiProperties(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp| {
+        const props = uucode.getAll("8", cp);
+        try out.print("{x}:{d}:{d}:{d},", .{ cp, bidiClass(props.bidi_class), @intFromBool(props.is_bidi_mirrored), bracketType(props.bidi_paired_bracket.unshift(cp)) });
+    }
+}
+
+pub fn dumpBidiMappings(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp| {
+        const props = uucode.getAll("9", cp);
+        if (props.bidi_mirroring.unshift(cp)) |mirror| try out.print("{x}:m{x}:", .{ cp, mirror }) else try out.print("{x}:n:", .{cp});
+        if (bracketValue(uucode.get(.bidi_paired_bracket, cp))) |bracket| try out.print("b{x},", .{bracket}) else try out.writeAll("n,");
+    }
 }
 
 pub fn dumpCombiningClass(out: *std.Io.Writer, codepoints: []const u21) !void {

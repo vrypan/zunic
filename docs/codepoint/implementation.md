@@ -32,6 +32,16 @@ primary-only caller does not retain it: 176 merged ranges use binary search,
 then address 118 deduplicated static sets. The extension arrays occupy 2,003
 bytes, for 43,347 bytes when both methods are retained.
 
+Bidirectional classification uses another two-stage prefix table with the same
+seven-bit page suffix. Its raw one-byte leaf combines the 23-value Bidi_Class,
+mirrored status, and three-value paired-bracket type, so a lookup takes two
+dependent reads without a class-record translation. The dense arrays occupy
+33,152 bytes. Mirroring glyphs and paired brackets use separate two-stage BMP
+tables (4,736 and 3,328 bytes). This preserves independent dead stripping,
+unambiguous optional results, and constant-time lookups. The generator asserts
+that all Unicode 17 mapping keys and values fit in the BMP; a future Unicode upgrade
+must widen these arrays before accepting supplementary mappings.
+
 The three simple case mappings share a two-stage index. One read selects a
 leaf offset; another reads the signed delta from the uppercase, lowercase, or
 titlecase array. ASCII uses the same lookup. Separate payload arrays allow

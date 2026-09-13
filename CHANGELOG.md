@@ -11,6 +11,8 @@ were superseded before the same release are omitted.
 - Added primary `Script` and exact `Script_Extensions` codepoint queries through
   `cp(value).script()` and `cp(value).scriptExtensions()`.
 - Added the five Unicode `Changes_When_*` predicates to `GeneralProperties`.
+- Added `Bidi_Class`, mirrored status, mirroring glyph, and paired-bracket
+  codepoint properties through `cp(value)`.
 
 ## [0.4.0] - 2026-09-12
 

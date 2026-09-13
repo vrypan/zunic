@@ -7,6 +7,38 @@ The primary-Script results below were recorded separately from
 2026-09-13. They use the same machine, toolchain, optimization mode, native
 target, three alternating pairs, and 15 samples per executable run.
 
+The bidirectional results were recorded separately from
+`benchmarks/20260913T192946Z-plan034-final-edb601/summary.json` on 2026-09-13,
+using the same machine, toolchain, target, and sampling protocol.
+
+## Bidirectional scalar properties
+
+| Corpus | Zunic µs | uucode µs | uucode/Zunic | Units Z/U | Output |
+| --- | ---: | ---: | ---: | ---: | :---: |
+| arabic | 14.201 | 20.352 | 1.43× | 27647/27647 | same |
+| hindi | 10.122 | 14.005 | 1.38× | 19595/19595 | same |
+| korean | 10.974 | 15.634 | 1.42× | 21191/21191 | same |
+| russian | 14.745 | 21.748 | 1.47× | 28552/28552 | same |
+| source_code | 25.105 | 36.668 | 1.46× | 50202/50202 | same |
+| english | 25.399 | 35.561 | 1.40× | 49489/49489 | same |
+| japanese | 9.304 | 14.473 | 1.56× | 18108/18108 | same |
+| mandarin | 9.030 | 13.086 | 1.45× | 17639/17639 | same |
+| features | 0.042 | 0.056 | 1.33× | 75/75 | same |
+
+## Bidirectional scalar mappings
+
+| Corpus | Zunic µs | uucode µs | uucode/Zunic | Units Z/U | Output |
+| --- | ---: | ---: | ---: | ---: | :---: |
+| arabic | 28.521 | 42.406 | 1.49× | 27647/27647 | same |
+| hindi | 21.294 | 30.933 | 1.45× | 19595/19595 | same |
+| korean | 24.261 | 34.729 | 1.43× | 21191/21191 | same |
+| russian | 32.711 | 46.862 | 1.43× | 28552/28552 | same |
+| source_code | 66.544 | 89.573 | 1.35× | 50202/50202 | same |
+| english | 55.169 | 79.057 | 1.43× | 49489/49489 | same |
+| japanese | 23.771 | 32.898 | 1.38× | 18108/18108 | same |
+| mandarin | 20.207 | 29.297 | 1.45× | 17639/17639 | same |
+| features | 0.081 | 0.126 | 1.56× | 75/75 | same |
+
 ## Primary Script property
 
 | Corpus | Zunic µs | uucode µs | uucode/Zunic | Units Z/U | Output |

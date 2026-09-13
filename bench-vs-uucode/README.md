@@ -22,6 +22,8 @@ native CPU target. The run used three alternating pairs and 15 samples per
 executable run. See [TIMINGS.md](TIMINGS.md) for every per-corpus measurement.
 The primary-Script row was recorded separately on 2026-09-13 from the current
 Plan 033 working tree, also with three alternating pairs.
+The two bidirectional rows were recorded on 2026-09-13 from the Plan 034
+working tree, with the same three-pair protocol.
 
 For each corpus, the result is the median of the three run medians. The average
 below is the geometric mean of the nine per-corpus ratios. `uucode/Zunic` above
@@ -43,6 +45,8 @@ paths.
 | Simple titlecase mapping | 1.20× | 1.01–1.34× | 9/9 |
 | Exact numeric properties | 2.26× | 2.12–2.85× | 9/9 |
 | Primary Script property | 1.01× | 0.95–1.03× | 9/9 |
+| Bidirectional scalar properties | 1.43× | 1.33–1.56× | 9/9 |
+| Bidirectional scalar mappings | 1.44× | 1.35–1.56× | 9/9 |
 | Canonical combining class | 1.05× | 0.95–1.26× | 9/9 |
 | Immediate decomposition facts | 1.20× | 1.02–1.84× | 9/9 |
 | Incremental grapheme boundaries | 2.64× | 1.94–3.93× | 8/9 |
@@ -50,7 +54,7 @@ paths.
 
 [Results breakdown: full per-corpus timings](TIMINGS.md)
 
-uucode and Zunic overlap in sixteen benchmarked operations:
+uucode and Zunic overlap in eighteen benchmarked operations:
 
 | Operation | Zunic | uucode | Timed result consumed |
 |---|---|---|---|
@@ -66,6 +70,8 @@ uucode and Zunic overlap in sixteen benchmarked operations:
 | Simple titlecase | `cp(value).simpleTitlecase()` | `simple_titlecase_mapping` | every predecoded scalar and mapped value |
 | Numeric properties | `cp(value).numeric()` | numeric type and value fields | every exact reduced rational value and kind |
 | Primary Script | `cp(value).script()` | configured `script` field | every predecoded scalar and Script enum value |
+| Bidi properties | `cp(value).bidi()` | configured class, mirrored, and paired-bracket fields | every predecoded scalar's normalized class, mirrored flag, and bracket type |
+| Bidi mappings | the two optional mapping methods | mirroring and paired-bracket fields | presence and target of every optional mapping |
 | Combining class | `cp(value).canonicalCombiningClass()` | `canonical_combining_class` | every predecoded scalar and class |
 | Decomposition | `cp(value).decomposition()` | decomposition type and mapping | every immediate mapping and type |
 | Streaming graphemes | `graphemeBreak` | `computeGraphemeBreak` | every adjacent-pair boundary and ending offset |
@@ -75,7 +81,7 @@ The UTF-8 row measures the low-level `zunic.utf8.step()` decoder, not
 `text(bytes).codepoints().iterator()`. It does not measure the public iterator's
 `CodepointView` return or sticky `err` handling. Property rows use the current
 `cp(value)` API; grapheme rows use the tolerant text iterators. Simple case
-mapping, numeric properties, Script, combining class, and decomposition receive
+mapping, numeric properties, Script, bidi properties and mappings, combining class, and decomposition receive
 predecoded codepoints so their timings isolate lookup and result handling.
 
 uucode does not currently expose comparable line breaking, complete text
@@ -107,7 +113,7 @@ make -C bench-vs-uucode bench OPERATIONS=combining_class,decomposition PAIRS=1
 utf8, graphemes, measured, width,
 terminal_properties, terminal_lookup, case_fold,
 simple_uppercase, simple_lowercase, simple_titlecase,
-numeric_properties, script, combining_class, decomposition,
+numeric_properties, script, bidi_properties, bidi_mappings, combining_class, decomposition,
 grapheme_stream, ghostty_width
 ```
 

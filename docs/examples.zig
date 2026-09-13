@@ -286,6 +286,13 @@ test "docs: code-point property groups" {
     try std.testing.expectEqual(@as(u21, 0x01c4), zunic.cp(0x01c6).simpleUppercase());
     try std.testing.expectEqual(@as(u21, 0x01c5), zunic.cp(0x01c6).simpleTitlecase());
     try std.testing.expectEqual(@as(u21, 0x01c6), zunic.cp(0x01c4).simpleLowercase());
+
+    const bidi: zunic.BidiProperties = zunic.cp('(').bidi();
+    try std.testing.expectEqual(zunic.BidiClass.other_neutral, bidi.class);
+    try std.testing.expect(bidi.isMirrored);
+    try std.testing.expectEqual(zunic.BidiPairedBracketType.open, bidi.pairedBracketType);
+    try std.testing.expectEqual(@as(?u21, ')'), zunic.cp('(').bidiMirroringGlyph());
+    try std.testing.expectEqual(@as(?u21, ')'), zunic.cp('(').bidiPairedBracket());
 }
 
 test "docs: strict codepoint iteration exposes decoding errors after the loop" {

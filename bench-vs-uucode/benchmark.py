@@ -32,13 +32,13 @@ OPERATIONS = (
     "utf8", "graphemes", "measured", "width",
     "terminal_properties", "terminal_lookup", "case_fold",
     "simple_uppercase", "simple_lowercase", "simple_titlecase",
-    "numeric_properties", "script", "combining_class", "decomposition",
+    "numeric_properties", "script", "bidi_properties", "bidi_mappings", "combining_class", "decomposition",
     "grapheme_stream", "ghostty_width",
 )
 EXACT_OPERATIONS = (
     "terminal_properties", "terminal_lookup", "case_fold",
     "simple_uppercase", "simple_lowercase", "simple_titlecase",
-    "numeric_properties", "script", "combining_class", "decomposition", "ghostty_width",
+    "numeric_properties", "script", "bidi_properties", "bidi_mappings", "combining_class", "decomposition", "ghostty_width",
 )
 CAPTIONS = {
     "utf8": "UTF-8 decoding",
@@ -53,6 +53,8 @@ CAPTIONS = {
     "simple_titlecase": "Simple titlecase mapping",
     "numeric_properties": "Exact numeric properties",
     "script": "Primary Script property",
+    "bidi_properties": "Bidirectional scalar properties",
+    "bidi_mappings": "Bidirectional scalar mappings",
     "combining_class": "Canonical combining class",
     "decomposition": "Immediate decomposition facts",
     "grapheme_stream": "Incremental grapheme boundaries",
@@ -326,7 +328,7 @@ def benchmark(args: argparse.Namespace) -> int:
     git_head = run(["git", "rev-parse", "HEAD"], ROOT).stdout.strip()
     git_status = run(["git", "status", "--short"], ROOT).stdout
     summary = {
-        "schema": "zunic-uucode-benchmark/v7", "title": "Unicode primitives: uucode vs Zunic",
+        "schema": "zunic-uucode-benchmark/v8", "title": "Unicode primitives: uucode vs Zunic",
         "label": args.label, "pair_count": args.pairs, "cases": list(CORPORA),
         "operations": list(operations), "pairs": pairs,
         "peers": {name: {"name": name if name == "zunic" else "uucode 0.2.0",
@@ -339,7 +341,7 @@ def benchmark(args: argparse.Namespace) -> int:
             "Both peers use Unicode 17.0.0; whole-grapheme width policies can still differ and are shown explicitly.",
             "Terminal-property, case-mapping, numeric, Script, normalization-fact, full-fold, and Ghostty-width rows agree exactly on these valid UTF-8 corpora.",
             "The fused scalar lookup row receives predecoded code points, excluding UTF-8 decoding from its timing.",
-            "Simple case, numeric, Script, combining-class, and decomposition rows also receive predecoded code points.",
+            "Simple case, numeric, Script, bidi, combining-class, and decomposition rows also receive predecoded code points.",
             "uucode exposes non-decimal numeric values as text; its numeric row includes parsing and reducing that text to Zunic's exact rational result.",
             "Multi-result operations use independent field accumulators, combined once after traversal, to reduce checksum dependency-chain cost.",
             "The focused streaming row intentionally records uucode's emoji-modifier tailoring against Zunic's default UAX #29 GB9 behavior.",
