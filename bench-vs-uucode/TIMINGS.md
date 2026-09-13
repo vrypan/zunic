@@ -2,6 +2,25 @@
 
 Recorded from `benchmarks/20260912T180222Z-uucode-fddbcc/summary.json` on 2026-09-12 at Zunic commit `d82ae3d`. The benchmark used Zig 0.16.0, ReleaseFast, and the native CPU target on macOS 26.6.2 ARM64.
 
+The primary-Script results below were recorded separately from
+`benchmarks/20260913T174210Z-script-two-stage-128-b7bd12/summary.json` on
+2026-09-13. They use the same machine, toolchain, optimization mode, native
+target, three alternating pairs, and 15 samples per executable run.
+
+## Primary Script property
+
+| Corpus | Zunic µs | uucode µs | uucode/Zunic | Units Z/U | Output |
+| --- | ---: | ---: | ---: | ---: | :---: |
+| arabic | 9.535 | 9.736 | 1.02× | 27647/27647 | same |
+| hindi | 6.747 | 6.916 | 1.03× | 19595/19595 | same |
+| korean | 7.297 | 7.524 | 1.03× | 21191/21191 | same |
+| russian | 9.815 | 9.994 | 1.02× | 28552/28552 | same |
+| source_code | 17.338 | 17.166 | 0.99× | 50202/50202 | same |
+| english | 17.380 | 17.347 | 1.00× | 49489/49489 | same |
+| japanese | 6.301 | 6.372 | 1.01× | 18108/18108 | same |
+| mandarin | 6.134 | 6.193 | 1.01× | 17639/17639 | same |
+| features | 0.019 | 0.018 | 0.95× | 52/52 | same |
+
 Label: `uucode`. Sequential alternating pairs: 3.
 
 Unicode: Zunic 17.0.0; uucode 17.0.0.

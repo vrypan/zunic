@@ -16,3 +16,4 @@ pub const terminal_properties = @import("terminal_properties.zig");
 pub const case_folding = @import("case_folding.zig");
 pub const simple_case_mappings = @import("simple_case_mappings.zig");
 pub const numeric = @import("numeric_properties.zig");
+pub const script_properties = @import("script_properties.zig");

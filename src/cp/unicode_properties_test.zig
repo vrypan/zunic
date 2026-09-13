@@ -1,6 +1,35 @@
 const std = @import("std");
 const codepoints = @import("cp");
 
+test "Script and Script_Extensions representatives" {
+    try std.testing.expectEqual(codepoints.Script.latin, codepoints.init('A').script());
+    try std.testing.expectEqual(codepoints.Script.greek, codepoints.init(0x03b1).script());
+    try std.testing.expectEqual(codepoints.Script.inherited, codepoints.init(0x0301).script());
+    try std.testing.expectEqual(codepoints.Script.common, codepoints.init(0x30fc).script());
+    try std.testing.expectEqualSlices(codepoints.Script, &.{ .hiragana, .katakana }, codepoints.init(0x30fc).scriptExtensions());
+    try std.testing.expectEqualSlices(codepoints.Script, &.{.greek}, codepoints.init(0x0342).scriptExtensions());
+    try std.testing.expectEqual(@as(usize, 8), codepoints.init(0x0301).scriptExtensions().len);
+    try std.testing.expectEqual(@as(usize, 9), codepoints.init(0x0640).scriptExtensions().len);
+    try std.testing.expectEqual(@as(usize, 23), codepoints.init(0x0965).scriptExtensions().len);
+
+    for ([_]u21{ 0x0378, 0xd800, 0xe000 }) |value| {
+        try std.testing.expectEqual(codepoints.Script.unknown, codepoints.init(value).script());
+        try std.testing.expectEqualSlices(codepoints.Script, &.{.unknown}, codepoints.init(value).scriptExtensions());
+    }
+}
+
+test "Script wider-u21 default is exhaustive and extension slices are static" {
+    var value: u21 = 0x110000;
+    while (true) : (value += 1) {
+        const view = codepoints.init(value);
+        try std.testing.expectEqual(codepoints.Script.unknown, view.script());
+        try std.testing.expectEqualSlices(codepoints.Script, &.{.unknown}, view.scriptExtensions());
+        if (value == 0x1fffff) break;
+    }
+    const borrowed = codepoints.init(0x30fc).scriptExtensions();
+    try std.testing.expectEqualSlices(codepoints.Script, &.{ .hiragana, .katakana }, borrowed);
+}
+
 test "terminal property representatives" {
     try std.testing.expectEqual(@FieldType(codepoints.TerminalProperties, "eastAsianWidth").narrow, codepoints.init('A').terminal().eastAsianWidth);
     try std.testing.expectEqual(@FieldType(codepoints.TerminalProperties, "eastAsianWidth").wide, codepoints.init(0x4e00).terminal().eastAsianWidth);

@@ -3,9 +3,9 @@
 [Documentation index](../README.md) · [Text view](../text/README.md) · [Implementation](implementation.md)
 
 Use `zunic.cp(value)` if you have a codepoint stored as a `u21` and want to
-query its properties. This gives you access to its Unicode category, numeric
-value, normalization facts, emoji properties, isolated display width, or
-case-folded values.
+query its properties. This gives you access to its Unicode category and
+script, numeric value, normalization facts, emoji properties, isolated
+display width, or case-folded values.
 
 ```zig
 const value: u21 = 0x1f600; // U+1F600, 😀
@@ -92,6 +92,9 @@ does not populate or cache the others.
 | `terminal()` | `zunic.TerminalProperties` | East Asian width, emoji flags, and terminal width facts |
 | `grapheme()` | `zunic.GraphemeProperties` | Classification used by grapheme segmentation |
 
+Script properties are separate methods: `script()` returns a `zunic.Script`,
+and `scriptExtensions()` returns the codepoint's exact set of possible scripts.
+
 ### General properties
 
 `general().category` is a `zunic.GeneralCategory`, with values such as `.lu`
@@ -154,6 +157,35 @@ These facts alone do not decide a boundary. Use
 `zunic.graphemeBreak(previous, current, &state)` with `zunic.GraphemeState`
 for [incremental codepoint input](grapheme-break.md). Both apply the contextual
 segmentation rules.
+
+### Script properties
+
+`script()` returns the primary Unicode `Script` value. `scriptExtensions()`
+returns the explicit `Script_Extensions` set when Unicode defines one;
+otherwise it returns a one-element slice containing the primary script. The
+slice borrows immutable table storage and remains valid for the program
+lifetime. Its members are sorted by `Script` enum order for deterministic
+iteration; that order has no linguistic priority.
+
+`zunic.Script` uses lowercase canonical long names such as `.latin` and
+`.old_italic`. The tags are public API; their numeric ordinals are not a
+stable serialization format.
+
+```zig
+const prolonged = zunic.cp(0x30fc); // KATAKANA-HIRAGANA PROLONGED SOUND MARK
+std.debug.print("primary: {s}\n", .{@tagName(prolonged.script())});
+for (prolonged.scriptExtensions()) |script| {
+    std.debug.print("extension: {s}\n", .{@tagName(script)});
+}
+// primary: common
+// extension: hiragana
+// extension: katakana
+```
+
+An explicit extension set replaces the default; the example therefore does
+not include `.common`. These methods provide per-codepoint facts. They do not
+detect a language, resolve `.common` or `.inherited` from surrounding text,
+segment script runs, or enforce a mixed-script policy.
 
 ## Width, whitespace, and case folding
 
@@ -289,6 +321,7 @@ Operations have defined fallbacks for values above `zunic.max_codepoint`:
 | Simple case mappings | The original value |
 | `numeric()`, `decomposition()` | `null` |
 | `canonicalCombiningClass()` | `0` |
+| `script()`, `scriptExtensions()` | `.unknown`, singleton `.unknown` |
 
 These fallbacks do not make the input a valid scalar. Surrogates are a
 different case: they are within Unicode's range and use their table entries,

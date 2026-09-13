@@ -37,6 +37,9 @@ pub fn build(b: *std.Build) void {
             "decomposition_type",
             "decomposition_mapping",
         }),
+        // Primary Script is measured alone, matching Zunic's independent
+        // Script trie rather than widening another configured table.
+        .fields_7 = @as([]const []const u8, &.{"script"}),
     });
 
     // A separate uucode instance containing exactly the raw fields in

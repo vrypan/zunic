@@ -193,6 +193,15 @@ pub inline fn numericProperties(codepoints: []const u21) Stats {
     return .{ .units = codepoints.len, .checksum = finishSums(sums) };
 }
 
+pub inline fn script(codepoints: []const u21) Stats {
+    var sums: [2]usize = @splat(0);
+    for (codepoints) |cp| {
+        sums[0] +%= cp;
+        sums[1] +%= @intFromEnum(uucode.get(.script, cp));
+    }
+    return .{ .units = codepoints.len, .checksum = finishSums(sums) };
+}
+
 pub inline fn combiningClass(codepoints: []const u21) Stats {
     var sums: [2]usize = @splat(0);
     for (codepoints) |cp| {
@@ -360,6 +369,11 @@ pub fn dumpNumericProperties(out: *std.Io.Writer, codepoints: []const u21) !void
             });
         } else try out.print("{x}:n,", .{cp});
     }
+}
+
+pub fn dumpScript(out: *std.Io.Writer, codepoints: []const u21) !void {
+    for (codepoints) |cp|
+        try out.print("{x}:{d},", .{ cp, @intFromEnum(uucode.get(.script, cp)) });
 }
 
 pub fn dumpCombiningClass(out: *std.Io.Writer, codepoints: []const u21) !void {

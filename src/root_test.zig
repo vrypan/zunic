@@ -7,6 +7,12 @@ test "unicode component compiles as an independent root" {
     try std.testing.expectEqual(@as(usize, 2), unicode.text("🇬🇷").width());
 }
 
+test "Script properties are exposed by the public facade" {
+    const primary: unicode.Script = unicode.cp('A').script();
+    try std.testing.expectEqual(unicode.Script.latin, primary);
+    try std.testing.expectEqualSlices(unicode.Script, &.{ .hiragana, .katakana }, unicode.cp(0x30fc).scriptExtensions());
+}
+
 test "word bounds partition the view and name their own types" {
     const line = "The price is $9.99 -unless you pay cash.";
 

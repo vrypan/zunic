@@ -131,6 +131,19 @@ test "docs: terminal properties, case folding, and streaming graphemes" {
     try std.testing.expect(!zunic.graphemeBreak(0x0301, 0x0308, &state));
 }
 
+test "docs: Script and Script_Extensions" {
+    const mark = zunic.cp(0x30fc);
+    try std.testing.expectEqual(zunic.Script.common, mark.script());
+
+    var has_hiragana = false;
+    var has_katakana = false;
+    for (mark.scriptExtensions()) |script| {
+        has_hiragana = has_hiragana or script == .hiragana;
+        has_katakana = has_katakana or script == .katakana;
+    }
+    try std.testing.expect(has_hiragana and has_katakana);
+}
+
 test "docs: normalize from the text view" {
     var buffer: [64]u8 = undefined;
     // Normalize either canonical form through the text view.

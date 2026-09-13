@@ -25,6 +25,9 @@ generator can reject a mixed data release.
 | `LineBreak-17.0.0.txt` | `e6a18fa91f8f6a6f8e534b1d3f128c21ada45bfe152eb6b1bcc5e15fd8ac92e6` |
 | `LineBreakTest-17.0.0.txt` | `e69884e0dde6a8724873f885d68c52dc14518abf9ae4ca9e2283b8773db3b752` |
 | `NormalizationTest-17.0.0.txt` | `5019ffd530751a741900c849c0e010332f142a3612234639bd200b82138a87db` |
+| `PropertyValueAliases-17.0.0.txt` | `64e9a5f76f7a1e8b5a47d6a1f9a26522a251208f5276bdfa1559dac7cf2e827a` |
+| `ScriptExtensions-17.0.0.txt` | `ec2107e58825a1586acee8e0911ce18260394ac8b87e535ca325f1ccbeb06bc6` |
+| `Scripts-17.0.0.txt` | `9f5e50d3abaee7d6ce09480f325c706f485ae3240912527e651954d2d6b035bf` |
 | `UnicodeData-17.0.0.txt` | `2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c` |
 | `WordBreakProperty-17.0.0.txt` | `72274cac1e6b919507db35655c3e175aa27274668a1ece95c28d2069f2ad9852` |
 | `WordBreakTest-17.0.0.txt` | `1de23a75f37904abc7d206239ee8d34f8fdf0fb4ab32a7174dfbabbde25419b2` |

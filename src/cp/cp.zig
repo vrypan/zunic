@@ -22,6 +22,17 @@ pub const CodepointView = packed struct(u32) {
         return @bitCast(tables.general_category.generalCategoryProperties(self.value));
     }
 
+    /// The code point's primary Unicode Script property.
+    pub fn script(self: CodepointView) Script {
+        return tables.script_properties.script(self.value);
+    }
+
+    /// The exact Unicode Script_Extensions set, or the primary Script as a
+    /// singleton when no explicit set exists. The returned storage is static.
+    pub fn scriptExtensions(self: CodepointView) []const Script {
+        return tables.script_properties.scriptExtensions(self.value);
+    }
+
     /// East Asian width, emoji flags, and terminal width facts, fetched together.
     pub fn terminal(self: CodepointView) TerminalProperties {
         return @bitCast(tables.terminal_properties.terminalProperties(self.value));
@@ -150,6 +161,7 @@ fn compatibilityType(value: tables.normalization.DecompositionType) Decompositio
 
 pub const Numeric = tables.numeric.Numeric;
 pub const NumericType = tables.numeric.NumericType;
+pub const Script = tables.script_properties.Script;
 
 pub const DecompositionType = enum(u5) {
     canonical,

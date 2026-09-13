@@ -35,6 +35,7 @@ const Operation = enum {
     simple_lowercase,
     simple_titlecase,
     numeric_properties,
+    script,
     combining_class,
     decomposition,
     grapheme_stream,
@@ -74,6 +75,7 @@ inline fn run(comptime operation: Operation, case: Case) peer.Stats {
         .simple_lowercase => peer.simpleLowercase(codepoints),
         .simple_titlecase => peer.simpleTitlecase(codepoints),
         .numeric_properties => peer.numericProperties(codepoints),
+        .script => peer.script(codepoints),
         .combining_class => peer.combiningClass(codepoints),
         .decomposition => peer.decomposition(codepoints),
         .grapheme_stream => peer.graphemeStream(bytes),
@@ -144,6 +146,7 @@ fn dumpOne(out: *std.Io.Writer, case: Case, comptime operation: Operation) !void
         .simple_lowercase => try peer.dumpSimpleLowercase(out, case.codepoints),
         .simple_titlecase => try peer.dumpSimpleTitlecase(out, case.codepoints),
         .numeric_properties => try peer.dumpNumericProperties(out, case.codepoints),
+        .script => try peer.dumpScript(out, case.codepoints),
         .combining_class => try peer.dumpCombiningClass(out, case.codepoints),
         .decomposition => try peer.dumpDecomposition(out, case.codepoints),
         .grapheme_stream => try peer.dumpGraphemeStream(out, case.text),
@@ -195,7 +198,7 @@ pub fn main(init: std.process.Init) !void {
     if (std.mem.eql(u8, args[1], "--dump")) return printDump(out, init.arena.allocator(), selection);
     if (!std.mem.eql(u8, args[1], "--bench")) return error.UnexpectedArgument;
 
-    try out.print("protocol=6 suite=unicode peer={s} unicode={s} samples={d} calibration_ms={d} input=bytes+predecoded_codepoints consumption=operation_checksum_v6\n", .{
+    try out.print("protocol=7 suite=unicode peer={s} unicode={s} samples={d} calibration_ms={d} input=bytes+predecoded_codepoints consumption=operation_checksum_v7\n", .{
         peer.name, peer.unicode_version, sample_count, target_ns / std.time.ns_per_ms,
     });
     var cases: [source_cases.len]Case = undefined;

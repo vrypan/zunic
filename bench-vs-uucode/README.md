@@ -20,6 +20,8 @@ Recorded on 2026-09-12 at Zunic `d82ae3d` on an Apple ARM64 machine running
 macOS 26.6.2. Both peers used Unicode 17.0.0, Zig 0.16.0, ReleaseFast, and the
 native CPU target. The run used three alternating pairs and 15 samples per
 executable run. See [TIMINGS.md](TIMINGS.md) for every per-corpus measurement.
+The primary-Script row was recorded separately on 2026-09-13 from the current
+Plan 033 working tree, also with three alternating pairs.
 
 For each corpus, the result is the median of the three run medians. The average
 below is the geometric mean of the nine per-corpus ratios. `uucode/Zunic` above
@@ -40,6 +42,7 @@ paths.
 | Simple lowercase mapping | 1.16× | 1.02–1.33× | 9/9 |
 | Simple titlecase mapping | 1.20× | 1.01–1.34× | 9/9 |
 | Exact numeric properties | 2.26× | 2.12–2.85× | 9/9 |
+| Primary Script property | 1.01× | 0.95–1.03× | 9/9 |
 | Canonical combining class | 1.05× | 0.95–1.26× | 9/9 |
 | Immediate decomposition facts | 1.20× | 1.02–1.84× | 9/9 |
 | Incremental grapheme boundaries | 2.64× | 1.94–3.93× | 8/9 |
@@ -47,7 +50,7 @@ paths.
 
 [Results breakdown: full per-corpus timings](TIMINGS.md)
 
-uucode and Zunic overlap in fifteen benchmarked operations:
+uucode and Zunic overlap in sixteen benchmarked operations:
 
 | Operation | Zunic | uucode | Timed result consumed |
 |---|---|---|---|
@@ -62,6 +65,7 @@ uucode and Zunic overlap in fifteen benchmarked operations:
 | Simple lowercase | `cp(value).simpleLowercase()` | `simple_lowercase_mapping` | every predecoded scalar and mapped value |
 | Simple titlecase | `cp(value).simpleTitlecase()` | `simple_titlecase_mapping` | every predecoded scalar and mapped value |
 | Numeric properties | `cp(value).numeric()` | numeric type and value fields | every exact reduced rational value and kind |
+| Primary Script | `cp(value).script()` | configured `script` field | every predecoded scalar and Script enum value |
 | Combining class | `cp(value).canonicalCombiningClass()` | `canonical_combining_class` | every predecoded scalar and class |
 | Decomposition | `cp(value).decomposition()` | decomposition type and mapping | every immediate mapping and type |
 | Streaming graphemes | `graphemeBreak` | `computeGraphemeBreak` | every adjacent-pair boundary and ending offset |
@@ -71,14 +75,14 @@ The UTF-8 row measures the low-level `zunic.utf8.step()` decoder, not
 `text(bytes).codepoints().iterator()`. It does not measure the public iterator's
 `CodepointView` return or sticky `err` handling. Property rows use the current
 `cp(value)` API; grapheme rows use the tolerant text iterators. Simple case
-mapping, numeric properties, combining class, and decomposition receive
+mapping, numeric properties, Script, combining class, and decomposition receive
 predecoded codepoints so their timings isolate lookup and result handling.
 
 uucode does not currently expose comparable line breaking, complete text
-normalization, word boundaries, or wrapping, so those Zunic features are not
-included. The shared corpora are the same eight multilingual files used by
-`bench-vs-rust`; the suite checks them before use and embeds them into both
-executables.
+normalization, Script_Extensions, word boundaries, or wrapping, so those Zunic
+features are not included. The shared corpora are the same eight multilingual
+files used by `bench-vs-rust`; the suite checks them before use and embeds them
+into both executables.
 
 ## Run it
 
@@ -103,7 +107,7 @@ make -C bench-vs-uucode bench OPERATIONS=combining_class,decomposition PAIRS=1
 utf8, graphemes, measured, width,
 terminal_properties, terminal_lookup, case_fold,
 simple_uppercase, simple_lowercase, simple_titlecase,
-numeric_properties, combining_class, decomposition,
+numeric_properties, script, combining_class, decomposition,
 grapheme_stream, ghostty_width
 ```
 
@@ -207,10 +211,12 @@ For numeric properties, Zunic returns a reduced rational directly. uucode
 returns non-decimal numeric values as strings, so its timed adapter parses and
 reduces those strings to produce the same result a caller receives from Zunic.
 
-Both peers now use Unicode 17.0.0. Their whole-grapheme terminal-width policies
-still differ, so output differences are reported per corpus rather than treated
-as benchmark failures. Terminal-property, case-mapping, numeric,
-normalization-fact, full-fold, and Ghostty-width outputs must match exactly.
+Both peers now use Unicode 17.0.0. Their primary Script enum ordinals agree,
+and the benchmark checks every emitted Script result exactly. Their
+whole-grapheme terminal-width policies still differ, so output differences are
+reported per corpus rather than treated as benchmark failures.
+Terminal-property, case-mapping, numeric, Script, normalization-fact,
+full-fold, and Ghostty-width outputs must match exactly.
 Streaming boundaries match on the document corpora; the
 focused corpus pins the known isolated-emoji-modifier difference between
 Zunic's default UAX #29 GB9 behavior and uucode's modifier tailoring.

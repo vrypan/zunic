@@ -22,6 +22,16 @@ calls therefore do not retain the wider line-break/layout table. Whitespace uses
 trimming. Case folding has an ASCII uppercase fast path followed by indexed
 mapping tables, returning an owned buffer of at most three values.
 
+Primary Script uses a fixed two-stage prefix trie. The high bits index 8,704
+byte-sized page IDs, and the low seven bits select a `Script` within one of 255
+deduplicated 128-codepoint pages. Its arrays occupy 41,344 bytes and every
+in-range lookup performs two dependent reads. This layout measured 1.32 times
+the throughput of the smaller three-stage trie on the eight multilingual
+benchmark corpora. Script_Extensions stays in separate sparse storage so a
+primary-only caller does not retain it: 176 merged ranges use binary search,
+then address 118 deduplicated static sets. The extension arrays occupy 2,003
+bytes, for 43,347 bytes when both methods are retained.
+
 The three simple case mappings share a two-stage index. One read selects a
 leaf offset; another reads the signed delta from the uppercase, lowercase, or
 titlecase array. ASCII uses the same lookup. Separate payload arrays allow
@@ -49,8 +59,10 @@ each view. Internal segmentation and layout instead use
 positions and already gathered facts for reuse. Those tokens serve text
 engines; they are not the public codepoint view.
 
-Run `zig build test-cp` for property and folding tests, including comparisons
-across the complete `u21` domain and the pinned case-folding fixture.
+Run `zig build test-unicode-properties` for independent exhaustive checks of
+the generated property tables against their pinned Unicode sources. Run
+`zig build test-cp` for compiled property and folding tests, including wider
+`u21` fallbacks and the pinned case-folding fixture.
 `zig build test-text` and `zig build test-api` cover decoding behavior and
 public API integration. Module refactoring previously preserved the optimized
 comparison benchmark's machine code; future representation or inlining
