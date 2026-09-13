@@ -8,9 +8,8 @@ and normalize Unicode.
 
 > [!CAUTION] 
 >
-> If you are against using AI-generated code, **DO NOT** use this library in your projects.
->
 > zunic development makes extensive use of AI tools, and AI-generated code can be found throughout the codebase.
+> If you are against using AI-generated code, you may not want to use this library in your projects.
 
 ## Why zunic
 
