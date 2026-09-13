@@ -60,7 +60,7 @@ were superseded before the same release are omitted.
   terminators, wrapping, word boundaries, validation, and normalization.
 - Added default Unicode word-boundary segmentation.
 - Added canonical NFC and NFD normalization, normalization quick checks,
-  canonical equality, caller-buffer output, and the Stream-Safe combining-run
+  canonical equality, caller-buffer output, and a bounded combining-run
   limit.
 - Added an ANSI-aware terminal view with escape-aware grapheme iteration,
   parsed formatting effects, and allocation-free ANSI stripping.
