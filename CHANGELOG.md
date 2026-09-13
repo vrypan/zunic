@@ -4,6 +4,14 @@ Notable code changes are listed by package version. Documentation-only,
 benchmark-only, planning, release bookkeeping, and intermediate changes that
 were superseded before the same release are omitted.
 
+## [0.4.1] - 2026-09-13
+
+### Added
+
+- Added primary `Script` and exact `Script_Extensions` codepoint queries through
+  `cp(value).script()` and `cp(value).scriptExtensions()`.
+- Added the five Unicode `Changes_When_*` predicates to `GeneralProperties`.
+
 ## [0.4.0] - 2026-09-12
 
 ### Added
