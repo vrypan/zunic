@@ -24,3 +24,25 @@ run eight samples with rotating case order. Fixed cases use 2,000 iterations
 per sample; refill cases use 500. Normalize elapsed time by iterations when
 comparing modes. This measures iteration CPU cost, not file-system latency.
 Unicode fixture tests provide exact boundary checks beyond these corpus checks.
+
+## Decoder optimization results
+
+Measured on 2026-09-14, native macOS ARM64, Zig 0.16.0, ReleaseFast. The same
+harness was compiled against the decoder at `fc26fd6` and against fused
+incremental decoding with an inlined `next()`. Three process runs alternated
+the before/after order, giving 24 samples per case. The figures below divide
+the median baseline time by the median optimized time; larger is faster.
+
+| Corpus | Fixed codepoints | Fixed graphemes | Refill codepoints | Refill graphemes |
+| --- | ---: | ---: | ---: | ---: |
+| ASCII | 1.40× | 2.01× | 1.25× | 1.14× |
+| Multilingual | 2.69× | 2.10× | 1.35× | 1.23× |
+| Combining marks | 2.01× | 1.69× | 1.28× | 1.10× |
+
+These are local measurements, not portable performance guarantees or CI
+thresholds. Compared with the baseline benchmark, the optimized Mach-O
+`__text` section grew by 1,024 bytes and `__TEXT,__const` by 64 bytes.
+Unicode table definitions and sizes did not change.
+
+A small inline ASCII wrapper around an out-of-line decoder was also tested;
+full inlining performed better across these corpora.

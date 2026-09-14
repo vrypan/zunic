@@ -43,7 +43,8 @@ pub const ReaderCodepointIterator = struct {
     offset: u64 = 0,
     status: Status = .active,
 
-    pub fn next(self: *ReaderCodepointIterator) ReaderCodepointError!?codepoint_view.CodepointView {
+    // Let callers eliminate unused result/state handling, as slice iterators do.
+    pub inline fn next(self: *ReaderCodepointIterator) ReaderCodepointError!?codepoint_view.CodepointView {
         switch (self.status) {
             .active => {},
             .exhausted => return null,
