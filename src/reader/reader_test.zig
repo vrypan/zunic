@@ -7,6 +7,7 @@ const Chunked = struct {
     cursor: usize = 0,
     max_chunk: usize = 1,
     reads: usize = 0,
+    rebases: usize = 0,
     fail_at: ?usize = null,
     interface: std.Io.Reader,
 
@@ -14,7 +15,7 @@ const Chunked = struct {
         return .{
             .data = data,
             .interface = .{
-                .vtable = &.{ .stream = stream },
+                .vtable = &.{ .stream = stream, .rebase = rebase },
                 .buffer = buffer,
                 .seek = 0,
                 .end = 0,
@@ -32,6 +33,12 @@ const Chunked = struct {
         const written = try writer.write(self.data[self.cursor..][0..n]);
         self.cursor += written;
         return written;
+    }
+
+    fn rebase(interface: *std.Io.Reader, capacity: usize) std.Io.Reader.RebaseError!void {
+        const self: *Chunked = @alignCast(@fieldParentPtr("interface", interface));
+        self.rebases += 1;
+        return std.Io.Reader.defaultRebase(interface, capacity);
     }
 };
 
@@ -124,6 +131,27 @@ test "invalid prefixes fail early, stay unconsumed, and latch" {
         try std.testing.expectEqual(case.reads, input.reads);
         try std.testing.expectEqual(case.bytes[0], (try input.interface.peek(1))[0]);
     }
+}
+
+test "malformed prefix remains logically available after forced rebase" {
+    var storage: [4]u8 = undefined;
+    var input = Chunked.init("abc\xe2A", &storage);
+    var it = reader_input.init(&input.interface).codepoints();
+
+    for ("abc") |expected| try std.testing.expectEqual(@as(u21, expected), (try it.next()).?.value);
+    try std.testing.expectEqual(@as(u64, 3), it.offset);
+    try std.testing.expectEqual(@as(usize, 0), input.rebases);
+
+    try std.testing.expectError(error.InvalidUtf8, it.next());
+    try std.testing.expectEqual(@as(usize, 1), input.rebases);
+    try std.testing.expectEqual(@as(u64, 3), it.offset);
+    const reads = input.reads;
+
+    try std.testing.expectError(error.InvalidUtf8, it.next());
+    try std.testing.expectEqual(reads, input.reads);
+    try std.testing.expectEqual(@as(u64, 3), it.offset);
+    try std.testing.expectEqual(@as(u8, 0xe2), (try input.interface.peek(1))[0]);
+    try std.testing.expectEqual(reads, input.reads);
 }
 
 test "capacity and truncation precedence" {

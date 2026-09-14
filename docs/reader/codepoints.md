@@ -36,7 +36,10 @@ whose ending offset cannot fit in `u64`.
 Zunic uses `peek` and `toss`. An offending sequence is not tossed, although a
 Reader refill may move buffered bytes and may read ahead in the underlying
 source. Continue recovery through the same Reader rather than bypassing its
-buffer. A split encoding remains valid across refills.
+buffer: discard the failed iterator, diagnose and repair or skip input through
+that Reader, then open a fresh iterator whose relative offset starts at zero.
+Do not read from the raw file handle while buffered bytes remain. A split
+encoding remains valid across refills.
 
 The Reader's buffer needs capacity for the next UTF-8 prefix. One byte is
 enough for ASCII; general UTF-8 needs at least four. Smaller multibyte capacity
