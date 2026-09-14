@@ -39,12 +39,31 @@ const Status = enum {
 pub const ReaderCodepointIterator = struct {
     pub const Error = ReaderCodepointError;
 
+    const Decoded = struct {
+        point: codepoint_view.CodepointView,
+        raw: [4]u8,
+        len: u3,
+    };
+
+    fn Result(comptime capture_bytes: bool) type {
+        return if (capture_bytes) Decoded else codepoint_view.CodepointView;
+    }
+
     input: *std.Io.Reader,
     offset: u64 = 0,
     status: Status = .active,
 
     // Let callers eliminate unused result/state handling, as slice iterators do.
     pub inline fn next(self: *ReaderCodepointIterator) ReaderCodepointError!?codepoint_view.CodepointView {
+        return self.nextInternal(false);
+    }
+
+    /// Internal adapter entry point; capture bytes before advancing the Reader.
+    inline fn nextDecoded(self: *ReaderCodepointIterator) ReaderCodepointError!?Decoded {
+        return self.nextInternal(true);
+    }
+
+    inline fn nextInternal(self: *ReaderCodepointIterator, comptime capture_bytes: bool) ReaderCodepointError!?Result(capture_bytes) {
         switch (self.status) {
             .active => {},
             .exhausted => return null,
@@ -63,7 +82,7 @@ pub const ReaderCodepointIterator = struct {
             error.ReadFailed => return self.fail(.read_failed),
         };
         const lead = first[0];
-        if (lead < 0x80) return try self.commit(lead, 1);
+        if (lead < 0x80) return try self.commit(capture_bytes, lead, 1);
         if (lead < 0xc2 or lead > 0xf4) return self.fail(.invalid_utf8);
 
         // Validate only the next decisive byte. A full-length peek could block
@@ -74,14 +93,14 @@ pub const ReaderCodepointIterator = struct {
             (lead == 0xed and second > 0x9f) or
             (lead == 0xf0 and second < 0x90) or
             (lead == 0xf4 and second > 0x8f)) return self.fail(.invalid_utf8);
-        if (lead < 0xe0) return try self.commit((@as(u21, lead & 0x1f) << 6) | (second & 0x3f), 2);
+        if (lead < 0xe0) return try self.commit(capture_bytes, (@as(u21, lead & 0x1f) << 6) | (second & 0x3f), 2);
 
         const third = try self.continuation(3);
         const tail = (@as(u21, second & 0x3f) << 6) | (third & 0x3f);
-        if (lead < 0xf0) return try self.commit((@as(u21, lead & 0x0f) << 12) | tail, 3);
+        if (lead < 0xf0) return try self.commit(capture_bytes, (@as(u21, lead & 0x0f) << 12) | tail, 3);
 
         const fourth = try self.continuation(4);
-        return try self.commit((@as(u21, lead & 0x07) << 18) | (tail << 6) | (fourth & 0x3f), 4);
+        return try self.commit(capture_bytes, (@as(u21, lead & 0x07) << 18) | (tail << 6) | (fourth & 0x3f), 4);
     }
 
     inline fn continuation(self: *ReaderCodepointIterator, comptime needed: usize) ReaderCodepointError!u8 {
@@ -95,13 +114,20 @@ pub const ReaderCodepointIterator = struct {
         return byte;
     }
 
-    inline fn commit(self: *ReaderCodepointIterator, value: u21, length: usize) ReaderCodepointError!codepoint_view.CodepointView {
+    inline fn commit(self: *ReaderCodepointIterator, comptime capture_bytes: bool, value: u21, comptime length: usize) ReaderCodepointError!Result(capture_bytes) {
         const end = std.math.add(u64, self.offset, @as(u64, @intCast(length))) catch {
             return self.fail(.offset_overflow);
         };
+        var result: Result(capture_bytes) = undefined;
+        if (capture_bytes) {
+            result = .{ .point = codepoint_view.init(value), .raw = .{ 0, 0, 0, 0 }, .len = length };
+            @memcpy(result.raw[0..length], self.input.buffer[self.input.seek..][0..length]);
+        } else {
+            result = codepoint_view.init(value);
+        }
         self.input.toss(length);
         self.offset = end;
-        return codepoint_view.init(value);
+        return result;
     }
 
     fn fail(self: *ReaderCodepointIterator, status: Status) ReaderCodepointError {
@@ -116,7 +142,6 @@ pub const ReaderCodepointIterator = struct {
     }
 };
 
-pub const ReaderGraphemeSpan = reader_graphemes.Span;
 pub const ReaderGraphemeUpdate = reader_graphemes.Update;
 pub const ReaderGraphemeError = ReaderCodepointError;
-pub const ReaderGraphemeIterator = reader_graphemes.Iterator(ReaderCodepointIterator);
+pub const ReaderGraphemeIterator = reader_graphemes.Iterator(ReaderCodepointIterator, ReaderCodepointIterator.nextDecoded);

@@ -1,48 +1,43 @@
-//! Incremental grapheme snapshots over strict Reader codepoints.
-const codepoint_view = @import("cp");
+//! Incremental grapheme bytes and boundaries over strict Reader codepoints.
 const segmentation = @import("segmentation");
 
-pub const Span = struct {
-    start: u64,
-    end: u64,
-};
-
 pub const Update = struct {
-    /// The current grapheme's cumulative byte extent.
-    grapheme: Span,
-    /// The scalar consumed for this update; null only for final EOF.
-    point: ?codepoint_view.CodepointView,
-    /// This scalar begins a new grapheme and finalizes the previous snapshot.
+    /// Owned UTF-8 bytes of the scalar added by this update.
+    _bytes: [4]u8 = .{ 0, 0, 0, 0 },
+    _len: u3 = 0,
+    /// These bytes begin a new grapheme and finalize the preceding grapheme.
     starts_new: bool,
     /// Clean EOF has finalized this current grapheme.
     is_final: bool,
+
+    /// Newly consumed bytes, not the whole grapheme; empty at final EOF.
+    /// The slice borrows this update and remains valid while it is alive.
+    pub inline fn bytes(self: *const Update) []const u8 {
+        return self._bytes[0..self._len];
+    }
 };
 
-pub fn Iterator(comptime CodepointIterator: type) type {
+pub fn Iterator(comptime CodepointIterator: type, comptime next_decoded: anytype) type {
     return struct {
         points: CodepointIterator,
-        offset: u64 = 0,
         previous: ?u21 = null,
         state: segmentation.stream.GraphemeState = .{},
-        current_start: u64 = 0,
         exhausted: bool = false,
 
-        pub fn next(self: *@This()) CodepointIterator.Error!?Update {
+        pub inline fn next(self: *@This()) CodepointIterator.Error!?Update {
             if (self.exhausted) return null;
 
-            const scalar_start = self.points.offset;
-            const maybe_point = try self.points.next();
-            if (maybe_point) |point| {
-                self.offset = self.points.offset;
+            const maybe_decoded = try next_decoded(&self.points);
+            if (maybe_decoded) |decoded| {
+                const point = decoded.point;
                 const starts_new = if (self.previous) |previous|
                     segmentation.stream.graphemeBreak(previous, point.value, &self.state)
                 else
                     true;
-                if (starts_new) self.current_start = scalar_start;
                 self.previous = point.value;
                 return .{
-                    .grapheme = .{ .start = self.current_start, .end = self.offset },
-                    .point = point,
+                    ._bytes = decoded.raw,
+                    ._len = decoded.len,
                     .starts_new = starts_new,
                     .is_final = false,
                 };
@@ -51,8 +46,6 @@ pub fn Iterator(comptime CodepointIterator: type) type {
             self.exhausted = true;
             if (self.previous == null) return null;
             return .{
-                .grapheme = .{ .start = self.current_start, .end = self.offset },
-                .point = null,
                 .starts_new = false,
                 .is_final = true,
             };

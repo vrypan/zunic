@@ -22,11 +22,7 @@ pub fn main(init: std.process.Init) !void {
             try stdout.interface.flush();
             current.clearRetainingCapacity();
         }
-        if (update.point) |point| {
-            var encoded: [4]u8 = undefined;
-            const len = try std.unicode.utf8Encode(point.value, &encoded);
-            try current.appendSlice(allocator, encoded[0..len]);
-        }
+        try current.appendSlice(allocator, update.bytes());
         if (update.is_final) {
             try stdout.interface.writeAll(current.items);
             try stdout.interface.writeByte('\n');

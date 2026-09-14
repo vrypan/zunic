@@ -12,18 +12,18 @@ test "docs: Reader codepoints" {
 test "docs: incremental Reader graphemes" {
     var input: std.Io.Reader = .fixed("e\u{0301}x");
     var updates = zunic.reader(&input).graphemes();
-    var pending: ?zunic.ReaderGraphemeSpan = null;
+    var pending = false;
     var completed: usize = 0;
     while (try updates.next()) |update| {
-        if (update.starts_new and pending != null) completed += 1;
-        pending = update.grapheme;
+        if (update.starts_new and pending) completed += 1;
+        pending = true;
         if (update.is_final) {
             completed += 1;
-            pending = null;
+            pending = false;
         }
     }
     try std.testing.expectEqual(@as(usize, 2), completed);
-    try std.testing.expect(pending == null);
+    try std.testing.expect(!pending);
 }
 
 test "docs: measured graphemes" {

@@ -18,64 +18,57 @@ test "public Reader codepoint API" {
     try std.testing.expect((try it.next()) == null);
 }
 
-test "public Reader grapheme updates reconstruct final spans and codepoints" {
+test "public Reader grapheme updates reconstruct original bytes" {
     const bytes = "e\u{0301}x";
     var input: std.Io.Reader = .fixed(bytes);
     var updates: unicode.ReaderGraphemeIterator = unicode.reader(&input).graphemes();
-    var pending: ?unicode.ReaderGraphemeSpan = null;
-    var completed: [2]unicode.ReaderGraphemeSpan = undefined;
-    var completed_len: usize = 0;
+    var completed: usize = 0;
+    var finals: usize = 0;
     var reconstructed: [bytes.len]u8 = undefined;
-    var reconstructed_len: usize = 0;
-
+    var length: usize = 0;
     while (try updates.next()) |update| {
-        if (update.starts_new) {
-            if (pending) |span| {
-                completed[completed_len] = span;
-                completed_len += 1;
-            }
-        }
-        pending = update.grapheme;
-        if (update.point) |point|
-            reconstructed_len += try std.unicode.utf8Encode(point.value, reconstructed[reconstructed_len..]);
+        if (update.starts_new and length != 0) completed += 1;
+        const added = update.bytes();
+        @memcpy(reconstructed[length..][0..added.len], added);
+        length += added.len;
         if (update.is_final) {
-            completed[completed_len] = update.grapheme;
-            completed_len += 1;
-            pending = null;
+            completed += 1;
+            finals += 1;
         }
     }
-
-    try std.testing.expectEqual(@as(usize, 2), completed_len);
-    try std.testing.expectEqualDeep(unicode.ReaderGraphemeSpan{ .start = 0, .end = 3 }, completed[0]);
-    try std.testing.expectEqualDeep(unicode.ReaderGraphemeSpan{ .start = 3, .end = 4 }, completed[1]);
-    try std.testing.expectEqualStrings(bytes, reconstructed[0..reconstructed_len]);
-    try std.testing.expect(pending == null);
+    try std.testing.expectEqual(@as(usize, 2), completed);
+    try std.testing.expectEqual(@as(usize, 1), finals);
+    try std.testing.expectEqualStrings(bytes, reconstructed[0..length]);
 }
 
-test "Reader grapheme finalized spans match Text graphemes" {
+test "consumer-tracked Reader offsets match Text grapheme spans" {
     const bytes = "a\r\ne\u{0301}\u{1f1e6}\u{1f1e7}x";
     var input: std.Io.Reader = .fixed(bytes);
     var updates = unicode.reader(&input).graphemes();
     var spans = unicode.text(bytes).graphemes().iterator();
-    var pending: ?unicode.ReaderGraphemeSpan = null;
-
+    var start: usize = 0;
+    var end: usize = 0;
+    var pending = false;
     while (try updates.next()) |update| {
         if (update.starts_new) {
-            if (pending) |done| {
+            if (pending) {
                 const expected = spans.next().?;
-                try std.testing.expectEqual(@as(u64, expected.start.value), done.start);
-                try std.testing.expectEqual(@as(u64, expected.end.value), done.end);
+                try std.testing.expectEqual(expected.start.value, start);
+                try std.testing.expectEqual(expected.end.value, end);
             }
+            start = end;
+            pending = true;
         }
-        pending = update.grapheme;
+        end += update.bytes().len;
         if (update.is_final) {
             const expected = spans.next().?;
-            try std.testing.expectEqual(@as(u64, expected.start.value), update.grapheme.start);
-            try std.testing.expectEqual(@as(u64, expected.end.value), update.grapheme.end);
-            pending = null;
+            try std.testing.expectEqual(expected.start.value, start);
+            try std.testing.expectEqual(expected.end.value, end);
+            pending = false;
         }
     }
-    try std.testing.expect(pending == null);
+    try std.testing.expect(!pending);
+    try std.testing.expectEqual(bytes.len, end);
     try std.testing.expect(spans.next() == null);
 }
 

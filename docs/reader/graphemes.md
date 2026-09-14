@@ -3,20 +3,19 @@
 [Reader view](README.md) · [Reader codepoints](codepoints.md) ·
 [Text graphemes](../text/graphemes/README.md)
 
-`zunic.reader(input).graphemes()` reports the current grapheme after every
-strictly decoded codepoint. It uses the default Unicode 17 extended grapheme
-rules without buffering the complete cluster or reading ahead to its boundary.
+`zunic.reader(input).graphemes()` yields newly consumed UTF-8 bytes and boundary
+flags after every strictly decoded codepoint. It uses the default Unicode 17
+extended grapheme rules without buffering the complete cluster or reading ahead
+to its boundary.
 
 ```zig
 pub fn graphemes(self: Reader) ReaderGraphemeIterator;
 
-pub const ReaderGraphemeSpan = struct { start: u64, end: u64 };
-
 pub const ReaderGraphemeUpdate = struct {
-    grapheme: ReaderGraphemeSpan,
-    point: ?CodepointView,
     starts_new: bool,
     is_final: bool,
+    // Owns up to four UTF-8 bytes internally.
+    pub fn bytes(self: *const ReaderGraphemeUpdate) []const u8;
 };
 
 pub fn next(
@@ -24,43 +23,50 @@ pub fn next(
 ) ReaderGraphemeError!?ReaderGraphemeUpdate;
 ```
 
-The span is a cumulative snapshot of the current grapheme, relative to the
-Reader position where the iterator was opened. `point` is the codepoint newly
-consumed for this update. It is null only for the final clean-EOF update.
-Result values contain no pointer into the Reader buffer.
+`update.bytes()` returns the original UTF-8 bytes newly consumed for this
+update: one complete codepoint,
+one to four bytes. It returns an empty slice for the final clean-EOF update.
+These are the added bytes, not the entire grapheme. Updates contain no spans
+or source offsets.
 
-`starts_new` means this point begins a new grapheme. It finalizes the preceding
-snapshot and introduces the new snapshot in the same update. `is_final` means
+Each update owns its bytes; result values contain no pointer into the Reader
+buffer. Retaining or copying an update preserves its bytes across subsequent
+reads and buffer reuse. The slice returned by `bytes()` borrows that particular
+update, so it is valid only while the update remains alive and unchanged.
+Keep the update in a local variable before taking its byte slice.
+
+`starts_new` means these bytes begin a new grapheme. It finalizes the preceding
+grapheme and introduces the new grapheme in the same update. `is_final` means
 clean EOF finalized the current grapheme. Most graphemes are therefore
 completed by the next update's `starts_new`, while only the last grapheme gets
 an `is_final` update.
 
 For `e` + combining acute accent + `x`:
 
-| Consumed | Span | point | `starts_new` | `is_final` |
-| --- | --- | --- | --- | --- |
-| `e` | `[0,1)` | U+0065 | true | false |
-| U+0301 | `[0,3)` | U+0301 | false | false |
-| `x` | `[3,4)` | U+0078 | true | false |
-| EOF | `[3,4)` | null | false | true |
+| Consumed | `bytes()` (hex) | `starts_new` | `is_final` |
+| --- | --- | --- | --- |
+| `e` | `65` | true | false |
+| U+0301 | `CC 81` | false | false |
+| `x` | `78` | true | false |
+| EOF | empty | false | true |
 
 A nonempty stream containing N codepoints produces N scalar updates plus one
 EOF update. Empty input with nonzero Reader capacity produces no update; as
 with codepoint iteration, a zero-capacity Reader reports
-`ReaderBufferTooSmall`. Do not append a codepoint for the EOF update, and do
-not count only `is_final`: use `starts_new` to commit the preceding snapshot.
+`ReaderBufferTooSmall`. Appending `update.bytes()` at EOF adds nothing. Do not
+count only `is_final`: use `starts_new` to commit the preceding grapheme.
 
 ```zig
 var input: std.Io.Reader = .fixed("e\u{0301}x");
 var updates = zunic.reader(&input).graphemes();
-var pending: ?zunic.ReaderGraphemeSpan = null;
+var pending = false;
 var completed: usize = 0;
 while (try updates.next()) |update| {
-    if (update.starts_new and pending != null) completed += 1;
-    pending = update.grapheme;
+    if (update.starts_new and pending) completed += 1;
+    pending = true;
     if (update.is_final) {
         completed += 1;
-        pending = null;
+        pending = false;
     }
 }
 ```
@@ -83,21 +89,35 @@ remaining allocation-free and using bounded internal storage. It would have to
 buffer the entire grapheme, impose an arbitrary maximum, or make the caller
 supply a potentially large buffer.
 
-Instead, the iterator returns the current grapheme representation after each
-codepoint. The consumer can display or accumulate that representation as data
+Instead, the iterator returns the added bytes and boundary flags after each
+codepoint. The consumer can display or accumulate those bytes as data
 arrives. `starts_new` confirms the preceding grapheme when the next boundary is
 known, and `is_final` confirms the last grapheme at clean EOF. The iterator
 itself remains constant in size regardless of grapheme length.
 
-The iterator does not retain the grapheme's bytes or calculate terminal width.
-Consumers that need the text can encode each non-null `point`, as in the
-example below, or retain input themselves.
+The iterator does not retain the complete grapheme or calculate terminal
+width. Consumers that need the text can append `update.bytes()` to their own
+buffer, as in the example below. No UTF-8 re-encoding is needed. Zunic still
+decodes the codepoint internally to determine grapheme boundaries; consumers
+that need decoded codepoint properties can use `reader(input).codepoints()`.
 
 The errors and buffer requirements are identical to Reader codepoint
 iteration. Errors are sticky and never synthesize a final update. On failure,
-the last snapshot remains provisional; discard the iterator before recovering
+the last grapheme remains provisional; discard the iterator before recovering
 through the same buffered Reader. The caller owns the Reader and buffer, and
 copies share the same underlying cursor.
+
+## Tracking source positions
+
+Consumers needing source positions can keep a byte counter and the current
+grapheme's start. At `starts_new`, the preceding grapheme covers
+`[start, offset)`; then set `start = offset`. Add `update.bytes().len` to
+`offset` for every update. At `is_final`, `[start, offset)` identifies the last
+grapheme. Start both counters at zero for positions relative to the Reader
+cursor where iteration began.
+
+These positions refer to the original stream, not the Reader's reusable buffer.
+Only use them to slice input you have retained separately.
 
 ## Blocking stdin example
 
@@ -121,7 +141,7 @@ pub fn main(init: std.process.Init) !void {
     var graphemes = zunic.reader(&stdin.interface).graphemes();
 
     while (try graphemes.next()) |update| {
-        // The new point belongs to the next grapheme, so finish the preceding
+        // The new bytes belong to the next grapheme, so finish the preceding
         // buffer before appending it.
         if (update.starts_new and current.items.len != 0) {
             try stdout.interface.writeAll(current.items);
@@ -130,14 +150,9 @@ pub fn main(init: std.process.Init) !void {
             current.clearRetainingCapacity();
         }
 
-        if (update.point) |point| {
-            var encoded: [4]u8 = undefined;
-            const len = try std.unicode.utf8Encode(point.value, &encoded);
-            try current.appendSlice(allocator, encoded[0..len]);
-        }
+        try current.appendSlice(allocator, update.bytes());
 
-        // The EOF update has no point, so this does not append the final
-        // codepoint twice.
+        // The EOF update adds no bytes and finalizes the last grapheme.
         if (update.is_final) {
             try stdout.interface.writeAll(current.items);
             try stdout.interface.writeByte('\n');

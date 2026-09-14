@@ -2,6 +2,23 @@
 //! Counts and span checksums are checked against slice iteration before timing.
 const std = @import("std");
 const zunic = @import("zunic");
+const Work = enum { codepoints, spans, bytes, raw_bytes };
+
+// Compile the same consumer against either API for before/after measurements.
+fn updateBytes(update: *const zunic.ReaderGraphemeUpdate, scratch: *[4]u8) ![]const u8 {
+    if (@hasDecl(zunic.ReaderGraphemeUpdate, "bytes")) return update.bytes();
+    if (update.point) |point| {
+        const len = try std.unicode.utf8Encode(point.value, scratch);
+        return scratch[0..len];
+    }
+    return &.{};
+}
+
+fn byteChecksum(bytes: []const u8) u64 {
+    var sum: u64 = 0;
+    for (bytes, 1..) |byte, i| sum +%= @as(u64, byte) *% i;
+    return sum;
+}
 
 const Chunked = struct {
     data: []const u8,
@@ -40,13 +57,39 @@ const Result = struct {
     }
 };
 
-fn scan(comptime graphemes: bool, input: *std.Io.Reader) !Result {
+fn scan(comptime work: Work, input: *std.Io.Reader) !Result {
     var result: Result = .{};
-    if (graphemes) {
+    if (work != .codepoints) {
+        // Bounded only for these benchmark corpora, not a library limit.
+        var accumulated: [4096]u8 = undefined;
+        var length: usize = 0;
+        var offset: u64 = 0;
+        var cluster_start: u64 = 0;
         var it = zunic.reader(input).graphemes();
         while (try it.next()) |update| {
-            if (update.point) |point| result.point(point.value, update.grapheme.end);
-            result.span(update.grapheme.start, update.grapheme.end, update.starts_new, update.is_final);
+            if (!update.is_final) result.scalars += 1;
+            if (work == .raw_bytes) {
+                result.span(0, 0, update.starts_new, update.is_final);
+            } else if (@hasField(zunic.ReaderGraphemeUpdate, "grapheme")) {
+                result.span(update.grapheme.start, update.grapheme.end, update.starts_new, update.is_final);
+            } else {
+                // A consumer needing positions can track them from byte lengths.
+                if (update.starts_new) cluster_start = offset;
+                offset += update.bytes().len;
+                result.span(cluster_start, offset, update.starts_new, update.is_final);
+            }
+            if (work == .bytes or work == .raw_bytes) {
+                if (update.starts_new) {
+                    result.checksum +%= byteChecksum(accumulated[0..length]);
+                    length = 0;
+                }
+                var scratch: [4]u8 = undefined;
+                const bytes = try updateBytes(&update, &scratch);
+                if (length + bytes.len > accumulated.len) return error.BenchmarkClusterTooLong;
+                @memcpy(accumulated[length..][0..bytes.len], bytes);
+                length += bytes.len;
+                if (update.is_final) result.checksum +%= byteChecksum(accumulated[0..length]);
+            }
         }
     } else {
         var it = zunic.reader(input).codepoints();
@@ -55,14 +98,14 @@ fn scan(comptime graphemes: bool, input: *std.Io.Reader) !Result {
     return result;
 }
 
-fn run(comptime graphemes: bool, comptime chunked: bool, bytes: []const u8, iterations: usize) !Result {
+fn run(comptime work: Work, comptime chunked: bool, bytes: []const u8, iterations: usize) !Result {
     var total: Result = .{};
     for (0..iterations) |_| {
         std.mem.doNotOptimizeAway(bytes);
         var storage: [4]u8 = undefined;
         var short = Chunked.init(bytes, &storage);
         var fixed: std.Io.Reader = .fixed(bytes);
-        const result = try scan(graphemes, if (chunked) &short.interface else &fixed);
+        const result = try scan(work, if (chunked) &short.interface else &fixed);
         total.scalars +%= result.scalars;
         total.boundaries +%= result.boundaries;
         total.finals +%= result.finals;
@@ -71,7 +114,7 @@ fn run(comptime graphemes: bool, comptime chunked: bool, bytes: []const u8, iter
     return total;
 }
 
-fn expected(comptime graphemes: bool, bytes: []const u8) !Result {
+fn expected(comptime work: Work, bytes: []const u8) !Result {
     var result: Result = .{};
     var clusters = zunic.text(bytes).graphemes().iterator();
     var last_start: usize = 0;
@@ -83,33 +126,62 @@ fn expected(comptime graphemes: bool, bytes: []const u8) !Result {
             const value = try std.unicode.utf8Decode(bytes[offset..][0..length]);
             const boundary = offset == last_start;
             offset += length;
-            result.point(value, offset);
-            if (graphemes) result.span(last_start, offset, boundary, false);
+            if (work == .codepoints) result.point(value, offset) else result.scalars += 1;
+            if (work == .raw_bytes) result.span(0, 0, boundary, false) else if (work != .codepoints) result.span(last_start, offset, boundary, false);
         }
+        if (work == .bytes or work == .raw_bytes) result.checksum +%= byteChecksum(bytes[last_start..cluster.end.value]);
     }
-    if (graphemes and bytes.len != 0) result.span(last_start, bytes.len, false, true);
+    if (bytes.len != 0) {
+        if (work == .raw_bytes) result.span(0, 0, false, true) else if (work != .codepoints) result.span(last_start, bytes.len, false, true);
+    }
     return result;
 }
 
+fn verifyBytes(bytes: []const u8, comptime chunked: bool) !void {
+    var storage: [4]u8 = undefined;
+    var short = Chunked.init(bytes, &storage);
+    var fixed: std.Io.Reader = .fixed(bytes);
+    var it = zunic.reader(if (chunked) &short.interface else &fixed).graphemes();
+    var offset: usize = 0;
+    while (try it.next()) |update| {
+        var scratch: [4]u8 = undefined;
+        const got = try updateBytes(&update, &scratch);
+        if (update.is_final) {
+            if (got.len != 0 or offset != bytes.len) return error.BenchmarkMismatch;
+        } else {
+            const len = try std.unicode.utf8ByteSequenceLength(bytes[offset]);
+            if (!std.mem.eql(u8, got, bytes[offset..][0..len])) return error.BenchmarkMismatch;
+            offset += len;
+        }
+    }
+    if (offset != bytes.len) return error.BenchmarkMismatch;
+}
+
 fn measure(io: std.Io, out: *std.Io.Writer, name: []const u8, bytes: []const u8) !void {
-    inline for (.{ false, true }) |graphemes| {
-        const oracle = try expected(graphemes, bytes);
+    try verifyBytes(bytes, false);
+    try verifyBytes(bytes, true);
+    inline for (.{ Work.codepoints, Work.spans, Work.bytes, Work.raw_bytes }) |work| {
+        const oracle = try expected(work, bytes);
         inline for (.{ false, true }) |chunked| {
-            if (!std.meta.eql(oracle, try run(graphemes, chunked, bytes, 1))) return error.BenchmarkMismatch;
-            std.mem.doNotOptimizeAway(try run(graphemes, chunked, bytes, 100));
+            if (!std.meta.eql(oracle, try run(work, chunked, bytes, 1))) return error.BenchmarkMismatch;
+            std.mem.doNotOptimizeAway(try run(work, chunked, bytes, 100));
         }
     }
     // Rotate case order each round; preserve every sample, not just the best.
     for (0..8) |round| {
-        for (0..4) |position| {
-            const mode = (position + round) % 4;
-            const iterations: usize = if (mode >= 2) 500 else 2000;
+        for (0..8) |position| {
+            const mode = (position + round) % 8;
+            const iterations: usize = if (mode == 2 or mode == 3 or mode == 5 or mode == 7) 500 else 2000;
             const start = std.Io.Clock.Timestamp.now(io, .awake);
             const result = switch (mode) {
-                0 => try run(false, false, bytes, iterations),
-                1 => try run(true, false, bytes, iterations),
-                2 => try run(false, true, bytes, iterations),
-                3 => try run(true, true, bytes, iterations),
+                0 => try run(.codepoints, false, bytes, iterations),
+                1 => try run(.spans, false, bytes, iterations),
+                2 => try run(.codepoints, true, bytes, iterations),
+                3 => try run(.spans, true, bytes, iterations),
+                4 => try run(.bytes, false, bytes, iterations),
+                5 => try run(.bytes, true, bytes, iterations),
+                6 => try run(.raw_bytes, false, bytes, iterations),
+                7 => try run(.raw_bytes, true, bytes, iterations),
                 else => unreachable,
             };
             const ns = start.durationTo(std.Io.Clock.Timestamp.now(io, .awake)).raw.toNanoseconds();

@@ -16,6 +16,10 @@ The Reader view provides strict [codepoint iteration](codepoints.md) and
 [incremental grapheme updates](graphemes.md). It does not provide streaming
 normalization, casing, or width APIs.
 
+Each grapheme update owns the newly consumed UTF-8 bytes and exposes them
+through `update.bytes()`, alongside its boundary flags.
+This lets consumers accumulate text without re-encoding codepoints.
+
 This is a single-pass view. Copies and iterators share the underlying Reader's
 cursor, so use only one active consumer unless you deliberately coordinate all
 access. Zunic never closes or owns the source.

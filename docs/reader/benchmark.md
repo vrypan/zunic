@@ -13,17 +13,26 @@ with emoji, and combining-mark-heavy text. Modes are:
 | Mode | Iterator | Input |
 | --- | --- | --- |
 | 0 | Codepoints | Fixed Reader |
-| 1 | Grapheme updates | Fixed Reader |
+| 1 | Track grapheme positions | Fixed Reader |
 | 2 | Codepoints | One-byte refills, four-byte buffer |
-| 3 | Grapheme updates | One-byte refills, four-byte buffer |
+| 3 | Track grapheme positions | One-byte refills, four-byte buffer |
+| 4 | Accumulate grapheme bytes and track positions | Fixed Reader |
+| 5 | Accumulate grapheme bytes and track positions | One-byte refills, four-byte buffer |
+| 6 | Accumulate grapheme bytes and flags only | Fixed Reader |
+| 7 | Accumulate grapheme bytes and flags only | One-byte refills, four-byte buffer |
 
 Before timing, each mode checks scalar, boundary, and final-event counts and
-a checksum against independently decoded slice iteration. The grapheme
-checksum consumes both span offsets and both flags. All cases warm up, then
-run eight samples with rotating case order. Fixed cases use 2,000 iterations
+a checksum against independently decoded slice iteration. Byte reconstruction
+is also checked exactly against the original input. The position checksum
+consumes consumer-tracked offsets and both flags; modes 4 through 7 copy bytes into
+a consumer buffer and checksum each finalized grapheme. They use a fixed
+4,096-byte buffer sufficient for these corpora, not a library cluster limit.
+All cases warm up, then run eight samples with rotating case order.
+Fixed cases use 2,000 iterations
 per sample; refill cases use 500. Normalize elapsed time by iterations when
 comparing modes. This measures iteration CPU cost, not file-system latency.
 Unicode fixture tests provide exact boundary checks beyond these corpus checks.
+Modes 6 and 7 consume bytes and flags without tracking positions.
 
 ## Decoder optimization results
 
@@ -40,7 +49,9 @@ the median baseline time by the median optimized time; larger is faster.
 | Combining marks | 2.01× | 1.69× | 1.28× | 1.10× |
 
 These are local measurements, not portable performance guarantees or CI
-thresholds. Compared with the baseline benchmark, the optimized Mach-O
+thresholds. These historical results used the original four-mode harness,
+whose grapheme checksum also consumed scalar values. Compared with the
+baseline benchmark, the optimized Mach-O
 `__text` section grew by 1,024 bytes and `__TEXT,__const` by 64 bytes.
 Unicode table definitions and sizes did not change.
 
@@ -54,3 +65,64 @@ Verification included the full Debug and ReleaseFast suites (259 passed,
 one optional test skipped in each), exhaustive scalar roundtrips, malformed
 prefix/error-precedence tests, and every Unicode grapheme fixture with
 one- to four-byte refills across four- to eight-byte buffers.
+
+## Owned-byte update experiment
+
+The six-mode version of this harness was compiled against three versions on native
+macOS ARM64 with Zig 0.16.0, ReleaseFast:
+
+- Baseline: `9e5f046`, returning codepoints, with consumer UTF-8 re-encoding.
+- Control: the baseline with the grapheme iterator's `next()` explicitly inlined.
+- Byte API: the inlined iterator returning owned UTF-8 bytes captured by the
+  shared decoder before advancing the Reader.
+
+After discarding measurements affected by high system load, six runs of each
+unchanged binary rotated and reversed execution order. Each case has 48 timing
+samples. The table shows throughput ratios from median times for byte
+accumulation; a value above 1 is faster.
+
+| Corpus | Fixed vs baseline | Refills vs baseline | Fixed vs inline control | Refills vs inline control |
+| --- | ---: | ---: | ---: | ---: |
+| ASCII | 1.26× | 1.11× | 1.00× | 1.04× |
+| Multilingual | 1.32× | 1.12× | 1.17× | 1.03× |
+| Combining marks | 1.42× | 1.16× | 1.20× | 1.08× |
+
+Span-only traversal was within about 2% of the inline control. Codepoint-only
+iteration remained within about 2%, with byte capture removed at compile time.
+The measurements support retaining the byte API for text consumers, but part
+of the improvement over the baseline comes from inlining, not byte capture.
+No Unicode tables were added or enlarged.
+
+On this target the update shrank from 32 to 24 bytes. The grapheme iterator
+remains 56 bytes and the codepoint iterator remains 24 bytes. The final
+benchmark has the same section sizes as the measured prototype.
+
+After the successful comparison, examples and tests were migrated to
+`update.bytes()`. Full Debug and ReleaseFast suites each passed 261 tests
+with one optional skip. Coverage includes all valid scalar encodings,
+updates retained across buffer reuse, Unicode boundary fixtures across
+refills, and unchanged malformed-input and offset-overflow behavior.
+
+## Removing spans from updates
+
+The final API returns only owned bytes and boundary flags. Removing the span
+and duplicate position bookkeeping reduces the native update from 24 to
+7 bytes and the grapheme iterator from 56 to 40 bytes. The codepoint iterator
+remains 24 bytes, including its checked input offset.
+
+Four alternating runs of the eight-mode harness compared the owned-byte API
+with and without spans on the same macOS ARM64/Zig 0.16.0 setup. Each case has
+32 samples. Byte accumulation without positions (modes 6 and 7) improved:
+
+| Corpus | Fixed Reader throughput ratio | One-byte refill throughput ratio |
+| --- | ---: | ---: |
+| ASCII | 1.01× | 1.10× |
+| Multilingual | 1.02× | 1.11× |
+| Combining marks | 1.03× | 1.11× |
+
+This is a tradeoff for consumers needing source positions. Tracking offsets
+in the consumer reduced fixed-Reader throughput by about 7–17% in mode 1,
+and by about 1–12% when combined with byte accumulation in mode 4. Refill
+position workloads were roughly unchanged or modestly faster. Keeping only
+bytes and flags favors consumers that accumulate or display text without
+source positions; the API documentation explains how to track them when needed.

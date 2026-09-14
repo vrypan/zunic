@@ -45,39 +45,77 @@ const Chunked = struct {
 
 fn expectUpdate(
     it: *reader_input.ReaderGraphemeIterator,
-    start: u64,
     end: u64,
     point: ?u21,
     starts_new: bool,
     is_final: bool,
 ) !void {
     const update = (try it.next()).?;
-    try std.testing.expectEqual(start, update.grapheme.start);
-    try std.testing.expectEqual(end, update.grapheme.end);
-    try std.testing.expectEqual(point, if (update.point) |p| p.value else null);
+    var encoded: [4]u8 = undefined;
+    const len = if (point) |value| try std.unicode.utf8Encode(value, &encoded) else 0;
+    try std.testing.expectEqualSlices(u8, encoded[0..len], update.bytes());
     try std.testing.expectEqual(starts_new, update.starts_new);
     try std.testing.expectEqual(is_final, update.is_final);
-    try std.testing.expectEqual(end, it.offset);
+    try std.testing.expectEqual(end, it.points.offset);
 }
 
 test "ASCII uses one update per scalar and one final EOF update" {
     var input: std.Io.Reader = .fixed("abc");
     var it = reader_input.init(&input).graphemes();
-    try expectUpdate(&it, 0, 1, 'a', true, false);
-    try expectUpdate(&it, 1, 2, 'b', true, false);
-    try expectUpdate(&it, 2, 3, 'c', true, false);
-    try expectUpdate(&it, 2, 3, null, false, true);
+    try expectUpdate(&it, 1, 'a', true, false);
+    try expectUpdate(&it, 2, 'b', true, false);
+    try expectUpdate(&it, 3, 'c', true, false);
+    try expectUpdate(&it, 3, null, false, true);
     try std.testing.expect((try it.next()) == null);
 }
 
 test "combining update extends the current snapshot" {
     var input: std.Io.Reader = .fixed("e\u{0301}x");
     var it = reader_input.init(&input).graphemes();
-    try expectUpdate(&it, 0, 1, 'e', true, false);
-    try expectUpdate(&it, 0, 3, 0x0301, false, false);
-    try expectUpdate(&it, 3, 4, 'x', true, false);
-    try expectUpdate(&it, 3, 4, null, false, true);
+    try expectUpdate(&it, 1, 'e', true, false);
+    try expectUpdate(&it, 3, 0x0301, false, false);
+    try expectUpdate(&it, 4, 'x', true, false);
+    try expectUpdate(&it, 4, null, false, true);
     try std.testing.expect((try it.next()) == null);
+}
+
+test "updates own their bytes across copies and Reader buffer reuse" {
+    const pieces = [_][]const u8{ "\x00", "\u{80}", "\u{800}", "\u{10000}", "\u{10ffff}", "z" };
+    const bytes = "\x00\u{80}\u{800}\u{10000}\u{10ffff}z";
+    var storage: [4]u8 = undefined;
+    var input = Chunked.init(bytes, &storage);
+    var it = reader_input.init(&input.interface).graphemes();
+    var retained: [pieces.len]reader_input.ReaderGraphemeUpdate = undefined;
+    for (&retained) |*update| update.* = (try it.next()).?;
+    const final = (try it.next()).?;
+    try std.testing.expect(final.is_final);
+    try std.testing.expectEqual(@as(usize, 0), final.bytes().len);
+    try std.testing.expect((try it.next()) == null);
+    try std.testing.expect(input.rebases > 0);
+    @memset(&storage, 0xff);
+    const copied = retained;
+    for (&retained, &copied, pieces) |*saved, *copy, expected| {
+        try std.testing.expectEqualSlices(u8, expected, saved.bytes());
+        try std.testing.expectEqualSlices(u8, expected, copy.bytes());
+    }
+}
+
+test "grapheme updates preserve every valid UTF-8 scalar encoding" {
+    var encoded: [4]u8 = undefined;
+    for (0..0x110000) |value| {
+        if (value >= 0xd800 and value <= 0xdfff) continue;
+        const len = try std.unicode.utf8Encode(@intCast(value), &encoded);
+        var input: std.Io.Reader = .fixed(encoded[0..len]);
+        var it = reader_input.init(&input).graphemes();
+        const update = (try it.next()).?;
+        try std.testing.expectEqualSlices(u8, encoded[0..len], update.bytes());
+        try std.testing.expect(update.starts_new);
+        try std.testing.expect(!update.is_final);
+        const final = (try it.next()).?;
+        try std.testing.expect(final.is_final);
+        try std.testing.expectEqual(@as(usize, 0), final.bytes().len);
+        try std.testing.expect((try it.next()) == null);
+    }
 }
 
 test "empty supported input has no update" {
@@ -113,21 +151,17 @@ test "contextual grapheme rules survive one-byte refills and rebases" {
         true, false, false, // Indic conjunct
         true, false, true, // regional indicator pair + single
     };
-    var current_start: u64 = 0;
     while (try it.next()) |update| {
-        try std.testing.expect(update.grapheme.end >= last_end);
-        if (update.point != null) {
+        if (update.bytes().len != 0) {
             try std.testing.expect(scalar_count < boundaries.len);
             try std.testing.expectEqual(boundaries[scalar_count], update.starts_new);
             try std.testing.expect(!update.is_final);
-            if (boundaries[scalar_count]) current_start = last_end;
             scalar_count += 1;
         } else {
             try std.testing.expect(update.is_final);
             try std.testing.expect(!update.starts_new);
         }
-        try std.testing.expectEqual(current_start, update.grapheme.start);
-        last_end = update.grapheme.end;
+        last_end += update.bytes().len;
     }
     try std.testing.expectEqual(@as(usize, 18), scalar_count);
     try std.testing.expectEqual(@as(u64, bytes.len), last_end);
@@ -181,22 +215,22 @@ test "updates match every Unicode 17 grapheme fixture" {
 
 fn expectFixture(input: *std.Io.Reader, cps: []const u21, breaks: []const bool, offsets: []const usize) !void {
     var it = reader_input.init(input).graphemes();
-    var current_start: usize = 0;
+    var consumed: usize = 0;
     for (cps, 0..) |value, i| {
         const update = (try it.next()).?;
-        if (breaks[i]) current_start = offsets[i];
         try std.testing.expectEqual(breaks[i], update.starts_new);
         try std.testing.expect(!update.is_final);
-        try std.testing.expectEqual(value, update.point.?.value);
-        try std.testing.expectEqual(@as(u64, current_start), update.grapheme.start);
-        try std.testing.expectEqual(@as(u64, offsets[i + 1]), update.grapheme.end);
+        var encoded: [4]u8 = undefined;
+        const len = try std.unicode.utf8Encode(value, &encoded);
+        try std.testing.expectEqualSlices(u8, encoded[0..len], update.bytes());
+        consumed += update.bytes().len;
+        try std.testing.expectEqual(offsets[i + 1], consumed);
     }
     const final = (try it.next()).?;
     try std.testing.expect(final.is_final);
     try std.testing.expect(!final.starts_new);
-    try std.testing.expect(final.point == null);
-    try std.testing.expectEqual(@as(u64, current_start), final.grapheme.start);
-    try std.testing.expectEqual(@as(u64, offsets[cps.len]), final.grapheme.end);
+    try std.testing.expectEqual(@as(usize, 0), final.bytes().len);
+    try std.testing.expectEqual(offsets[cps.len], consumed);
     try std.testing.expect((try it.next()) == null);
     try std.testing.expect((try it.next()) == null);
 }
@@ -209,13 +243,13 @@ test "a scalar update never waits for or consumes the following scalar" {
         input.fail_at = sample.len;
         var it = reader_input.init(&input.interface).graphemes();
         const update = (try it.next()).?;
-        try std.testing.expect(update.point != null);
-        try std.testing.expectEqual(@as(u64, sample.len), update.grapheme.end);
+        try std.testing.expectEqualSlices(u8, sample, update.bytes());
+        try std.testing.expectEqual(@as(u64, sample.len), it.points.offset);
         try std.testing.expectError(error.ReadFailed, it.next());
         const reads = input.reads;
         try std.testing.expectError(error.ReadFailed, it.next());
         try std.testing.expectEqual(reads, input.reads);
-        try std.testing.expectEqual(@as(u64, sample.len), it.offset);
+        try std.testing.expectEqual(@as(u64, sample.len), it.points.offset);
     }
 }
 
@@ -231,12 +265,12 @@ test "decoder failures do not finalize or advance grapheme state" {
         var storage: [4]u8 = undefined;
         var input = Chunked.init(case.bytes, &storage);
         var it = reader_input.init(&input.interface).graphemes();
-        try expectUpdate(&it, 0, 1, 'a', true, false);
+        try expectUpdate(&it, 1, 'a', true, false);
         try std.testing.expectError(case.expected, it.next());
         const reads = input.reads;
         try std.testing.expectError(case.expected, it.next());
         try std.testing.expectEqual(reads, input.reads);
-        try std.testing.expectEqual(@as(u64, 1), it.offset);
+        try std.testing.expectEqual(@as(u64, 1), it.points.offset);
         try std.testing.expectEqual(case.bytes[1], (try input.interface.peek(1))[0]);
     }
 
@@ -256,22 +290,25 @@ test "read failures and rebased malformed bytes stay provisional" {
     before.fail_at = 0;
     var before_it = reader_input.init(&before.interface).graphemes();
     try std.testing.expectError(error.ReadFailed, before_it.next());
-    try std.testing.expectEqual(@as(u64, 0), before_it.offset);
+    try std.testing.expectEqual(@as(u64, 0), before_it.points.offset);
 
     var middle_storage: [4]u8 = undefined;
     var middle = Chunked.init("\xe2\x82", &middle_storage);
     middle.fail_at = 2;
     var middle_it = reader_input.init(&middle.interface).graphemes();
     try std.testing.expectError(error.ReadFailed, middle_it.next());
-    try std.testing.expectEqual(@as(u64, 0), middle_it.offset);
+    try std.testing.expectEqual(@as(u64, 0), middle_it.points.offset);
 
     var rebase_storage: [4]u8 = undefined;
     var rebased = Chunked.init("abc\xe2A", &rebase_storage);
     var rebased_it = reader_input.init(&rebased.interface).graphemes();
-    for ("abc") |expected| try std.testing.expectEqual(@as(u21, expected), (try rebased_it.next()).?.point.?.value);
+    for ("abc") |expected| {
+        const update = (try rebased_it.next()).?;
+        try std.testing.expectEqualSlices(u8, &.{expected}, update.bytes());
+    }
     try std.testing.expectError(error.InvalidUtf8, rebased_it.next());
     try std.testing.expect(rebased.rebases > 0);
-    try std.testing.expectEqual(@as(u64, 3), rebased_it.offset);
+    try std.testing.expectEqual(@as(u64, 3), rebased_it.points.offset);
     const reads = rebased.reads;
     try std.testing.expectError(error.InvalidUtf8, rebased_it.next());
     try std.testing.expectEqual(reads, rebased.reads);
@@ -282,13 +319,13 @@ test "checked u64 offsets are preserved" {
     var input: std.Io.Reader = .fixed("a");
     var it = reader_input.init(&input).graphemes();
     it.points.offset = 0x1_0000_0000;
-    try expectUpdate(&it, 0x1_0000_0000, 0x1_0000_0001, 'a', true, false);
+    try expectUpdate(&it, 0x1_0000_0001, 'a', true, false);
 
     var overflow_input: std.Io.Reader = .fixed("a");
     var overflow = reader_input.init(&overflow_input).graphemes();
     overflow.points.offset = std.math.maxInt(u64);
     try std.testing.expectError(error.OffsetOverflow, overflow.next());
-    try std.testing.expectEqual(@as(u64, 0), overflow.offset);
+    try std.testing.expectEqual(std.math.maxInt(u64), overflow.points.offset);
     try std.testing.expectEqual(@as(u8, 'a'), (try overflow_input.peek(1))[0]);
 }
 
@@ -306,11 +343,16 @@ test "long grapheme uses bounded iterator state" {
     var input = Chunked.init(bytes, &storage);
     var it = reader_input.init(&input.interface).graphemes();
     var count: usize = 0;
+    var byte_count: usize = 0;
     while (try it.next()) |update| {
-        if (update.point != null) count += 1;
+        if (update.bytes().len != 0) {
+            try std.testing.expectEqual(count == 0, update.starts_new);
+            byte_count += update.bytes().len;
+            count += 1;
+        }
         if (update.is_final) {
-            try std.testing.expectEqual(@as(u64, bytes.len), update.grapheme.end);
-            try std.testing.expectEqual(@as(u64, 0), update.grapheme.start);
+            try std.testing.expect(!update.starts_new);
+            try std.testing.expectEqual(bytes.len, byte_count);
         }
     }
     try std.testing.expectEqual(mark_count + 1, count);
@@ -334,8 +376,8 @@ test "file Reader and a pre-consumed source use a fresh offset origin" {
     try std.testing.expectEqual(@as(u8, 'x'), try file_reader.interface.takeByte());
     const source = reader_input.init(&file_reader.interface);
     var it = source.graphemes();
-    try expectUpdate(&it, 0, 1, 'e', true, false);
-    try expectUpdate(&it, 0, 3, 0x0301, false, false);
-    try expectUpdate(&it, 0, 3, null, false, true);
+    try expectUpdate(&it, 1, 'e', true, false);
+    try expectUpdate(&it, 3, 0x0301, false, false);
+    try expectUpdate(&it, 3, null, false, true);
     try std.testing.expect((try it.next()) == null);
 }

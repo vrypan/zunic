@@ -11,7 +11,7 @@ were superseded before the same release are omitted.
 - Added allocation-free, strict codepoint iteration over caller-owned buffered
   `std.Io.Reader` values through `reader(input).codepoints()`.
 - Added constant-storage incremental grapheme updates through
-  `reader(input).graphemes()`, with one update per codepoint and explicit
+  `reader(input).graphemes()`, with owned UTF-8 bytes per update and explicit
   boundary and clean-EOF finalization signals.
 
 ## [0.4.1] - 2026-09-13
