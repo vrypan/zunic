@@ -104,10 +104,30 @@ test "contextual grapheme rules survive one-byte refills and rebases" {
     var it = reader_input.init(&input.interface).graphemes();
     var scalar_count: usize = 0;
     var last_end: u64 = 0;
+    const boundaries = [_]bool{
+        true, false, // CR LF
+        true, false, // base + Extend
+        true, false, // Prepend + base
+        true, false, false, // Hangul
+        true, false, false, // pictographic ZWJ sequence
+        true, false, false, // Indic conjunct
+        true, false, true, // regional indicator pair + single
+    };
+    var current_start: u64 = 0;
     while (try it.next()) |update| {
         try std.testing.expect(update.grapheme.end >= last_end);
+        if (update.point != null) {
+            try std.testing.expect(scalar_count < boundaries.len);
+            try std.testing.expectEqual(boundaries[scalar_count], update.starts_new);
+            try std.testing.expect(!update.is_final);
+            if (boundaries[scalar_count]) current_start = last_end;
+            scalar_count += 1;
+        } else {
+            try std.testing.expect(update.is_final);
+            try std.testing.expect(!update.starts_new);
+        }
+        try std.testing.expectEqual(current_start, update.grapheme.start);
         last_end = update.grapheme.end;
-        if (update.point != null) scalar_count += 1;
     }
     try std.testing.expectEqual(@as(usize, 18), scalar_count);
     try std.testing.expectEqual(@as(u64, bytes.len), last_end);
@@ -146,24 +166,39 @@ test "updates match every Unicode 17 grapheme fixture" {
         offsets[cp_len] = byte_len;
 
         var input: std.Io.Reader = .fixed(bytes[0..byte_len]);
-        var it = reader_input.init(&input).graphemes();
-        var current_start: usize = 0;
-        for (cps[0..cp_len], 0..) |value, i| {
-            const update = (try it.next()).?;
-            if (breaks[i]) current_start = offsets[i];
-            try std.testing.expectEqual(breaks[i], update.starts_new);
-            try std.testing.expect(!update.is_final);
-            try std.testing.expectEqual(value, update.point.?.value);
-            try std.testing.expectEqual(@as(u64, current_start), update.grapheme.start);
-            try std.testing.expectEqual(@as(u64, offsets[i + 1]), update.grapheme.end);
+        try expectFixture(&input, cps[0..cp_len], breaks[0..break_len], offsets[0 .. cp_len + 1]);
+        var storage: [8]u8 = undefined;
+        for (4..9) |capacity| {
+            for (1..5) |chunk_size| {
+                var chunked = Chunked.init(bytes[0..byte_len], storage[0..capacity]);
+                chunked.max_chunk = chunk_size;
+                try expectFixture(&chunked.interface, cps[0..cp_len], breaks[0..break_len], offsets[0 .. cp_len + 1]);
+                if (byte_len > capacity) try std.testing.expect(chunked.rebases > 0);
+            }
         }
-        const final = (try it.next()).?;
-        try std.testing.expect(final.is_final);
-        try std.testing.expect(final.point == null);
-        try std.testing.expectEqual(@as(u64, current_start), final.grapheme.start);
-        try std.testing.expectEqual(@as(u64, byte_len), final.grapheme.end);
-        try std.testing.expect((try it.next()) == null);
     }
+}
+
+fn expectFixture(input: *std.Io.Reader, cps: []const u21, breaks: []const bool, offsets: []const usize) !void {
+    var it = reader_input.init(input).graphemes();
+    var current_start: usize = 0;
+    for (cps, 0..) |value, i| {
+        const update = (try it.next()).?;
+        if (breaks[i]) current_start = offsets[i];
+        try std.testing.expectEqual(breaks[i], update.starts_new);
+        try std.testing.expect(!update.is_final);
+        try std.testing.expectEqual(value, update.point.?.value);
+        try std.testing.expectEqual(@as(u64, current_start), update.grapheme.start);
+        try std.testing.expectEqual(@as(u64, offsets[i + 1]), update.grapheme.end);
+    }
+    const final = (try it.next()).?;
+    try std.testing.expect(final.is_final);
+    try std.testing.expect(!final.starts_new);
+    try std.testing.expect(final.point == null);
+    try std.testing.expectEqual(@as(u64, current_start), final.grapheme.start);
+    try std.testing.expectEqual(@as(u64, offsets[cps.len]), final.grapheme.end);
+    try std.testing.expect((try it.next()) == null);
+    try std.testing.expect((try it.next()) == null);
 }
 
 test "a scalar update never waits for or consumes the following scalar" {

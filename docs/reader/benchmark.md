@@ -49,3 +49,8 @@ full inlining performed better across these corpora. Three table-free ASCII
 grapheme-classification variants showed no consistent benefit, with some
 regressions, and were discarded. The existing generated property lookup
 remains in use; no additional ASCII table is retained by this change.
+
+Verification included the full Debug and ReleaseFast suites (259 passed,
+one optional test skipped in each), exhaustive scalar roundtrips, malformed
+prefix/error-precedence tests, and every Unicode grapheme fixture with
+one- to four-byte refills across four- to eight-byte buffers.
