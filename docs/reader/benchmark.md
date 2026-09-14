@@ -45,4 +45,7 @@ thresholds. Compared with the baseline benchmark, the optimized Mach-O
 Unicode table definitions and sizes did not change.
 
 A small inline ASCII wrapper around an out-of-line decoder was also tested;
-full inlining performed better across these corpora.
+full inlining performed better across these corpora. Three table-free ASCII
+grapheme-classification variants showed no consistent benefit, with some
+regressions, and were discarded. The existing generated property lookup
+remains in use; no additional ASCII table is retained by this change.
