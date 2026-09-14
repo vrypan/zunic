@@ -18,6 +18,67 @@ test "public Reader codepoint API" {
     try std.testing.expect((try it.next()) == null);
 }
 
+test "public Reader grapheme updates reconstruct final spans and codepoints" {
+    const bytes = "e\u{0301}x";
+    var input: std.Io.Reader = .fixed(bytes);
+    var updates: unicode.ReaderGraphemeIterator = unicode.reader(&input).graphemes();
+    var pending: ?unicode.ReaderGraphemeSpan = null;
+    var completed: [2]unicode.ReaderGraphemeSpan = undefined;
+    var completed_len: usize = 0;
+    var reconstructed: [bytes.len]u8 = undefined;
+    var reconstructed_len: usize = 0;
+
+    while (try updates.next()) |update| {
+        if (update.starts_new) {
+            if (pending) |span| {
+                completed[completed_len] = span;
+                completed_len += 1;
+            }
+        }
+        pending = update.grapheme;
+        if (update.point) |point|
+            reconstructed_len += try std.unicode.utf8Encode(point.value, reconstructed[reconstructed_len..]);
+        if (update.is_final) {
+            completed[completed_len] = update.grapheme;
+            completed_len += 1;
+            pending = null;
+        }
+    }
+
+    try std.testing.expectEqual(@as(usize, 2), completed_len);
+    try std.testing.expectEqualDeep(unicode.ReaderGraphemeSpan{ .start = 0, .end = 3 }, completed[0]);
+    try std.testing.expectEqualDeep(unicode.ReaderGraphemeSpan{ .start = 3, .end = 4 }, completed[1]);
+    try std.testing.expectEqualStrings(bytes, reconstructed[0..reconstructed_len]);
+    try std.testing.expect(pending == null);
+}
+
+test "Reader grapheme finalized spans match Text graphemes" {
+    const bytes = "a\r\ne\u{0301}\u{1f1e6}\u{1f1e7}x";
+    var input: std.Io.Reader = .fixed(bytes);
+    var updates = unicode.reader(&input).graphemes();
+    var spans = unicode.text(bytes).graphemes().iterator();
+    var pending: ?unicode.ReaderGraphemeSpan = null;
+
+    while (try updates.next()) |update| {
+        if (update.starts_new) {
+            if (pending) |done| {
+                const expected = spans.next().?;
+                try std.testing.expectEqual(@as(u64, expected.start.value), done.start);
+                try std.testing.expectEqual(@as(u64, expected.end.value), done.end);
+            }
+        }
+        pending = update.grapheme;
+        if (update.is_final) {
+            const expected = spans.next().?;
+            try std.testing.expectEqual(@as(u64, expected.start.value), update.grapheme.start);
+            try std.testing.expectEqual(@as(u64, expected.end.value), update.grapheme.end);
+            pending = null;
+        }
+    }
+    try std.testing.expect(pending == null);
+    try std.testing.expect(spans.next() == null);
+}
+
 test "Reader and strict slice iterators have deterministic malformed parity" {
     var prng = std.Random.DefaultPrng.init(0x037_c0de);
     var bytes: [32]u8 = undefined;

@@ -14,6 +14,8 @@ its iterators. A view does not own or free memory.
 
 `zunic.reader(input)` instead borrows a mutable Reader and its caller-owned
 buffer. Its iterators consume the shared source. They neither own nor close it.
+Reader grapheme results are value snapshots: their spans are relative `u64`
+offsets and their optional codepoint does not borrow refillable storage.
 
 Results that contain byte offsets refer to the original input; they contain
 no copied text. Results that own inline storage, such as `CaseFold`, have their

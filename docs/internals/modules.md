@@ -13,7 +13,7 @@ something a reviewer has to notice.
 | `types` | shared byte positions, spans, and display measurements | nothing |
 | `cp` | code-point views, scalar properties, case folding, whitespace predicate | `tables` |
 | `encoding` | UTF-8 stepping, scalar plus its record, whole-slice ASCII check | `tables` |
-| `reader_input` | strict codepoint iteration over `std.Io.Reader` | `cp`, `encoding` |
+| `reader_input` | strict codepoint iteration and incremental grapheme updates over `std.Io.Reader` | `cp`, `encoding`, `segmentation` |
 | `segmentation` | grapheme clusters, streaming state, word bounds | `tables`, `encoding` |
 | `linebreak` | UAX #14 opportunities and its machine | `tables`, `encoding` |
 | `normalization` | NFC, NFD, NFKC, NFKD | `tables`, `encoding` |
@@ -47,10 +47,11 @@ The internal `text` module lives under `src/text/`. It owns byte-sequence
 views and their adapters; `zunic.text()` re-exports its constructor. It has no
 import of the public facade, and reaches line breaking only through layout.
 
-The internal `reader_input` module stores only the caller's Reader pointer,
-offset, and terminal status. It uses `encoding` for strict prefix
-classification and final decoding, then constructs the same lazy codepoint
-view as `cp` and Text iteration. It has no table or layout imports.
+The internal `reader_input` module stores the caller's Reader pointer and
+bounded iterator state. It uses `encoding` for strict decoding and
+`segmentation` for incremental grapheme boundaries, then constructs the same
+lazy codepoint view as `cp` and Text iteration. It has no direct table or
+layout imports.
 
 Streaming grapheme state and advancement live in `segmentation`; the facade
 re-exports them without handling machine IDs. Facade imports are listed

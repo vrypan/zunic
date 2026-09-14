@@ -10,7 +10,7 @@ Zunic has three basic exports for working with Unicode: **`cp`, `text`, and
   `[]const u8` and want to iterate codepoints, graphemes, or words, measure
   display width, wrap lines, trim whitespace, or normalize text.
 - Use [`zunic.reader(input)`](reader/README.md) to strictly decode codepoints
-  incrementally from a buffered `std.Io.Reader`.
+  and track grapheme updates incrementally from a buffered `std.Io.Reader`.
 
 None of these constructors allocate or validate their input. `cp()` holds the
 numeric value; `text()` borrows the existing byte slice without copying or
@@ -57,8 +57,8 @@ You can call its property methods directly.
 
 ### Reader
 
-The [Reader documentation](reader/README.md) covers single-pass ownership,
-buffer capacity, blocking behavior, offsets, and strict decoding errors.
+The [Reader documentation](reader/README.md) covers codepoints, incremental
+graphemes, single-pass ownership, blocking behavior, offsets, and errors.
 
 ## Shared conventions and examples
 

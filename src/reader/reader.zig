@@ -2,6 +2,7 @@
 const std = @import("std");
 const codepoint_view = @import("cp");
 const encoding = @import("encoding");
+const reader_graphemes = @import("graphemes.zig");
 
 pub const ReaderCodepointError = error{
     ReadFailed,
@@ -15,6 +16,11 @@ pub const Reader = struct {
 
     pub fn codepoints(self: Reader) ReaderCodepointIterator {
         return .{ .input = self.input };
+    }
+
+    /// Incrementally report the current grapheme after each decoded scalar.
+    pub fn graphemes(self: Reader) ReaderGraphemeIterator {
+        return .{ .points = self.codepoints() };
     }
 };
 
@@ -32,6 +38,8 @@ const Status = enum {
 };
 
 pub const ReaderCodepointIterator = struct {
+    pub const Error = ReaderCodepointError;
+
     input: *std.Io.Reader,
     offset: u64 = 0,
     status: Status = .active,
@@ -89,3 +97,8 @@ pub const ReaderCodepointIterator = struct {
         };
     }
 };
+
+pub const ReaderGraphemeSpan = reader_graphemes.Span;
+pub const ReaderGraphemeUpdate = reader_graphemes.Update;
+pub const ReaderGraphemeError = ReaderCodepointError;
+pub const ReaderGraphemeIterator = reader_graphemes.Iterator(ReaderCodepointIterator);

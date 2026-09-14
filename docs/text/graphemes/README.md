@@ -100,3 +100,8 @@ Measured columns also use East Asian Width data from
 [UAX #11, revision 45](https://www.unicode.org/reports/tr11/tr11-45.html),
 with [Zunic's width policy](../width/README.md#display-policy).
 UAX #29 does not define terminal column counts.
+
+For blocking input, [Reader grapheme updates](../../reader/graphemes.md)
+report the current cumulative span after every codepoint. They use
+`starts_new` and `is_final` because a stream cannot know a cluster's final
+extent until another boundary or clean EOF arrives.

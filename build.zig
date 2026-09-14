@@ -78,13 +78,14 @@ pub fn build(b: *std.Build) void {
             const encoding = owner.createModule(.{ .root_source_file = owner.path("src/encoding/encoding.zig") });
             encoding.addImport("tables", tables);
 
-            const reader_input = owner.createModule(.{ .root_source_file = owner.path("src/reader/reader.zig") });
-            reader_input.addImport("cp", cp);
-            reader_input.addImport("encoding", encoding);
-
             const segmentation = owner.createModule(.{ .root_source_file = owner.path("src/segmentation/segmentation.zig") });
             segmentation.addImport("tables", tables);
             segmentation.addImport("encoding", encoding);
+
+            const reader_input = owner.createModule(.{ .root_source_file = owner.path("src/reader/reader.zig") });
+            reader_input.addImport("cp", cp);
+            reader_input.addImport("encoding", encoding);
+            reader_input.addImport("segmentation", segmentation);
 
             const linebreak = owner.createModule(.{ .root_source_file = owner.path("src/linebreak/linebreak.zig") });
             linebreak.addImport("tables", tables);
@@ -166,6 +167,7 @@ pub fn build(b: *std.Build) void {
         .{ .path = "src/encoding/utf8.zig", .group = "encoding", .grants = &.{.none} },
         .{ .path = "src/encoding/utf8_prefix.zig", .group = "encoding", .grants = &.{.none} },
         .{ .path = "src/reader/reader_test.zig", .group = "reader", .grants = &.{ .reader_input, .cp, .encoding } },
+        .{ .path = "src/reader_graphemes_test.zig", .group = "reader-graphemes", .extra_group = "reader", .grants = &.{ .reader_input, .cp } },
         .{ .path = "src/linebreak/linebreak.zig", .group = "linebreak", .grants = &.{ .tables, .encoding } },
         .{ .path = "src/word_test.zig", .group = "segmentation", .grants = &.{ .tables, .segmentation } },
         .{ .path = "src/scan_test.zig", .group = "layout", .grants = &.{ .tables, .encoding, .segmentation, .linebreak, .layout } },
@@ -326,4 +328,18 @@ pub fn build(b: *std.Build) void {
     const install_reader_example = b.addInstallArtifact(reader_example, .{});
     b.step("reader-example", "Compile and install the Reader stdin example")
         .dependOn(&install_reader_example.step);
+
+    const reader_graphemes_example_mod = b.createModule(.{
+        .root_source_file = b.path("docs/reader/graphemes-stdin.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    reader_graphemes_example_mod.addImport("zunic", zunic);
+    const reader_graphemes_example = b.addExecutable(.{
+        .name = "zunic-reader-graphemes-stdin",
+        .root_module = reader_graphemes_example_mod,
+    });
+    const install_reader_graphemes_example = b.addInstallArtifact(reader_graphemes_example, .{});
+    b.step("reader-graphemes-example", "Compile and install the Reader grapheme example")
+        .dependOn(&install_reader_graphemes_example.step);
 }

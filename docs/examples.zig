@@ -9,6 +9,23 @@ test "docs: Reader codepoints" {
     try std.testing.expect((try points.next()) == null);
 }
 
+test "docs: incremental Reader graphemes" {
+    var input: std.Io.Reader = .fixed("e\u{0301}x");
+    var updates = zunic.reader(&input).graphemes();
+    var pending: ?zunic.ReaderGraphemeSpan = null;
+    var completed: usize = 0;
+    while (try updates.next()) |update| {
+        if (update.starts_new and pending != null) completed += 1;
+        pending = update.grapheme;
+        if (update.is_final) {
+            completed += 1;
+            pending = null;
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 2), completed);
+    try std.testing.expect(pending == null);
+}
+
 test "docs: measured graphemes" {
     const bytes = "e\u{0301}界";
     var it = zunic.text(bytes).graphemes().measured().iterator();

@@ -34,7 +34,8 @@ Zunic has three basic entry points:
   want to iterate codepoints, graphemes, or words, measure or wrap text, find
   line endings, trim whitespace, or normalize the text.
 - Use [`zunic.reader(input)`](docs/reader/README.md) when UTF-8 arrives through
-  a buffered `std.Io.Reader` and you want strict, incremental codepoint decoding.
+  a buffered `std.Io.Reader` and you want strict incremental codepoint decoding
+  or grapheme updates.
 
 None of these constructors allocate or validate their input. Property lookups,
 text operations, and Reader decoding perform the work when called.
