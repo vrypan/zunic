@@ -19,6 +19,7 @@ pub fn main(init: std.process.Init) !void {
         if (update.starts_new and current.items.len != 0) {
             try stdout.interface.writeAll(current.items);
             try stdout.interface.writeByte('\n');
+            try stdout.interface.flush();
             current.clearRetainingCapacity();
         }
         if (update.point) |point| {
