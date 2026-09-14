@@ -4,6 +4,13 @@ Notable code changes are listed by package version. Documentation-only,
 benchmark-only, planning, release bookkeeping, and intermediate changes that
 were superseded before the same release are omitted.
 
+## [dev]
+
+### Added
+
+- Added allocation-free, strict codepoint iteration over caller-owned buffered
+  `std.Io.Reader` values through `reader(input).codepoints()`.
+
 ## [0.4.1] - 2026-09-13
 
 ### Added

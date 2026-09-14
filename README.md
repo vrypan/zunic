@@ -25,7 +25,7 @@ and normalize Unicode.
 - **Zig only.** No external libraries.
 - **Tested.** Tests cover Unicode rules, fast paths, and edge cases.
 
-Zunic has two basic entry points:
+Zunic has three basic entry points:
 
 - Use [`zunic.cp(value)`](docs/codepoint/README.md) when you already have a
   Unicode codepoint in a `u21` and want its properties, isolated width, case
@@ -33,9 +33,11 @@ Zunic has two basic entry points:
 - Use [`zunic.text(bytes)`](docs/text/README.md) when you have UTF-8 bytes and
   want to iterate codepoints, graphemes, or words, measure or wrap text, find
   line endings, trim whitespace, or normalize the text.
+- Use [`zunic.reader(input)`](docs/reader/README.md) when UTF-8 arrives through
+  a buffered `std.Io.Reader` and you want strict, incremental codepoint decoding.
 
-Neither constructor allocates or validates its input. Property lookups and
-text operations perform the work when called.
+None of these constructors allocate or validate their input. Property lookups,
+text operations, and Reader decoding perform the work when called.
 
 ## Install
 
@@ -147,6 +149,7 @@ See [docs/](docs/README.md) for signatures, return values, examples, and
 implementation decisions:
 
 [Text view](docs/text/README.md) ·
+[Reader view](docs/reader/README.md) ·
 [API overview](docs/README.md#api-overview) ·
 [Changelog](CHANGELOG.md)
 

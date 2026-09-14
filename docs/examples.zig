@@ -1,6 +1,14 @@
 const std = @import("std");
 const zunic = @import("zunic");
 
+test "docs: Reader codepoints" {
+    var input: std.Io.Reader = .fixed("A\u{20ac}\u{1f600}");
+    var points = zunic.reader(&input).codepoints();
+    const expected = [_]u21{ 'A', 0x20ac, 0x1f600 };
+    for (expected) |value| try std.testing.expectEqual(value, (try points.next()).?.value);
+    try std.testing.expect((try points.next()) == null);
+}
+
 test "docs: measured graphemes" {
     const bytes = "e\u{0301}界";
     var it = zunic.text(bytes).graphemes().measured().iterator();

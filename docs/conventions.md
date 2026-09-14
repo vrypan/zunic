@@ -12,6 +12,9 @@ slice and exposes it as `.bytes`, without scanning, validating, copying, or
 allocating. Keep that storage alive and unchanged while using a Text view or
 its iterators. A view does not own or free memory.
 
+`zunic.reader(input)` instead borrows a mutable Reader and its caller-owned
+buffer. Its iterators consume the shared source. They neither own nor close it.
+
 Results that contain byte offsets refer to the original input; they contain
 no copied text. Results that own inline storage, such as `CaseFold`, have their
 own lifetime rules described on the relevant API page.
@@ -28,6 +31,10 @@ input. The copies can advance independently over the same borrowed bytes.
 Counting or measuring performs work on each call; results are not cached in
 the view.
 
+These checkpoint and independent-copy rules apply to Text iterators. Reader
+views and their iterator copies share one underlying cursor and are not
+independent checkpoints; use one active consumer unless access is coordinated.
+
 ## Byte offsets and columns
 
 ```zig
@@ -41,6 +48,9 @@ Offsets index the input slice of the Text view, even when that slice is itself
 a substring. Trimming returns a new Text; its offsets index the retained
 slice, starting at zero. They count **bytes**, not codepoints, graphemes, or
 columns. `Column` separates display measurements from byte offsets.
+
+Reader codepoint offsets are checked `u64` byte counts relative to the source
+position at which that iterator was opened. They do not index a retained slice.
 
 ## Plain text and malformed input
 

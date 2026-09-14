@@ -119,3 +119,8 @@ the other. Assign the saved copy back to resume from that checkpoint.
 
 Call `.iterator()` again on the `Codepoints` view to start a new traversal
 from the beginning. Both approaches borrow the same input without copying it.
+
+For a single-pass buffered `std.Io.Reader`, use
+[Reader codepoint iteration](../../reader/codepoints.md). Its error union,
+checked `u64` offset, capacity rules, and shared-cursor copying semantics are
+different from this borrowed-slice iterator.

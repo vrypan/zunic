@@ -1,6 +1,7 @@
 # Zunic documentation
 
-Zunic has two basic exports for working with Unicode: **`cp` and `text`**.
+Zunic has three basic exports for working with Unicode: **`cp`, `text`, and
+`reader`**.
 
 - Use [`zunic.cp(value)`](codepoint/README.md) if you have a codepoint stored
   as a `u21` and want its Unicode properties, isolated display width, or
@@ -8,9 +9,12 @@ Zunic has two basic exports for working with Unicode: **`cp` and `text`**.
 - Use [`zunic.text(bytes)`](text/README.md) if you have UTF-8 text in a
   `[]const u8` and want to iterate codepoints, graphemes, or words, measure
   display width, wrap lines, trim whitespace, or normalize text.
+- Use [`zunic.reader(input)`](reader/README.md) to strictly decode codepoints
+  incrementally from a buffered `std.Io.Reader`.
 
-Neither constructor allocates or validates its input. `cp()` holds the numeric
-value; `text()` borrows the existing byte slice without copying or scanning it.
+None of these constructors allocate or validate their input. `cp()` holds the
+numeric value; `text()` borrows the existing byte slice without copying or
+scanning it, and `reader()` stores the Reader pointer without doing I/O.
 Unicode data is pinned to **17.0.0**, available as `zunic.unicode_version`.
 
 ## API overview
@@ -18,6 +22,7 @@ Unicode data is pinned to **17.0.0**, available as `zunic.unicode_version`.
 ```zig
 pub fn cp(value: u21) CodepointView;
 pub fn text(bytes: []const u8) Text;
+pub fn reader(input: *std.Io.Reader) Reader;
 ```
 
 ### Codepoint
@@ -49,6 +54,11 @@ according to their own contracts.
 The two entry points work together: [codepoint iteration](text/codepoints/README.md)
 decodes UTF-8 and returns the same `CodepointView` that `cp(value)` constructs.
 You can call its property methods directly.
+
+### Reader
+
+The [Reader documentation](reader/README.md) covers single-pass ownership,
+buffer capacity, blocking behavior, offsets, and strict decoding errors.
 
 ## Shared conventions and examples
 

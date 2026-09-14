@@ -10,12 +10,15 @@
 //!
 //! Byte spans and terminal-column policy form the package's public boundary.
 //! Nothing allocates, and every span indexes the slice the view was opened on.
+//! Reader iterators instead consume one caller-owned input stream and report
+//! offsets relative to the position where the iterator was opened.
 //!
 //! `text` reads bytes as plain text. ANSI escape sequences are ordinary bytes
 //! here, so remove them before measuring or wrapping styled input.
 pub const utf8 = @import("encoding").utf8;
 const codepoint_view = @import("cp");
 const text_view = @import("text");
+const reader_input = @import("reader_input");
 const types = @import("types");
 const wrap_engine = @import("layout").wrap;
 pub const line_break = @import("linebreak");
@@ -41,6 +44,9 @@ pub const Codepoint = CodepointView;
 pub const DecodeError = text_view.DecodeError;
 pub const Codepoints = text_view.Codepoints;
 pub const CodepointIterator = text_view.CodepointIterator;
+pub const Reader = reader_input.Reader;
+pub const ReaderCodepointIterator = reader_input.ReaderCodepointIterator;
+pub const ReaderCodepointError = reader_input.ReaderCodepointError;
 pub const Form = normalization.Form;
 pub const Equivalence = normalization.Equivalence;
 pub const NormalizationIterator = normalization.Iterator;
@@ -66,6 +72,12 @@ pub const text = text_view.init;
 
 /// Open a code-point view without decoding or looking up any properties.
 pub const cp = codepoint_view.init;
+
+/// Open a single-pass view over a caller-owned buffered Reader. Construction
+/// performs no I/O; use `codepoints()` to decode strict UTF-8 incrementally.
+pub fn reader(input: *std.Io.Reader) Reader {
+    return reader_input.init(input);
+}
 
 pub const CodepointView = codepoint_view.CodepointView;
 pub const GeneralProperties = codepoint_view.GeneralProperties;

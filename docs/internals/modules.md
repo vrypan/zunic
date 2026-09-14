@@ -13,12 +13,13 @@ something a reviewer has to notice.
 | `types` | shared byte positions, spans, and display measurements | nothing |
 | `cp` | code-point views, scalar properties, case folding, whitespace predicate | `tables` |
 | `encoding` | UTF-8 stepping, scalar plus its record, whole-slice ASCII check | `tables` |
+| `reader_input` | strict codepoint iteration over `std.Io.Reader` | `cp`, `encoding` |
 | `segmentation` | grapheme clusters, streaming state, word bounds | `tables`, `encoding` |
 | `linebreak` | UAX #14 opportunities and its machine | `tables`, `encoding` |
 | `normalization` | NFC, NFD, NFKC, NFKD | `tables`, `encoding` |
 | `layout` | width, scanning, wrapping | `tables`, `encoding`, `segmentation`, `linebreak` |
 | `text` | borrowed text views, iterators, trimming, terminator scanning | `cp`, `types`, `encoding`, `segmentation`, `normalization`, `layout` |
-| `zunic` | public exports | `cp`, `text`, `types`, `tables`, `encoding`, `segmentation`, `linebreak`, `normalization`, `layout` |
+| `zunic` | public exports | `cp`, `text`, `reader_input`, `types`, `tables`, `encoding`, `segmentation`, `linebreak`, `normalization`, `layout` |
 
 Only `zunic` is public. The internal modules are created rather than named
 in the build graph, so a dependent cannot reach past the facade to one of
@@ -45,6 +46,11 @@ whitespace predicate. Only `zunic` remains available through `dep.module()`.
 The internal `text` module lives under `src/text/`. It owns byte-sequence
 views and their adapters; `zunic.text()` re-exports its constructor. It has no
 import of the public facade, and reaches line breaking only through layout.
+
+The internal `reader_input` module stores only the caller's Reader pointer,
+offset, and terminal status. It uses `encoding` for strict prefix
+classification and final decoding, then constructs the same lazy codepoint
+view as `cp` and Text iteration. It has no table or layout imports.
 
 Streaming grapheme state and advancement live in `segmentation`; the facade
 re-exports them without handling machine IDs. Facade imports are listed

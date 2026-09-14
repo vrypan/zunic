@@ -4,5 +4,6 @@
 //! decoded scalar with the one table record that describes it; `ascii` is
 //! the whole-slice byte-range check shared by word segmentation and `Text`.
 pub const utf8 = @import("utf8.zig");
+pub const utf8_prefix = @import("utf8_prefix.zig");
 pub const decoded_token = @import("decoded_token.zig");
 pub const ascii = @import("ascii.zig");

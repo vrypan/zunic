@@ -1,6 +1,48 @@
 const std = @import("std");
 const unicode = @import("zunic");
 
+test "cp keeps its concrete constructor type" {
+    const constructor: *const fn (u21) unicode.CodepointView = &unicode.cp;
+    try std.testing.expectEqual(@as(u21, 'A'), constructor('A').value);
+    try std.testing.expectEqual(@as(u21, 0x10ffff), unicode.cp(0x10ffff).value);
+}
+
+test "public Reader codepoint API" {
+    var input: std.Io.Reader = .fixed("A\u{20ac}");
+    const source: unicode.Reader = unicode.reader(&input);
+    var it: unicode.ReaderCodepointIterator = source.codepoints();
+    try std.testing.expectEqual(@as(u21, 'A'), (try it.next()).?.value);
+    const euro = (try it.next()).?;
+    try std.testing.expectEqual(@as(u21, 0x20ac), euro.value);
+    try std.testing.expectEqual(unicode.Script.common, euro.script());
+    try std.testing.expect((try it.next()) == null);
+}
+
+test "Reader and strict slice iterators have deterministic malformed parity" {
+    var prng = std.Random.DefaultPrng.init(0x037_c0de);
+    var bytes: [32]u8 = undefined;
+    for (0..10_000) |_| {
+        prng.random().bytes(&bytes);
+        const len = prng.random().intRangeAtMost(usize, 4, bytes.len);
+        var input: std.Io.Reader = .fixed(bytes[0..len]);
+        var stream = unicode.reader(&input).codepoints();
+        var slice = unicode.text(bytes[0..len]).codepoints().iterator();
+        while (true) {
+            const expected = slice.next();
+            const actual = stream.next() catch |err| {
+                try std.testing.expectEqual(error.InvalidUtf8, err);
+                try std.testing.expectEqual(unicode.DecodeError.invalid_utf8, slice.err.?);
+                try std.testing.expectEqual(@as(u64, @intCast(slice.offset)), stream.offset);
+                break;
+            };
+            try std.testing.expectEqual(expected == null, actual == null);
+            if (expected) |point| try std.testing.expectEqual(point.value, actual.?.value);
+            try std.testing.expectEqual(@as(u64, @intCast(slice.offset)), stream.offset);
+            if (expected == null) break;
+        }
+    }
+}
+
 test "unicode component compiles as an independent root" {
     const step = unicode.utf8.step("x");
     try std.testing.expectEqual(@as(usize, 1), step.len);

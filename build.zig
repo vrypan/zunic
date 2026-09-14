@@ -41,6 +41,7 @@ pub fn build(b: *std.Build) void {
         tables: *std.Build.Module,
         cp: *std.Build.Module,
         encoding: *std.Build.Module,
+        reader_input: *std.Build.Module,
         segmentation: *std.Build.Module,
         linebreak: *std.Build.Module,
         normalization: *std.Build.Module,
@@ -53,6 +54,7 @@ pub fn build(b: *std.Build) void {
             module.addImport("tables", self.tables);
             module.addImport("cp", self.cp);
             module.addImport("encoding", self.encoding);
+            module.addImport("reader_input", self.reader_input);
             module.addImport("segmentation", self.segmentation);
             module.addImport("linebreak", self.linebreak);
             module.addImport("normalization", self.normalization);
@@ -75,6 +77,10 @@ pub fn build(b: *std.Build) void {
 
             const encoding = owner.createModule(.{ .root_source_file = owner.path("src/encoding/encoding.zig") });
             encoding.addImport("tables", tables);
+
+            const reader_input = owner.createModule(.{ .root_source_file = owner.path("src/reader/reader.zig") });
+            reader_input.addImport("cp", cp);
+            reader_input.addImport("encoding", encoding);
 
             const segmentation = owner.createModule(.{ .root_source_file = owner.path("src/segmentation/segmentation.zig") });
             segmentation.addImport("tables", tables);
@@ -109,6 +115,7 @@ pub fn build(b: *std.Build) void {
                 .tables = tables,
                 .cp = cp,
                 .encoding = encoding,
+                .reader_input = reader_input,
                 .segmentation = segmentation,
                 .linebreak = linebreak,
                 .normalization = normalization,
@@ -145,7 +152,7 @@ pub fn build(b: *std.Build) void {
     // Note what `zunic` costs. It re-exports every module, so any root that
     // needs the public API depends on all of them whatever this table says;
     // only the roots that test an engine directly are genuinely narrow.
-    const Grant = enum { none, api, cp, text, tables, encoding, segmentation, linebreak, normalization, layout };
+    const Grant = enum { none, api, cp, text, tables, encoding, reader_input, segmentation, linebreak, normalization, layout };
     const TestRoot = struct {
         path: []const u8,
         /// Step suffix: `zig build test-<group>` runs just this group.
@@ -157,6 +164,8 @@ pub fn build(b: *std.Build) void {
         .{ .path = "src/cp/cp_test.zig", .group = "cp", .grants = &.{ .cp, .tables } },
         .{ .path = "src/text/text_test.zig", .group = "text", .grants = &.{ .text, .cp, .layout } },
         .{ .path = "src/encoding/utf8.zig", .group = "encoding", .grants = &.{.none} },
+        .{ .path = "src/encoding/utf8_prefix.zig", .group = "encoding", .grants = &.{.none} },
+        .{ .path = "src/reader/reader_test.zig", .group = "reader", .grants = &.{ .reader_input, .cp, .encoding } },
         .{ .path = "src/linebreak/linebreak.zig", .group = "linebreak", .grants = &.{ .tables, .encoding } },
         .{ .path = "src/word_test.zig", .group = "segmentation", .grants = &.{ .tables, .segmentation } },
         .{ .path = "src/scan_test.zig", .group = "layout", .grants = &.{ .tables, .encoding, .segmentation, .linebreak, .layout } },
@@ -187,6 +196,7 @@ pub fn build(b: *std.Build) void {
             .text => test_mod.addImport("text", internal.text),
             .tables => test_mod.addImport("tables", internal.tables),
             .encoding => test_mod.addImport("encoding", internal.encoding),
+            .reader_input => test_mod.addImport("reader_input", internal.reader_input),
             .segmentation => test_mod.addImport("segmentation", internal.segmentation),
             .linebreak => test_mod.addImport("linebreak", internal.linebreak),
             .normalization => test_mod.addImport("normalization", internal.normalization),
@@ -302,4 +312,18 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_benchmark.addArgs(args);
     const benchmark_step = b.step("benchmark", "Run zunic benchmarks");
     benchmark_step.dependOn(&run_benchmark.step);
+
+    const reader_example_mod = b.createModule(.{
+        .root_source_file = b.path("docs/reader/stdin.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    reader_example_mod.addImport("zunic", zunic);
+    const reader_example = b.addExecutable(.{
+        .name = "zunic-reader-stdin",
+        .root_module = reader_example_mod,
+    });
+    const install_reader_example = b.addInstallArtifact(reader_example, .{});
+    b.step("reader-example", "Compile and install the Reader stdin example")
+        .dependOn(&install_reader_example.step);
 }
