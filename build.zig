@@ -315,6 +315,20 @@ pub fn build(b: *std.Build) void {
     const benchmark_step = b.step("benchmark", "Run zunic benchmarks");
     benchmark_step.dependOn(&run_benchmark.step);
 
+    const reader_benchmark_mod = b.createModule(.{
+        .root_source_file = b.path("src/reader_benchmark.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    reader_benchmark_mod.addImport("zunic", zunic);
+    const reader_benchmark = b.addExecutable(.{
+        .name = "zunic-reader-benchmark",
+        .root_module = reader_benchmark_mod,
+    });
+    const reader_benchmark_step = b.step("benchmark-reader", "Check and benchmark Reader iteration (use ReleaseFast)");
+    reader_benchmark_step.dependOn(&b.addInstallArtifact(reader_benchmark, .{}).step);
+    reader_benchmark_step.dependOn(&b.addRunArtifact(reader_benchmark).step);
+
     const reader_example_mod = b.createModule(.{
         .root_source_file = b.path("docs/reader/stdin.zig"),
         .target = target,
