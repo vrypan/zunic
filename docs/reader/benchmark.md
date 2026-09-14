@@ -20,11 +20,15 @@ with emoji, and combining-mark-heavy text. Modes are:
 | 5 | Accumulate grapheme bytes and track positions | One-byte refills, four-byte buffer |
 | 6 | Accumulate grapheme bytes and flags only | Fixed Reader |
 | 7 | Accumulate grapheme bytes and flags only | One-byte refills, four-byte buffer |
+| 8 | Accumulate bytes with incremental measurement | Fixed Reader |
+| 9 | Accumulate bytes with incremental measurement | One-byte refills, four-byte buffer |
+| 10 | Accumulate bytes and remeasure each prefix with Text | Fixed Reader |
+| 11 | Accumulate bytes and remeasure each prefix with Text | One-byte refills, four-byte buffer |
 
 Before timing, each mode checks scalar, boundary, and final-event counts and
 a checksum against independently decoded slice iteration. Byte reconstruction
 is also checked exactly against the original input. The position checksum
-consumes consumer-tracked offsets and both flags; modes 4 through 7 copy bytes into
+consumes consumer-tracked offsets and both flags; modes 4 through 11 copy bytes into
 a consumer buffer and checksum each finalized grapheme. They use a fixed
 4,096-byte buffer sufficient for these corpora, not a library cluster limit.
 All cases warm up, then run eight samples with rotating case order.
@@ -33,6 +37,10 @@ per sample; refill cases use 500. Normalize elapsed time by iterations when
 comparing modes. This measures iteration CPU cost, not file-system latency.
 Unicode fixture tests provide exact boundary checks beyond these corpus checks.
 Modes 6 and 7 consume bytes and flags without tracking positions.
+Modes 8 through 11 also consume cumulative columns and renderability after
+every update, including EOF. Their expected checksum uses the slice API for
+each successive prefix outside timing. On revisions without `.measured()`,
+modes 8 and 9 fall back to remeasuring, allowing the same harness to compile.
 
 ## Decoder optimization results
 
@@ -126,3 +134,36 @@ and by about 1–12% when combined with byte accumulation in mode 4. Refill
 position workloads were roughly unchanged or modestly faster. Keeping only
 bytes and flags favors consumers that accumulate or display text without
 source positions; the API documentation explains how to track them when needed.
+
+## Incremental Reader measurement
+
+Four alternating runs on native macOS ARM64 with Zig 0.16.0/ReleaseFast
+collected 32 samples per case. Modes 8 and 9 accumulate the same bytes as
+unmeasured modes 6 and 7, adding cumulative width and renderability to the
+checksum after every update. Modes 10 and 11 instead recompute that measurement
+by passing the accumulated current grapheme to the slice API each time.
+
+| Corpus | Fixed measured/unmeasured time | Refill measured/unmeasured time | Fixed speedup over remeasuring | Refill speedup over remeasuring |
+| --- | ---: | ---: | ---: | ---: |
+| ASCII | 1.26× | 1.11× | 1.19× | 1.11× |
+| Multilingual | 1.23× | 1.10× | 1.51× | 1.22× |
+| Combining marks | 1.32× | 1.09× | 1.99× | 1.41× |
+
+The first two columns are additional workflow cost; lower is better. The last
+two are throughput improvements over repeated slice measurement; higher is
+better. They include consumption of the measurement fields, not just property
+lookup time. Longer graphemes benefit from avoiding repeated prefix scans.
+
+Separate before/after builds of the unchanged eight-mode harness checked the
+unmeasured path: byte-accumulation throughput stayed within about 3% on fixed
+Readers and about 2% with refills. Its iterator remains 40 bytes and updates
+remain 7 bytes on this target. The measured iterator is 56 bytes and updates
+are 9 bytes. Measurement shares the existing compact grapheme/width record;
+no Unicode tables were added or enlarged.
+
+Full Debug and ReleaseFast suites each passed 267 tests with one optional
+skip. Every grapheme fixture is checked at successive prefixes in both modes,
+with fixed Readers and varied short refills. Other checks cover decreasing
+width, renderability, owned bytes, sticky errors, no lookahead, offset overflow,
+and bounded measurement of long clusters. Selecting measurement after an
+unmeasured update was also verified to panic in ReleaseFast.

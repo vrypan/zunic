@@ -156,11 +156,25 @@ pub const ClusterMeasure = struct {
     /// control class: 3804 code points share that class with width 1, C1
     /// controls among them, and they must keep their column.
     pub fn add(self: *ClusterMeasure, token: decoded_token.Token) void {
+        self.addImpl(token, false);
+    }
+
+    /// Streaming input can grow indefinitely. Only the distinction between
+    /// totals 0, 1, 2, and greater than 2 matters to finish(). Keep processing
+    /// pictograph/RI flags even after the counter saturates.
+    pub fn addBounded(self: *ClusterMeasure, token: decoded_token.Token) void {
+        self.addImpl(token, true);
+    }
+
+    inline fn addImpl(self: *ClusterMeasure, token: decoded_token.Token, comptime bounded: bool) void {
         const cp = token.codepoint orelse return;
         if (cp < 0x20 or cp == 0x7f) return;
         if (token.cell_width != 0) {
             self.has_base = true;
-            self.columns += token.cell_width;
+            if (bounded)
+                self.columns = @min(self.columns +| token.cell_width, 3)
+            else
+                self.columns += token.cell_width;
         }
         if (token.grapheme.extended_pictographic) self.has_pictograph = true;
         if (token.grapheme.gcb == .regional_indicator) self.has_ri = true;

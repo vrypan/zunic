@@ -144,4 +144,6 @@ pub const ReaderCodepointIterator = struct {
 
 pub const ReaderGraphemeUpdate = reader_graphemes.Update;
 pub const ReaderGraphemeError = ReaderCodepointError;
-pub const ReaderGraphemeIterator = reader_graphemes.Iterator(ReaderCodepointIterator, ReaderCodepointIterator.nextDecoded);
+pub const ReaderGraphemeIterator = reader_graphemes.Iterator(ReaderCodepointIterator, ReaderCodepointIterator.nextDecoded, false);
+pub const ReaderMeasuredGraphemeUpdate = reader_graphemes.MeasuredUpdate;
+pub const ReaderMeasuredGraphemeIterator = reader_graphemes.Iterator(ReaderCodepointIterator, ReaderCodepointIterator.nextDecoded, true);

@@ -158,7 +158,8 @@ pub inline fn at(bytes: []const u8, start: usize) Token {
     return malformedToken(start, start + step.len);
 }
 
-fn fromCodepoint(start: usize, end: usize, cp: u21) Token {
+/// Classify an already decoded codepoint with one compact property lookup.
+pub inline fn fromCodepoint(start: usize, end: usize, cp: u21) Token {
     const r = grapheme_properties.record(cp);
     return .{
         .start = start,

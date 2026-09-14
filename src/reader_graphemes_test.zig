@@ -1,5 +1,6 @@
 const std = @import("std");
 const reader_input = @import("reader_input");
+const unicode = @import("zunic");
 
 const fixture = @embedFile("data/GraphemeBreakTest-17.0.0.txt");
 
@@ -199,23 +200,30 @@ test "updates match every Unicode 17 grapheme fixture" {
         }
         offsets[cp_len] = byte_len;
 
-        var input: std.Io.Reader = .fixed(bytes[0..byte_len]);
-        try expectFixture(&input, cps[0..cp_len], breaks[0..break_len], offsets[0 .. cp_len + 1]);
-        var storage: [8]u8 = undefined;
-        for (4..9) |capacity| {
-            for (1..5) |chunk_size| {
-                var chunked = Chunked.init(bytes[0..byte_len], storage[0..capacity]);
-                chunked.max_chunk = chunk_size;
-                try expectFixture(&chunked.interface, cps[0..cp_len], breaks[0..break_len], offsets[0 .. cp_len + 1]);
-                if (byte_len > capacity) try std.testing.expect(chunked.rebases > 0);
+        inline for (.{ false, true }) |measured| {
+            var input: std.Io.Reader = .fixed(bytes[0..byte_len]);
+            try expectFixture(measured, &input, cps[0..cp_len], breaks[0..break_len], offsets[0 .. cp_len + 1]);
+            var storage: [8]u8 = undefined;
+            for (4..9) |capacity| {
+                for (1..5) |chunk_size| {
+                    var chunked = Chunked.init(bytes[0..byte_len], storage[0..capacity]);
+                    chunked.max_chunk = chunk_size;
+                    try expectFixture(measured, &chunked.interface, cps[0..cp_len], breaks[0..break_len], offsets[0 .. cp_len + 1]);
+                    if (byte_len > capacity) try std.testing.expect(chunked.rebases > 0);
+                }
             }
         }
     }
 }
 
-fn expectFixture(input: *std.Io.Reader, cps: []const u21, breaks: []const bool, offsets: []const usize) !void {
-    var it = reader_input.init(input).graphemes();
+fn expectFixture(comptime measured: bool, input: *std.Io.Reader, cps: []const u21, breaks: []const bool, offsets: []const usize) !void {
+    const source = reader_input.init(input).graphemes();
+    var it = if (measured) source.measured() else source;
     var consumed: usize = 0;
+    var current: [256]u8 = undefined;
+    var length: usize = 0;
+    var last_columns: u2 = 0;
+    var last_renderable = false;
     for (cps, 0..) |value, i| {
         const update = (try it.next()).?;
         try std.testing.expectEqual(breaks[i], update.starts_new);
@@ -225,14 +233,148 @@ fn expectFixture(input: *std.Io.Reader, cps: []const u21, breaks: []const bool, 
         try std.testing.expectEqualSlices(u8, encoded[0..len], update.bytes());
         consumed += update.bytes().len;
         try std.testing.expectEqual(offsets[i + 1], consumed);
+        if (measured) {
+            if (breaks[i]) length = 0;
+            @memcpy(current[length..][0..len], encoded[0..len]);
+            length += len;
+            var expected = unicode.text(current[0..length]).graphemes().measured().iterator();
+            const span = expected.next().?;
+            try std.testing.expect(expected.next() == null);
+            try std.testing.expectEqual(span.columns, update.columns);
+            try std.testing.expectEqual(span.renderable, update.renderable);
+            last_columns = update.columns;
+            last_renderable = update.renderable;
+        }
     }
     const final = (try it.next()).?;
     try std.testing.expect(final.is_final);
     try std.testing.expect(!final.starts_new);
     try std.testing.expectEqual(@as(usize, 0), final.bytes().len);
     try std.testing.expectEqual(offsets[cps.len], consumed);
+    if (measured) {
+        try std.testing.expectEqual(last_columns, final.columns);
+        try std.testing.expectEqual(last_renderable, final.renderable);
+    }
     try std.testing.expect((try it.next()) == null);
     try std.testing.expect((try it.next()) == null);
+}
+
+test "measured updates are lazy and own bytes across Reader reuse" {
+    var storage: [4]u8 = undefined;
+    var input = Chunked.init("e\u{301}x", &storage);
+    var it: unicode.ReaderMeasuredGraphemeIterator = unicode.reader(&input.interface).graphemes().measured();
+    try std.testing.expectEqual(@as(usize, 0), input.reads);
+    var saved: [4]unicode.ReaderMeasuredGraphemeUpdate = undefined;
+    for (&saved) |*update| update.* = (try it.next()).?;
+    try std.testing.expect((try it.next()) == null);
+    const reads = input.reads;
+    try std.testing.expect((try it.next()) == null);
+    try std.testing.expectEqual(reads, input.reads);
+    @memset(&storage, 0xff);
+    const bytes = [_][]const u8{ "e", "\u{301}", "x", "" };
+    for (&saved, bytes, 0..) |*update, expected, i| {
+        try std.testing.expectEqualSlices(u8, expected, update.bytes());
+        try std.testing.expectEqual(@as(u2, 1), update.columns);
+        try std.testing.expect(update.renderable);
+        try std.testing.expectEqual(i == 0 or i == 2, update.starts_new);
+        try std.testing.expectEqual(i == 3, update.is_final);
+    }
+}
+
+test "measurement can decrease and resets before the first bytes of a new grapheme" {
+    // Three consonants form one Indic conjunct. The third exceeds the width
+    // policy's two-column limit, so the result becomes a replacement cell.
+    const bytes = "\u{915}\u{94d}\u{915}\u{94d}\u{915}x\r\n\u{301}\u{1f1e6}\u{1f1e7}";
+    var input: std.Io.Reader = .fixed(bytes);
+    var it = unicode.reader(&input).graphemes().measured();
+    const columns = [_]u2{ 1, 1, 2, 2, 1, 1, 0, 0, 0, 2, 2, 2 };
+    const renderable = [_]bool{ true, true, true, true, false, true, false, false, false, true, true, true };
+    for (columns, renderable) |width, fits| {
+        const update = (try it.next()).?;
+        try std.testing.expectEqual(width, update.columns);
+        try std.testing.expectEqual(fits, update.renderable);
+    }
+    try std.testing.expect((try it.next()) == null);
+}
+
+test "measured iteration keeps decoder error and no-lookahead contracts" {
+    const cases = [_]struct { bytes: []const u8, capacity: usize, failure: ?usize, expected: unicode.ReaderGraphemeError }{
+        .{ .bytes = "", .capacity = 0, .failure = null, .expected = error.ReaderBufferTooSmall },
+        .{ .bytes = "a\xff", .capacity = 4, .failure = null, .expected = error.InvalidUtf8 },
+        .{ .bytes = "a\xe0\x80", .capacity = 4, .failure = null, .expected = error.InvalidUtf8 },
+        .{ .bytes = "a\xe2\x82", .capacity = 4, .failure = null, .expected = error.InvalidUtf8 },
+        .{ .bytes = "a\xe2\x82", .capacity = 2, .failure = null, .expected = error.ReaderBufferTooSmall },
+        .{ .bytes = "a\xe2\x82", .capacity = 4, .failure = 3, .expected = error.ReadFailed },
+    };
+    for (cases) |case| {
+        var storage: [4]u8 = undefined;
+        var input = Chunked.init(case.bytes, storage[0..case.capacity]);
+        input.fail_at = case.failure;
+        var it = unicode.reader(&input.interface).graphemes().measured();
+        if (case.bytes.len != 0) _ = (try it.next()).?;
+        const before = it.measure;
+        const offset = it.points.offset;
+        try std.testing.expectError(case.expected, it.next());
+        const reads = input.reads;
+        try std.testing.expectError(case.expected, it.next());
+        try std.testing.expectEqual(reads, input.reads);
+        try std.testing.expectEqualDeep(before, it.measure);
+        try std.testing.expectEqual(offset, it.points.offset);
+    }
+    for ([_][]const u8{ "A", "\u{80}", "\u{800}", "\u{10000}" }) |bytes| {
+        var storage: [4]u8 = undefined;
+        var input = Chunked.init(bytes, &storage);
+        input.fail_at = bytes.len;
+        var it = unicode.reader(&input.interface).graphemes().measured();
+        const update = (try it.next()).?;
+        try std.testing.expectEqualSlices(u8, bytes, update.bytes());
+        try std.testing.expect(!update.is_final);
+        try std.testing.expectEqual(bytes.len, input.reads);
+        try std.testing.expectError(error.ReadFailed, it.next());
+    }
+    var storage: [4]u8 = undefined;
+    var empty = Chunked.init("", &storage);
+    var it = unicode.reader(&empty.interface).graphemes().measured();
+    try std.testing.expect((try it.next()) == null);
+    var fixed: std.Io.Reader = .fixed("a");
+    it = unicode.reader(&fixed).graphemes().measured();
+    it.points.offset = std.math.maxInt(u64);
+    try std.testing.expectError(error.OffsetOverflow, it.next());
+    try std.testing.expectEqualSlices(u8, "a", try fixed.peek(1));
+}
+
+test "bounded measurement saturates but continues tracking presentation flags" {
+    const grapheme = @import("segmentation").grapheme;
+    const token = @import("encoding").decoded_token;
+    var measure: grapheme.ClusterMeasure = .{};
+    for (0..100_000) |_| measure.addBounded(token.fromCodepoint(0, 0, 'a'));
+    try std.testing.expectEqual(@as(usize, 3), measure.columns);
+    try std.testing.expectEqual(@as(usize, 1), grapheme.displayColumns(measure.finish()));
+    try std.testing.expect(!grapheme.isRenderable(measure.finish()));
+    measure.addBounded(token.fromCodepoint(0, 0, 0x1f600));
+    try std.testing.expectEqual(@as(usize, 3), measure.columns);
+    try std.testing.expectEqual(@as(usize, 2), grapheme.displayColumns(measure.finish()));
+    try std.testing.expect(grapheme.isRenderable(measure.finish()));
+}
+
+test "long measured grapheme needs no growing buffer" {
+    const bytes = "\u{915}" ++ "\u{94d}\u{915}" ** 10_000;
+    var storage: [4]u8 = undefined;
+    var input = Chunked.init(bytes, &storage);
+    var it = unicode.reader(&input.interface).graphemes().measured();
+    var count: usize = 0;
+    while (try it.next()) |update| {
+        if (update.bytes().len != 0) {
+            try std.testing.expectEqual(count == 0, update.starts_new);
+            count += 1;
+        } else {
+            try std.testing.expect(update.is_final);
+            try std.testing.expectEqual(@as(u2, 1), update.columns);
+            try std.testing.expect(!update.renderable);
+        }
+        try std.testing.expect(it.measure.columns <= 3);
+    }
+    try std.testing.expectEqual(@as(usize, 20_001), count);
 }
 
 test "a scalar update never waits for or consumes the following scalar" {

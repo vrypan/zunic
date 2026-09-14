@@ -167,7 +167,7 @@ pub fn build(b: *std.Build) void {
         .{ .path = "src/encoding/utf8.zig", .group = "encoding", .grants = &.{.none} },
         .{ .path = "src/encoding/utf8_prefix.zig", .group = "encoding", .grants = &.{.none} },
         .{ .path = "src/reader/reader_test.zig", .group = "reader", .grants = &.{ .reader_input, .cp, .encoding } },
-        .{ .path = "src/reader_graphemes_test.zig", .group = "reader-graphemes", .extra_group = "reader", .grants = &.{ .reader_input, .cp } },
+        .{ .path = "src/reader_graphemes_test.zig", .group = "reader-graphemes", .extra_group = "reader", .grants = &.{ .reader_input, .cp, .api, .segmentation, .encoding } },
         .{ .path = "src/linebreak/linebreak.zig", .group = "linebreak", .grants = &.{ .tables, .encoding } },
         .{ .path = "src/word_test.zig", .group = "segmentation", .grants = &.{ .tables, .segmentation } },
         .{ .path = "src/scan_test.zig", .group = "layout", .grants = &.{ .tables, .encoding, .segmentation, .linebreak, .layout } },

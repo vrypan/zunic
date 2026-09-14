@@ -77,6 +77,63 @@ grapheme provisional indefinitely, but each arriving codepoint still produces
 an update immediately. Reader prefetch may occur; Zunic does not consume a
 following scalar to decide the current result.
 
+## Incremental measurements
+
+Select `.measured()` when opening the iterator to include the current
+grapheme's terminal width and renderability:
+
+```zig
+var input: std.Io.Reader = .fixed("e\u{0301}界");
+var updates = zunic.reader(&input).graphemes().measured();
+while (try updates.next()) |update| {
+    std.debug.print("added={s} columns={d} renderable={} final={}\n", .{
+        update.bytes(), update.columns, update.renderable, update.is_final,
+    });
+}
+```
+
+The measured iterator returns `ReaderMeasuredGraphemeUpdate`, with the same
+owned `bytes()`, `starts_new`, and `is_final` behavior, plus:
+
+```zig
+columns: u2,
+renderable: bool,
+```
+
+These fields describe the **entire current grapheme after adding the returned
+bytes**, using the same [width policy](../text/width/README.md) as
+`text(bytes).graphemes().measured()`. They do not describe just the added
+codepoint and are not deltas to add to a running width.
+
+| Update | `bytes()` | `starts_new` | `columns` | `renderable` | `is_final` |
+| --- | --- | --- | --- | --- | --- |
+| `e` | `e` | true | 1 | true | false |
+| Accent | `CC 81` | false | 1 | true | false |
+| `界` | `E7 95 8C` | true | 2 | true | false |
+| EOF | empty | false | 2 | true | true |
+
+A new-grapheme update reports the new grapheme's measurement. Retain the
+preceding update's measurement if you need it when that preceding grapheme
+is finalized. The EOF update repeats the last measurement without adding
+bytes. Empty input produces no measurement, and errors never finalize one.
+
+The current width or renderability can change in either direction as the
+grapheme grows. A renderer can display provisional text immediately, then
+remeasure its placement and redraw when an update changes these fields.
+`renderable = false` follows Zunic's existing display policy; it does not
+remove or replace any returned bytes.
+
+Call `.measured()` on a fresh iterator, before calling `next()`, and then use
+only the returned `ReaderMeasuredGraphemeIterator`. Enabling measurement after
+an unmeasured iterator has yielded a codepoint or reached EOF panics: its
+earlier grapheme bytes and widths cannot be reconstructed from boundary state.
+Copies still share the underlying Reader cursor.
+
+Measurement uses constant storage, performs no lookahead, and does not retain
+the complete grapheme. The width counter saturates once the total exceeds two
+columns while still tracking pictographic and regional-indicator properties.
+Omitting `.measured()` excludes this state and measurement work.
+
 ## Why incremental updates?
 
 Unicode places no upper bound on the number of codepoints in one grapheme. For

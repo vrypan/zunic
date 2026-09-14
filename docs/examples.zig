@@ -26,6 +26,22 @@ test "docs: incremental Reader graphemes" {
     try std.testing.expect(!pending);
 }
 
+test "docs: measured Reader graphemes" {
+    var input: std.Io.Reader = .fixed("e\u{0301}界");
+    var it = zunic.reader(&input).graphemes().measured();
+    const bytes = [_][]const u8{ "e", "\u{0301}", "界", "" };
+    const columns = [_]u2{ 1, 1, 2, 2 };
+    for (bytes, columns, 0..) |expected, width, i| {
+        const update = (try it.next()).?;
+        try std.testing.expectEqualSlices(u8, expected, update.bytes());
+        try std.testing.expectEqual(width, update.columns);
+        try std.testing.expect(update.renderable);
+        try std.testing.expectEqual(i == 0 or i == 2, update.starts_new);
+        try std.testing.expectEqual(i == 3, update.is_final);
+    }
+    try std.testing.expect((try it.next()) == null);
+}
+
 test "docs: measured graphemes" {
     const bytes = "e\u{0301}界";
     var it = zunic.text(bytes).graphemes().measured().iterator();

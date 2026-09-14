@@ -13,6 +13,8 @@ were superseded before the same release are omitted.
 - Added constant-storage incremental grapheme updates through
   `reader(input).graphemes()`, with owned UTF-8 bytes per update and explicit
   boundary and clean-EOF finalization signals.
+- Added optional cumulative width and renderability to Reader grapheme
+  updates through `reader(input).graphemes().measured()`.
 
 ## [0.4.1] - 2026-09-13
 

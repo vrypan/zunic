@@ -2,11 +2,11 @@
 //! Counts and span checksums are checked against slice iteration before timing.
 const std = @import("std");
 const zunic = @import("zunic");
-const Work = enum { codepoints, spans, bytes, raw_bytes };
+const Work = enum { codepoints, spans, bytes, raw_bytes, measured, remeasured };
 
 // Compile the same consumer against either API for before/after measurements.
-fn updateBytes(update: *const zunic.ReaderGraphemeUpdate, scratch: *[4]u8) ![]const u8 {
-    if (@hasDecl(zunic.ReaderGraphemeUpdate, "bytes")) return update.bytes();
+fn updateBytes(update: anytype, scratch: *[4]u8) ![]const u8 {
+    if (@hasDecl(@TypeOf(update.*), "bytes")) return update.bytes();
     if (update.point) |point| {
         const len = try std.unicode.utf8Encode(point.value, scratch);
         return scratch[0..len];
@@ -58,6 +58,8 @@ const Result = struct {
 };
 
 fn scan(comptime work: Work, input: *std.Io.Reader) !Result {
+    const with_measure = work == .measured or work == .remeasured;
+    const native_measure = work == .measured and @hasDecl(zunic.ReaderGraphemeIterator, "measured");
     var result: Result = .{};
     if (work != .codepoints) {
         // Bounded only for these benchmark corpora, not a library limit.
@@ -65,10 +67,10 @@ fn scan(comptime work: Work, input: *std.Io.Reader) !Result {
         var length: usize = 0;
         var offset: u64 = 0;
         var cluster_start: u64 = 0;
-        var it = zunic.reader(input).graphemes();
+        var it = if (native_measure) zunic.reader(input).graphemes().measured() else zunic.reader(input).graphemes();
         while (try it.next()) |update| {
             if (!update.is_final) result.scalars += 1;
-            if (work == .raw_bytes) {
+            if (work == .raw_bytes or with_measure) {
                 result.span(0, 0, update.starts_new, update.is_final);
             } else if (@hasField(zunic.ReaderGraphemeUpdate, "grapheme")) {
                 result.span(update.grapheme.start, update.grapheme.end, update.starts_new, update.is_final);
@@ -78,7 +80,7 @@ fn scan(comptime work: Work, input: *std.Io.Reader) !Result {
                 offset += update.bytes().len;
                 result.span(cluster_start, offset, update.starts_new, update.is_final);
             }
-            if (work == .bytes or work == .raw_bytes) {
+            if (work == .bytes or work == .raw_bytes or with_measure) {
                 if (update.starts_new) {
                     result.checksum +%= byteChecksum(accumulated[0..length]);
                     length = 0;
@@ -89,6 +91,11 @@ fn scan(comptime work: Work, input: *std.Io.Reader) !Result {
                 @memcpy(accumulated[length..][0..bytes.len], bytes);
                 length += bytes.len;
                 if (update.is_final) result.checksum +%= byteChecksum(accumulated[0..length]);
+                if (native_measure) {
+                    result.checksum +%= measurementChecksum(update.columns, update.renderable);
+                } else if (with_measure) {
+                    result.checksum +%= prefixMeasurement(accumulated[0..length]);
+                }
             }
         }
     } else {
@@ -115,6 +122,7 @@ fn run(comptime work: Work, comptime chunked: bool, bytes: []const u8, iteration
 }
 
 fn expected(comptime work: Work, bytes: []const u8) !Result {
+    const with_measure = work == .measured or work == .remeasured;
     var result: Result = .{};
     var clusters = zunic.text(bytes).graphemes().iterator();
     var last_start: usize = 0;
@@ -127,14 +135,26 @@ fn expected(comptime work: Work, bytes: []const u8) !Result {
             const boundary = offset == last_start;
             offset += length;
             if (work == .codepoints) result.point(value, offset) else result.scalars += 1;
-            if (work == .raw_bytes) result.span(0, 0, boundary, false) else if (work != .codepoints) result.span(last_start, offset, boundary, false);
+            if (work == .raw_bytes or with_measure) result.span(0, 0, boundary, false) else if (work != .codepoints) result.span(last_start, offset, boundary, false);
+            if (with_measure) result.checksum +%= prefixMeasurement(bytes[last_start..offset]);
         }
-        if (work == .bytes or work == .raw_bytes) result.checksum +%= byteChecksum(bytes[last_start..cluster.end.value]);
+        if (work == .bytes or work == .raw_bytes or with_measure) result.checksum +%= byteChecksum(bytes[last_start..cluster.end.value]);
     }
     if (bytes.len != 0) {
-        if (work == .raw_bytes) result.span(0, 0, false, true) else if (work != .codepoints) result.span(last_start, bytes.len, false, true);
+        if (work == .raw_bytes or with_measure) result.span(0, 0, false, true) else if (work != .codepoints) result.span(last_start, bytes.len, false, true);
+        if (with_measure) result.checksum +%= prefixMeasurement(bytes[last_start..]);
     }
     return result;
+}
+
+fn measurementChecksum(columns: u2, renderable: bool) u64 {
+    return @as(u64, columns) * 67 + @as(u64, @intFromBool(renderable)) * 71;
+}
+
+fn prefixMeasurement(bytes: []const u8) u64 {
+    var it = zunic.text(bytes).graphemes().measured().iterator();
+    const measured = it.next().?;
+    return measurementChecksum(measured.columns, measured.renderable);
 }
 
 fn verifyBytes(bytes: []const u8, comptime chunked: bool) !void {
@@ -160,7 +180,7 @@ fn verifyBytes(bytes: []const u8, comptime chunked: bool) !void {
 fn measure(io: std.Io, out: *std.Io.Writer, name: []const u8, bytes: []const u8) !void {
     try verifyBytes(bytes, false);
     try verifyBytes(bytes, true);
-    inline for (.{ Work.codepoints, Work.spans, Work.bytes, Work.raw_bytes }) |work| {
+    inline for (.{ Work.codepoints, Work.spans, Work.bytes, Work.raw_bytes, Work.measured, Work.remeasured }) |work| {
         const oracle = try expected(work, bytes);
         inline for (.{ false, true }) |chunked| {
             if (!std.meta.eql(oracle, try run(work, chunked, bytes, 1))) return error.BenchmarkMismatch;
@@ -169,9 +189,9 @@ fn measure(io: std.Io, out: *std.Io.Writer, name: []const u8, bytes: []const u8)
     }
     // Rotate case order each round; preserve every sample, not just the best.
     for (0..8) |round| {
-        for (0..8) |position| {
-            const mode = (position + round) % 8;
-            const iterations: usize = if (mode == 2 or mode == 3 or mode == 5 or mode == 7) 500 else 2000;
+        for (0..12) |position| {
+            const mode = (position + round) % 12;
+            const iterations: usize = if (mode == 2 or mode == 3 or mode == 5 or mode == 7 or mode == 9 or mode == 11) 500 else 2000;
             const start = std.Io.Clock.Timestamp.now(io, .awake);
             const result = switch (mode) {
                 0 => try run(.codepoints, false, bytes, iterations),
@@ -182,6 +202,10 @@ fn measure(io: std.Io, out: *std.Io.Writer, name: []const u8, bytes: []const u8)
                 5 => try run(.bytes, true, bytes, iterations),
                 6 => try run(.raw_bytes, false, bytes, iterations),
                 7 => try run(.raw_bytes, true, bytes, iterations),
+                8 => try run(.measured, false, bytes, iterations),
+                9 => try run(.measured, true, bytes, iterations),
+                10 => try run(.remeasured, false, bytes, iterations),
+                11 => try run(.remeasured, true, bytes, iterations),
                 else => unreachable,
             };
             const ns = start.durationTo(std.Io.Clock.Timestamp.now(io, .awake)).raw.toNanoseconds();

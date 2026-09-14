@@ -13,8 +13,9 @@ pub fn reader(input: *std.Io.Reader) Reader;
 ```
 
 The Reader view provides strict [codepoint iteration](codepoints.md) and
-[incremental grapheme updates](graphemes.md). It does not provide streaming
-normalization, casing, or width APIs.
+[incremental grapheme updates](graphemes.md), including optional cumulative
+width and renderability through `.graphemes().measured()`. It does not provide
+streaming normalization or casing APIs.
 
 Each grapheme update owns the newly consumed UTF-8 bytes and exposes them
 through `update.bytes()`, alongside its boundary flags.
