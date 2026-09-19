@@ -7,23 +7,20 @@ are built with the same Zig version, target, optimization mode, and CPU model.
 The dependency hash in `build.zig.zon` verifies the fetched package.
 
 > [!NOTE]
-> These benchmarks do not measure which library is better, not even
-> which one is faster. Thes provide measurements taken in a very specific
-> setup, that that give me a baseline I can compare agains.
+> These benchmarks do not measure which library is better, or even which one
+> is faster in general. They provide measurements from a specific setup that
+> gives me a baseline for comparison.
 >
-> That said, I believe they show that in many cases, zunic is comparable to uucode
-> in performance.
+> That said, I believe they show that in many cases, Zunic is comparable to
+> uucode in performance.
 
 ## Latest results
 
-Recorded on 2026-09-12 at Zunic `d82ae3d` on an Apple ARM64 machine running
-macOS 26.6.2. Both peers used Unicode 17.0.0, Zig 0.16.0, ReleaseFast, and the
-native CPU target. The run used three alternating pairs and 15 samples per
-executable run. See [TIMINGS.md](TIMINGS.md) for every per-corpus measurement.
-The primary-Script row was recorded separately on 2026-09-13 from the current
-Plan 033 working tree, also with three alternating pairs.
-The two bidirectional rows were recorded on 2026-09-13 from the Plan 034
-working tree, with the same three-pair protocol.
+Recorded on 2026-09-19 from the Zunic source tree committed as `7bdbc2d`, on
+an Apple ARM64 machine running macOS 26.6.2. Both peers used Unicode 17.0.0,
+Zig 0.16.0, ReleaseFast, and the native CPU target. The run used three
+alternating pairs and 15 samples per executable run. See
+[TIMINGS.md](TIMINGS.md) for every per-corpus measurement.
 
 For each corpus, the result is the median of the three run medians. The average
 below is the geometric mean of the nine per-corpus ratios. `uucode/Zunic` above
@@ -33,24 +30,24 @@ paths.
 
 | Benchmark class | Geometric mean uucode/Zunic | Range | Exact outputs |
 |---|---:|---:|---:|
-| UTF-8 decoding | 1.82× | 1.48–2.38× | 9/9 |
-| Extended grapheme ranges | 2.21× | 1.65–2.82× | 8/9 |
-| Grapheme ranges with cluster width | 2.68× | 2.26–3.69× | 7/9 |
-| Whole-text grapheme width | 6.29× | 2.59–112.87× | 7/9 |
-| Unicode terminal property facts | 1.91× | 1.52–2.13× | 9/9 |
-| Fused scalar terminal-property lookup | 1.24× | 1.20–1.33× | 9/9 |
-| Full default case folding | 1.09× | 0.97–1.37× | 9/9 |
-| Simple uppercase mapping | 1.20× | 1.00–1.33× | 9/9 |
-| Simple lowercase mapping | 1.16× | 1.02–1.33× | 9/9 |
-| Simple titlecase mapping | 1.20× | 1.01–1.34× | 9/9 |
-| Exact numeric properties | 2.26× | 2.12–2.85× | 9/9 |
-| Primary Script property | 1.01× | 0.95–1.03× | 9/9 |
-| Bidirectional scalar properties | 1.43× | 1.33–1.56× | 9/9 |
-| Bidirectional scalar mappings | 1.44× | 1.35–1.56× | 9/9 |
-| Canonical combining class | 1.05× | 0.95–1.26× | 9/9 |
-| Immediate decomposition facts | 1.20× | 1.02–1.84× | 9/9 |
-| Incremental grapheme boundaries | 2.64× | 1.94–3.93× | 8/9 |
-| Ghostty scalar-width composition | 1.63× | 1.46–1.82× | 9/9 |
+| UTF-8 decoding | 1.84× | 1.57–2.35× | 9/9 |
+| Extended grapheme ranges | 1.84× | 1.48–2.45× | 8/9 |
+| Grapheme ranges with cluster width | 2.54× | 2.21–3.21× | 7/9 |
+| Whole-text grapheme width | 5.90× | 2.42–111.89× | 7/9 |
+| Unicode terminal property facts | 1.91× | 1.50–2.11× | 9/9 |
+| Fused scalar terminal-property lookup | 1.22× | 1.19–1.25× | 9/9 |
+| Full default case folding | 1.09× | 0.97–1.35× | 9/9 |
+| Simple uppercase mapping | 1.06× | 0.91–1.29× | 9/9 |
+| Simple lowercase mapping | 1.02× | 0.92–1.23× | 9/9 |
+| Simple titlecase mapping | 1.05× | 0.88–1.29× | 9/9 |
+| Exact numeric properties | 1.88× | 1.80–2.23× | 9/9 |
+| Primary Script property | 0.86× | 0.82–0.97× | 9/9 |
+| Bidirectional scalar properties | 1.28× | 1.23–1.40× | 9/9 |
+| Bidirectional scalar mappings | 1.16× | 1.09–1.28× | 9/9 |
+| Canonical combining class | 0.83× | 0.75–0.97× | 9/9 |
+| Immediate decomposition facts | 1.25× | 1.12–1.78× | 9/9 |
+| Incremental grapheme boundaries | 2.69× | 1.94–3.97× | 8/9 |
+| Ghostty scalar-width composition | 1.55× | 1.24–1.70× | 9/9 |
 
 [Results breakdown: full per-corpus timings](TIMINGS.md)
 

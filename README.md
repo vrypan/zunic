@@ -43,7 +43,7 @@ text operations, and Reader decoding perform the work when called.
 ## Install
 
 ```sh
-zig fetch --save git+https://github.com/vrypan/zunic.git#v0.4.1
+zig fetch --save git+https://github.com/vrypan/zunic.git#v0.5.0
 ```
 
 In your application's `build.zig`:

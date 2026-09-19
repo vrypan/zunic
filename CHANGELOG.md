@@ -4,7 +4,7 @@ Notable code changes are listed by package version. Documentation-only,
 benchmark-only, planning, release bookkeeping, and intermediate changes that
 were superseded before the same release are omitted.
 
-## [dev]
+## [0.5.0] - 2026-09-19
 
 ### Added
 
@@ -15,6 +15,12 @@ were superseded before the same release are omitted.
   boundary and clean-EOF finalization signals.
 - Added optional cumulative width and renderability to Reader grapheme
   updates through `reader(input).graphemes().measured()`.
+
+### Fixed
+
+- Applied valid VS15 and VS16 emoji presentation selectors when measuring
+  grapheme clusters through text width, measured iteration, wrapping, and
+  Reader updates.
 
 ## [0.4.1] - 2026-09-13
 
