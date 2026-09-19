@@ -11,8 +11,8 @@ Their iterators are specializations of `Iterator(include_measure)` in
 not named exports on `zunic`.
 
 Both wrappers use the same internal grapheme iterator. The compile-time
-parameter selects the public result shape and allows unused measurement work
-to be eliminated for plain traversal.
+parameter selects the public result shape and explicitly excludes measurement
+through the engine's `nextSpan(comptime measured)` for plain traversal.
 
 ## Boundary tables and measurement
 
@@ -32,14 +32,17 @@ A pending token carries lookahead across calls: the scalar that establishes
 the next boundary does not have to be decoded again to start the next cluster.
 Non-ASCII classification uses the shared packed property record; ASCII skips
 UTF-8 decoding and uses a direct property array. The compact record contains
-only grapheme classification and scalar width. Line-break facts live in the
-wider layout record and are not retained by grapheme-only programs.
+grapheme classification, scalar width, and a presentation-candidate bit.
+Line-break facts live in the wider layout record and are not retained by
+grapheme-only programs.
 
-`ClusterMeasure` accumulates width during the same segmentation pass. The public
-measured iterator decodes that result instead of scanning the cluster again.
+`ClusterMeasure` accumulates ordinary width during segmentation and delegates
+presentation candidates to the exceptional path described in the
+[width implementation](../width/implementation.md). The public measured
+iterator decodes the resulting width without doing another scan itself.
 Internally, width value `3` means a one-cell non-renderable replacement; public
-results expose this as `columns = 1, renderable = false`. The inline traversal
-allows the compiler to discard measurement work when only boundaries are used.
+results expose this as `columns = 1, renderable = false`. Unmeasured traversal
+excludes measurement at compile time.
 
 The inline chain includes `decoded_token.at`, the engine's `decodeAt`, `peekToken`,
 `takeToken`, and `next`, and the public `text.Iterator(include_measure).next`.

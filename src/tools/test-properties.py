@@ -201,6 +201,7 @@ def main():
             "east_asian_wide": int(wide),
             "ep_cn": int(pictographic and cat == "Cn"),
             "line_break_category": expected_category[cp],
+            "presentation_candidate": int(pictographic or cp in (0xFE0E, 0xFE0F)),
             "_padding": 0,
         }
         for name, want in expected.items():
@@ -211,7 +212,7 @@ def main():
                     print(f"U+{cp:04X} {name}: table={got} expected={want}")
         grapheme_block = grapheme_table["index"][cp >> grapheme_table["shift"]]
         grapheme_raw = grapheme_table["data"][(grapheme_block << grapheme_table["shift"]) | (cp & grapheme_block_mask)]
-        grapheme_want = expected["gcb"] | (expected["incb"] << 4) | (expected["extended_pictographic"] << 6) | (width << 7)
+        grapheme_want = expected["gcb"] | (expected["incb"] << 4) | (expected["extended_pictographic"] << 6) | (width << 7) | (expected["presentation_candidate"] << 9)
         if grapheme_raw != grapheme_want:
             failures += 1
             if failures <= 20:

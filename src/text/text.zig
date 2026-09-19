@@ -54,15 +54,13 @@ pub fn Iterator(comptime include_measure: bool) type {
         // engine can cause this wrapper to be outlined once per grapheme;
         // unmeasured callers also need to eliminate the unused width work.
         pub inline fn next(self: *@This()) ?if (include_measure) MeasuredSpan else Span {
-            const span = self.inner.next() orelse return null;
+            const span = self.inner.nextSpan(include_measure) orelse return null;
             if (!include_measure) return .{
                 .start = .{ .value = span.start },
                 .end = .{ .value = span.end },
             };
-            // The grapheme engine already measured this cluster while it
-            // segmented it, so both fields are decoded from that measure
-            // rather than recomputed: re-measuring the same bytes would
-            // decode and classify every scalar of the cluster a second time.
+            // Ordinary clusters are measured during segmentation; exceptional
+            // presentation clusters are remeasured once by the engine.
             return .{
                 .start = .{ .value = span.start },
                 .end = .{ .value = span.end },

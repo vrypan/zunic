@@ -389,6 +389,7 @@ fn referenceAt(bytes: []const u8, start: usize) decoded_token.Token {
         .codepoint = cp,
         .grapheme = if (cp) |v| tables.grapheme.graphemeProperties(v) else .{ .gcb = .other, .incb = .none, .extended_pictographic = false },
         .cell_width = if (cp) |v| decoded_token.codepointWidth(v) else 0,
+        .presentation_candidate = if (cp) |v| tables.grapheme.graphemeProperties(v).extended_pictographic or v == 0xfe0e or v == 0xfe0f else false,
     };
 }
 
@@ -403,6 +404,7 @@ fn expectSameToken(bytes: []const u8, start: usize) !void {
     try std.testing.expectEqual(want.end, got.end);
     try std.testing.expectEqual(want.codepoint, got.codepoint);
     try std.testing.expectEqual(want.cell_width, got.cell_width);
+    try std.testing.expectEqual(want.presentation_candidate, got.presentation_candidate);
     try std.testing.expectEqual(want.grapheme.gcb, got.grapheme.gcb);
     try std.testing.expectEqual(want.grapheme.incb, got.grapheme.incb);
     try std.testing.expectEqual(want.grapheme.extended_pictographic, got.grapheme.extended_pictographic);

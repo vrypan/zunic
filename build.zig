@@ -171,6 +171,7 @@ pub fn build(b: *std.Build) void {
         .{ .path = "src/linebreak/linebreak.zig", .group = "linebreak", .grants = &.{ .tables, .encoding } },
         .{ .path = "src/word_test.zig", .group = "segmentation", .grants = &.{ .tables, .segmentation } },
         .{ .path = "src/scan_test.zig", .group = "layout", .grants = &.{ .tables, .encoding, .segmentation, .linebreak, .layout } },
+        .{ .path = "src/presentation_test.zig", .group = "presentation", .extra_group = "layout", .grants = &.{ .api, .segmentation, .layout, .tables } },
         .{ .path = "src/wrap_test.zig", .group = "layout", .grants = &.{.api} },
         .{ .path = "src/wrap_regression_test.zig", .group = "layout", .grants = &.{.api} },
         .{ .path = "src/normalization_test.zig", .group = "normalization", .grants = &.{ .api, .tables, .encoding, .normalization } },

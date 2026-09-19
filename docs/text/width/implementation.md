@@ -35,7 +35,16 @@ vector targets and when vectors are disabled.
 The mixed loop is `noinline` to keep its code size out of the ASCII dispatch's
 inlining budget. This is a compiler-specialization choice, not a different
 measurement rule. The one-cell replacement for oversized ordinary clusters
-and the two-cell pictographic rule are explicit terminal policy choices.
+and presentation-adjusted pictographic widths are terminal policy choices.
+
+Ordinary clusters are measured during segmentation. A spare record bit marks
+pictographs and VS15/VS16 for out-of-line finalization, keeping selector state
+out of the inlined scan. The finalizer first searches for byte `EF`, which both
+selectors contain. Without it, pictographic width is the accumulated width
+capped at two; otherwise a presentation-aware pass remeasures the cluster.
+False positives only add work, and each cluster is remeasured at most once.
+Reader uses the same presentation policy incrementally without retaining the
+cluster. The generated tables do not grow and total work remains linear.
 
 [Root tests](../../../src/root_test.zig) compare public measurements with cluster
 measurement; [scanner tests](../../../src/scan_test.zig) compare ASCII detectors

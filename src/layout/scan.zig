@@ -1,8 +1,8 @@
 //! Internal scanning helpers shared by wrapping accelerators.
 //!
 //! `Scanner` fuses UAX #29 cluster segmentation, cluster width measurement,
-//! and the UAX #14 boundary decision at each cluster end into one pass that
-//! decodes every scalar exactly once.
+//! and the UAX #14 boundary decision at each cluster end. Ordinary clusters
+//! are measured in that pass; presentation candidates are remeasured once.
 //!
 //! Work bound: each scalar is decoded and classified once, held in a buffer
 //! of at most two tokens, and consumed exactly once by both transition
@@ -12,7 +12,9 @@
 //! cluster end. These lookahead decodes use the same counted classifier.
 //! Every valid decode loads one property record; rule predicates reuse its
 //! bits, including those of previous base scalars retained by the state.
-//! Total decodes are therefore below twice the scalar count,
+//! Segmentation/LB decodes are therefore below twice the scalar count;
+//! exceptional remeasurement adds at most one decode per input scalar.
+//! Total decodes are below three times the scalar count,
 //! independent of wrapping width and line count. The bound is enforced by
 //! instrumented-scanner counters in tests; instrumentation is a comptime
 //! option and compiles to nothing in production builds.
@@ -36,8 +38,11 @@ pub const Cluster = struct {
 };
 
 pub const Counters = struct {
+    /// Segmentation and line-break work, including LB25 lookahead.
     decoded_scalars: usize = 0,
     property_lookups: usize = 0,
+    /// Actual additional work in exceptional-cluster remeasurement.
+    presentation: grapheme.PresentationCounters = .{},
     max_buffered: usize = 0,
     /// Line-break transition entries read. One per consumed scalar is the
     /// floor; a boundary that queried and then re-consumed the same
@@ -74,7 +79,7 @@ pub fn Scanner(comptime instrumented: bool) type {
 
             while (true) {
                 const decoded = self.peek0() orelse
-                    return .{ .start = start, .end = end, .columns = measure.finish(), .hard = hard, .can_break = true };
+                    return .{ .start = start, .end = end, .columns = self.finishMeasure(measure, start, end), .hard = hard, .can_break = true };
                 const lookahead = decoded.scalarToken();
                 const category = grapheme.categoryOf(lookahead);
                 if (state.step(category)) {
@@ -103,7 +108,7 @@ pub fn Scanner(comptime instrumented: bool) type {
                     else
                         line_break.State.opportunityForOpcode(opcode, self.bytes, .al, comptime properties.record(0), false, lookahead.end, &self.classifier);
                     self.updateCounters();
-                    return .{ .start = start, .end = end, .columns = measure.finish(), .hard = hard, .can_break = opportunity != .prohibited };
+                    return .{ .start = start, .end = end, .columns = self.finishMeasure(measure, start, end), .hard = hard, .can_break = opportunity != .prohibited };
                 }
                 self.buf0 = self.buf1;
                 self.buf1 = null;
@@ -112,6 +117,15 @@ pub fn Scanner(comptime instrumented: bool) type {
                 measure.add(lookahead);
                 end = lookahead.end;
             }
+        }
+
+        inline fn finishMeasure(self: *Self, measure: grapheme.ClusterMeasure, start: usize, end: usize) u3 {
+            if (instrumented and measure.has_base and measure.needs_presentation and !measure.has_ri) {
+                if (grapheme.mayHaveSelector(self.bytes[start..end]))
+                    return grapheme.presentationWidthCounted(self.bytes[start..end], &self.counters.presentation);
+                return @intCast(@min(measure.columns, 2));
+            }
+            return measure.finish(self.bytes[start..end]);
         }
 
         inline fn consumeLineBreak(self: *Self, category: u8) void {

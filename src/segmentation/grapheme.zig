@@ -1,6 +1,8 @@
 //! Default extended-grapheme boundaries (UAX #29 core rules).
+const std = @import("std");
 const decoded_token = @import("encoding").decoded_token;
 const grapheme_properties = @import("tables").grapheme;
+pub const PresentationMeasure = @import("presentation.zig").Measure;
 
 pub const Span = struct {
     start: usize,
@@ -104,23 +106,28 @@ pub const Iterator = struct {
 
     // Table-driven: one read per scalar yields the boundary decision and the
     // successor state, replacing `classify`'s switch plus `breakBefore`'s
-    // comparison chain and `consume`'s field updates. `next` stays `inline` so
-    // the unmeasured `graphemes()` traversal can still eliminate the measure.
+    // comparison chain and `consume`'s field updates.
     pub inline fn next(self: *Iterator) ?Span {
+        return self.nextSpan(true);
+    }
+
+    /// Unmeasured callers exclude measurement explicitly: the cold rescan
+    /// must not depend on the optimizer removing an unused column count.
+    pub inline fn nextSpan(self: *Iterator, comptime measured: bool) ?Span {
         if (self.pos >= self.bytes.len) return null;
         const start = self.pos;
         const first = self.takeToken();
         var measure = ClusterMeasure{};
-        measure.add(first.scalar);
+        if (measured) measure.add(first.scalar);
         var state = TableState.init(first.category);
 
         while (self.pos < self.bytes.len) {
             const lookahead = self.peekToken();
             if (state.step(lookahead.category)) break;
             _ = self.takeToken();
-            measure.add(lookahead.scalar);
+            if (measured) measure.add(lookahead.scalar);
         }
-        return .{ .start = start, .end = self.pos, .columns = measure.finish() };
+        return .{ .start = start, .end = self.pos, .columns = if (measured) measure.finish(self.bytes[start..self.pos]) else 0 };
     }
 
     // These helpers complete the inline chain from decoded_token.at to the public
@@ -147,7 +154,7 @@ pub const Iterator = struct {
 pub const ClusterMeasure = struct {
     columns: usize = 0,
     has_base: bool = false,
-    has_pictograph: bool = false,
+    needs_presentation: bool = false,
     has_ri: bool = false,
 
     /// Regional indicators are exactly `gcb == .regional_indicator`, checked
@@ -156,37 +163,69 @@ pub const ClusterMeasure = struct {
     /// control class: 3804 code points share that class with width 1, C1
     /// controls among them, and they must keep their column.
     pub fn add(self: *ClusterMeasure, token: decoded_token.Token) void {
-        self.addImpl(token, false);
-    }
-
-    /// Streaming input can grow indefinitely. Only the distinction between
-    /// totals 0, 1, 2, and greater than 2 matters to finish(). Keep processing
-    /// pictograph/RI flags even after the counter saturates.
-    pub fn addBounded(self: *ClusterMeasure, token: decoded_token.Token) void {
-        self.addImpl(token, true);
-    }
-
-    inline fn addImpl(self: *ClusterMeasure, token: decoded_token.Token, comptime bounded: bool) void {
         const cp = token.codepoint orelse return;
         if (cp < 0x20 or cp == 0x7f) return;
         if (token.cell_width != 0) {
             self.has_base = true;
-            if (bounded)
-                self.columns = @min(self.columns +| token.cell_width, 3)
-            else
-                self.columns += token.cell_width;
+            self.columns += token.cell_width;
         }
-        if (token.grapheme.extended_pictographic) self.has_pictograph = true;
+        // Selectors also cover non-pictographic variation bases (#, *, digits).
+        // No previous-scalar or selector state lives across this scan loop.
+        if (token.presentation_candidate) self.needs_presentation = true;
         if (token.grapheme.gcb == .regional_indicator) self.has_ri = true;
     }
 
-    pub fn finish(self: ClusterMeasure) u3 {
+    pub inline fn finish(self: ClusterMeasure, bytes: []const u8) u3 {
         if (!self.has_base) return 0;
-        if (self.has_pictograph or self.has_ri) return 2;
+        if (self.needs_presentation or self.has_ri) return exceptionalWidth(bytes, self.columns, self.has_ri);
         if (self.columns > 2) return replacement_sentinel;
         return @intCast(self.columns);
     }
 };
+
+noinline fn exceptionalWidth(bytes: []const u8, columns: usize, has_ri: bool) u3 {
+    if (has_ri) return 2;
+    if (mayHaveSelector(bytes)) return presentationWidth(bytes);
+    return @intCast(@min(columns, 2));
+}
+
+/// Both selectors begin with EF. False positives only cause an unnecessary
+/// rescan; no valid selector can be missed. This byte probe runs exclusively
+/// on exceptional clusters, outside the ordinary measurement loop.
+pub fn mayHaveSelector(bytes: []const u8) bool {
+    return std.mem.indexOfScalar(u8, bytes, 0xef) != null;
+}
+
+/// Remeasure an exceptional cluster once, with selector state confined to
+/// this call. Reader uses the same accumulator incrementally without replay.
+pub noinline fn presentationWidth(bytes: []const u8) u3 {
+    return presentationWidthImpl(false, bytes, undefined);
+}
+
+pub const PresentationCounters = struct {
+    decoded_scalars: usize = 0,
+    property_lookups: usize = 0,
+};
+
+pub noinline fn presentationWidthCounted(bytes: []const u8, counters: *PresentationCounters) u3 {
+    return presentationWidthImpl(true, bytes, counters);
+}
+
+fn presentationWidthImpl(comptime instrumented: bool, bytes: []const u8, counters: *PresentationCounters) u3 {
+    var measure: PresentationMeasure = .{};
+    var tokens = decoded_token.iterator(bytes);
+    while (tokens.next()) |token| {
+        if (instrumented) {
+            counters.decoded_scalars += 1;
+            if (token.codepoint) |cp| {
+                counters.property_lookups += 1;
+                if ((cp == 0xfe0e or cp == 0xfe0f) and measure.previous != null) counters.property_lookups += 1;
+            }
+        }
+        measure.addBounded(token);
+    }
+    return measure.finish();
+}
 
 pub fn iterator(bytes: []const u8) Iterator {
     return .{ .bytes = bytes };

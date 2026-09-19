@@ -84,7 +84,7 @@ def emit_grapheme_record_table(out, records, gcb, incb, ep):
     emit_grapheme_api(out, gcb, incb, ep)
 
     compact = [
-        (value & 0x7f) | (((value >> BIT_WIDTH) & 0x3) << 7)
+        (value & 0x7f) | (((value >> BIT_WIDTH) & 0x3) << 7) | (((value >> BIT_PRESENTATION) & 1) << 9)
         for value in records
     ]
     blocks, index = {}, []
@@ -101,7 +101,8 @@ def emit_grapheme_record_table(out, records, gcb, incb, ep):
     out.write("    incb: IndicConjunctBreak,\n")
     out.write("    extended_pictographic: bool,\n")
     out.write("    width: u2,\n")
-    out.write("    _padding: u7 = 0,\n")
+    out.write("    presentation_candidate: bool,\n")
+    out.write("    _padding: u6 = 0,\n")
     out.write("};\n\n")
     out.write("pub const record_default: Record = @bitCast(@as(u16, 0x80));\n")
     out.write(f"pub const record_block_shift = {BLOCK_SHIFT};\n\n")
@@ -166,6 +167,7 @@ INCB_ORDER = ["None", "InCB; Consonant", "InCB; Extend", "InCB; Linker"]
 # Bit layout of Record, mirrored by the packed struct emitted below. Zig packs
 # from the least significant bit, so this order is the struct field order.
 BIT_GCB, BIT_INCB, BIT_EP, BIT_LB, BIT_WIDTH, BIT_PRED, BIT_LB_CATEGORY = 0, 4, 6, 7, 13, 15, 23
+BIT_PRESENTATION = 30
 PREDICATES = ["lb_op30", "lb_cp30", "lb_qu_pi", "lb_qu_pf", "lb_ba_hyphen",
               "lb_sa_mn_mc", "east_asian_wide", "ep_cn"]
 BLOCK_SHIFT = 8
@@ -253,6 +255,7 @@ def build_records(gcb, incb, ep, lb, eaw, categories, lb_names):
         value |= int(pictographic) << BIT_EP
         value |= lb_index[lb_class] << BIT_LB
         value |= width << BIT_WIDTH
+        value |= int(pictographic or cp in (0xFE0E, 0xFE0F)) << BIT_PRESENTATION
         for offset, bit in enumerate(bits):
             value |= int(bit) << (BIT_PRED + offset)
         records[cp] = value
@@ -301,7 +304,8 @@ def emit_record_table(out, records, lb_names, malformed_category, default_catego
     for name in PREDICATES:
         out.write(f"    {name}: bool,\n")
     out.write("    line_break_category: u7,\n")
-    out.write("    _padding: u2 = 0,\n")
+    out.write("    presentation_candidate: bool,\n")
+    out.write("    _padding: u1 = 0,\n")
     out.write("};\n\n")
 
     out.write(f"pub const line_break_malformed_category: u7 = {malformed_category};\n")

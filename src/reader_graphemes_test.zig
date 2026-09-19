@@ -346,7 +346,7 @@ test "measured iteration keeps decoder error and no-lookahead contracts" {
 test "bounded measurement saturates but continues tracking presentation flags" {
     const grapheme = @import("segmentation").grapheme;
     const token = @import("encoding").decoded_token;
-    var measure: grapheme.ClusterMeasure = .{};
+    var measure: grapheme.PresentationMeasure = .{};
     for (0..100_000) |_| measure.addBounded(token.fromCodepoint(0, 0, 'a'));
     try std.testing.expectEqual(@as(usize, 3), measure.columns);
     try std.testing.expectEqual(@as(usize, 1), grapheme.displayColumns(measure.finish()));
@@ -355,6 +355,20 @@ test "bounded measurement saturates but continues tracking presentation flags" {
     try std.testing.expectEqual(@as(usize, 3), measure.columns);
     try std.testing.expectEqual(@as(usize, 2), grapheme.displayColumns(measure.finish()));
     try std.testing.expect(grapheme.isRenderable(measure.finish()));
+}
+
+test "presentation updates preserve adjacency across one-byte refills" {
+    const bytes = "⌚\u{fe0e}\u{fe0f}#\u{fe0f}\u{20e3}▪\u{301}\u{fe0f}❤\u{fe0f}\u{200d}🔥";
+    const columns = [_]u2{ 2, 1, 1, 1, 2, 2, 1, 1, 1, 1, 2, 2, 2, 2 };
+    var storage: [4]u8 = undefined;
+    var input = Chunked.init(bytes, &storage);
+    var it = unicode.reader(&input.interface).graphemes().measured();
+    for (columns) |expected| {
+        const update = (try it.next()).?;
+        try std.testing.expectEqual(expected, update.columns);
+        try std.testing.expect(update.renderable);
+    }
+    try std.testing.expect((try it.next()) == null);
 }
 
 test "long measured grapheme needs no growing buffer" {

@@ -44,15 +44,20 @@ std.debug.print("{d}\n", .{zunic.text("\t\xff").width()});
 | Combining marks without a base | Zero |
 | Wide/fullwidth scalar bases | Two per base before cluster aggregation |
 | East Asian ambiguous characters | Narrow under the pinned width policy |
-| Pictographic or regional-indicator cluster with a base | Two per cluster |
+| Pictographic cluster with a base | Sum of presentation-adjusted base widths, capped at two |
+| Regional-indicator cluster | Two per cluster |
+| Valid variation base immediately followed by VS16 | Base uses two columns |
+| Emoji-default variation base immediately followed by VS15 | Base uses one column, except Enclosed Ideographic Supplement bases |
 | Ordinary cluster whose base widths sum to one or two | That sum |
 | Ordinary cluster whose base widths sum beyond two | One replacement column |
 | C0 controls, DEL, and malformed bytes themselves | Zero |
 
 Width follows the generated scalar properties and cluster policy; it does not
-query the terminal, apply locale settings, or shape glyphs. The pictographic
-rule is broad: do not assume exact agreement with every terminal's emoji or
-variation-selector rendering.
+query the terminal, apply locale settings, or shape glyphs. VS15/VS16 apply
+only to an immediately preceding base in the pinned emoji variation data:
+bare `▪` is one column and `▪\u{FE0F}` is two. The VS15 policy follows
+`unicode-width` 0.2.2; terminals disagree on whether text presentation changes
+the column count. Scalar `cp().width()` has no selector context.
 
 The zero-width scalar categories are nonspacing marks (`Mn`), enclosing marks
 (`Me`), and format characters (`Cf`), except soft hyphen (U+00AD), which keeps

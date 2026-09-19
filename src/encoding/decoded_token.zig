@@ -12,6 +12,8 @@ pub const Token = struct {
     codepoint: ?u21,
     grapheme: grapheme_properties.GraphemeProperties,
     cell_width: u2,
+    /// Pictograph or VS15/VS16; independent of segmentation properties.
+    presentation_candidate: bool,
 };
 
 /// Internal token used by composed scans that also need line-break predicates.
@@ -29,6 +31,7 @@ pub const ClassifiedToken = struct {
             .codepoint = self.codepoint,
             .grapheme = properties.graphemeOf(self.record),
             .cell_width = self.record.width,
+            .presentation_candidate = self.record.presentation_candidate,
         };
     }
 };
@@ -98,6 +101,7 @@ inline fn malformedRecord() properties.Record {
         r.gcb = .other;
         r.incb = .none;
         r.extended_pictographic = false;
+        r.presentation_candidate = false;
         r.line_break = .al;
         r.width = 0;
         r.line_break_category = properties.line_break_malformed_category;
@@ -114,6 +118,7 @@ inline fn malformedToken(start: usize, end: usize) Token {
         .codepoint = null,
         .grapheme = .{ .gcb = .other, .incb = .none, .extended_pictographic = false },
         .cell_width = 0,
+        .presentation_candidate = false,
     };
 }
 
@@ -148,6 +153,7 @@ pub inline fn at(bytes: []const u8, start: usize) Token {
         .codepoint = bytes[start],
         .grapheme = grapheme_properties.grapheme_ascii[bytes[start]],
         .cell_width = 1,
+        .presentation_candidate = false,
     };
 
     const step = utf8.step(bytes[start..]);
@@ -167,6 +173,7 @@ pub inline fn fromCodepoint(start: usize, end: usize, cp: u21) Token {
         .codepoint = cp,
         .grapheme = grapheme_properties.graphemeOf(r),
         .cell_width = r.width,
+        .presentation_candidate = r.presentation_candidate,
     };
 }
 

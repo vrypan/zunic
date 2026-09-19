@@ -11,8 +11,9 @@ and looking up the same character separately for each operation.
 
 The scanner keeps at most two tokens. Most characters are decoded once;
 one numeric line-break rule can inspect a second following character again.
-The tests check that total decoding stays below twice the character count,
-regardless of line width or how many lines the caller requests.
+Presentation candidates may add one cluster remeasurement; instrumentation
+counts those decodes separately. Total decoding stays below three times the
+character count and remains linear regardless of line width or line count.
 
 ## Keep a fitting break without starting over
 

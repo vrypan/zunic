@@ -17,7 +17,7 @@ pub fn measureCluster(bytes: []const u8) Measure {
     var measure = grapheme.ClusterMeasure{};
     while (tokens.next()) |token| measure.add(token);
     // Both fields come from the one encoding, so neither restates it here.
-    const columns = measure.finish();
+    const columns = measure.finish(bytes);
     return .{
         .columns = @intCast(grapheme.displayColumns(columns)),
         .renderable = grapheme.isRenderable(columns),
@@ -104,8 +104,8 @@ fn generalWidthFrom(bytes: []const u8, start: usize) usize {
     return total;
 }
 
-// `grapheme.Iterator.next` is inline so each instantiation can drop the
-// cluster measure it does not read. Keeping the loop out of line here stops
+// `grapheme.Iterator.next` inlines segmentation and ordinary measurement.
+// Keeping the loop out of line here stops
 // that body from crowding the ASCII shortcut's inlining budget above, the same
 // split `wrap.nextGeneral` makes for the same reason.
 noinline fn generalTextWidth(bytes: []const u8) usize {

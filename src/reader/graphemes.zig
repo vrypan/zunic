@@ -43,7 +43,7 @@ pub fn Iterator(comptime CodepointIterator: type, comptime next_decoded: anytype
         points: CodepointIterator,
         previous: ?u21 = null,
         state: if (include_measure) grapheme.TableState else segmentation.stream.GraphemeState = if (include_measure) .{ .id = 0 } else .{},
-        measure: if (include_measure) grapheme.ClusterMeasure else void = if (include_measure) .{} else {},
+        measure: if (include_measure) grapheme.PresentationMeasure else void = if (include_measure) .{} else {},
         exhausted: bool = false,
 
         /// Select measurement before calling next(). Copies share the Reader;

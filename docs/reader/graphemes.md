@@ -130,8 +130,9 @@ earlier grapheme bytes and widths cannot be reconstructed from boundary state.
 Copies still share the underlying Reader cursor.
 
 Measurement uses constant storage, performs no lookahead, and does not retain
-the complete grapheme. The width counter saturates once the total exceeds two
-columns while still tracking pictographic and regional-indicator properties.
+the complete grapheme. A selector can revise its preceding base: `⌚` reports
+two columns, and an immediately following VS15 changes the current cluster to
+one. The width counter remains bounded while preserving this behavior.
 Omitting `.measured()` excludes this state and measurement work.
 
 ## Why incremental updates?
