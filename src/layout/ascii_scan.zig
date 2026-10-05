@@ -194,7 +194,6 @@ pub fn asciiLineCounted(comptime instrumented: bool, bytes: []const u8, start: u
     var columns: usize = 0;
     if (selectedBackend() != .off and simdSupported()) {
         const V = @Vector(simd_width, u8);
-        const Mask = @Int(.unsigned, simd_width);
         while (pos + simd_width <= bytes.len) : (pos += simd_width) {
             const chunk: V = bytes[pos..][0..simd_width].*;
             if (instrumented) examined.* += simd_width;
@@ -209,8 +208,7 @@ pub fn asciiLineCounted(comptime instrumented: bool, bytes: []const u8, start: u
             const ends_run = (chunk > @as(V, @splat(0x7E))) |
                 ((chunk >= @as(V, @splat(0x0A))) & (chunk <= @as(V, @splat(0x0D))));
             if (@reduce(.Or, ends_run)) break;
-            const printable = chunk >= @as(V, @splat(0x20));
-            columns += @popCount(@as(Mask, @bitCast(printable)));
+            columns += printableCount(chunk);
             if (columns > max_columns) return null;
         }
     }
@@ -248,16 +246,37 @@ pub fn asciiRun(bytes: []const u8, start: usize) AsciiRun {
     var columns: usize = 0;
     if (selectedBackend() != .off and simdSupported()) {
         const V = @Vector(simd_width, u8);
-        const Mask = @Int(.unsigned, simd_width);
         while (pos + simd_width <= bytes.len) : (pos += simd_width) {
             const chunk: V = bytes[pos..][0..simd_width].*;
             if (@reduce(.Or, chunk >= @as(V, @splat(0x80)))) break;
-            const printable = (chunk >= @as(V, @splat(0x20))) & (chunk != @as(V, @splat(0x7F)));
-            columns += @popCount(@as(Mask, @bitCast(printable)));
+            columns += printableCount(chunk);
         }
     }
     while (pos < bytes.len and bytes[pos] < 0x80) : (pos += 1) {
         if (bytes[pos] >= 0x20 and bytes[pos] != 0x7F) columns += 1;
     }
     return .{ .end = pos, .columns = columns };
+}
+
+/// Printable bytes (0x20..0x7E) in a chunk known to be ASCII. Each lane is
+/// computed arithmetically: for a byte below 0x80, bit 7 of `b + 0x60` is set
+/// from 0x20 up, and bit 7 of `b + 1` only for DEL. Counting a bool mask with
+/// `@popCount` or a select is widened lane by lane on aarch64 and costs about
+/// twice as much.
+inline fn printableCount(chunk: @Vector(simd_width, u8)) usize {
+    const V = @Vector(simd_width, u8);
+    const at_least_space = (chunk +% @as(V, @splat(0x60))) >> @splat(7);
+    const del = (chunk +% @as(V, @splat(1))) >> @splat(7);
+    return @reduce(.Add, @as(@Vector(simd_width, u16), at_least_space - del));
+}
+
+test "printable count matches the byte classes" {
+    var bytes: [128]u8 = undefined;
+    for (&bytes, 0..) |*byte, i| byte.* = @intCast(i);
+    for (0..128 / simd_width) |i| {
+        const chunk: @Vector(simd_width, u8) = bytes[i * simd_width ..][0..simd_width].*;
+        var expected: usize = 0;
+        for (bytes[i * simd_width ..][0..simd_width]) |byte| expected += @intFromBool(byte >= 0x20 and byte != 0x7F);
+        try std.testing.expectEqual(expected, printableCount(chunk));
+    }
 }
