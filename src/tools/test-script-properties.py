@@ -38,7 +38,7 @@ def section(text, declaration):
 
 
 def numeric_array(text, name):
-    body = section(text, f"const {name} = [_]u" + ("21" if name == "extension_starts" else "16" if name == "primary_stage2" else "8"))
+    body = section(text, f"const {name} = [_]u" + ("21" if name == "extension_starts" else "16" if name == "primary_stage1" else "8"))
     return [int(value, 0) for value in re.findall(r"0x[0-9A-F]+|\d+", body)]
 
 
@@ -112,12 +112,14 @@ def main():
     singletons = script_array(text, "singleton_values", tag_ids)
     if (len(stage1), len(stage2), len(starts), len(ranges), len(descriptors), len(members), len(singletons)) != (8704, 32640, 176, 176, 118, 536, 175):
         raise SystemExit("generated Script table counts changed")
+    if any(offset % 128 or offset + 128 > len(stage2) for offset in stage1):
+        raise SystemExit("primary offset is unaligned or outside stage2")
     if singletons != list(range(175)):
         raise SystemExit("singleton table does not follow enum ordinals")
 
     for cp in range(MAX_CP):
-        page = stage1[cp >> 7]
-        primary = stage2[(page << 7) | (cp & 127)]
+        offset = stage1[cp >> 7]
+        primary = stage2[offset | (cp & 127)]
         if primary != expected_primary[cp]:
             raise SystemExit(f"Script mismatch at U+{cp:04X}: {tags[primary]} != {tags[expected_primary[cp]]}")
 

@@ -23,14 +23,15 @@ trimming. Case folding has an ASCII uppercase fast path followed by indexed
 mapping tables, returning an owned buffer of at most three values.
 
 Primary Script uses a fixed two-stage prefix trie. The high bits index 8,704
-byte-sized page IDs, and the low seven bits select a `Script` within one of 255
-deduplicated 128-codepoint pages. Its arrays occupy 41,344 bytes and every
-in-range lookup performs two dependent reads. This layout measured 1.32 times
-the throughput of the smaller three-stage trie on the eight multilingual
-benchmark corpora. Script_Extensions stays in separate sparse storage so a
-primary-only caller does not retain it: 176 merged ranges use binary search,
+precomputed `u16` offsets, and the low seven bits select a `Script` within one
+of 255 deduplicated 128-codepoint pages. Its arrays occupy 50,048 bytes and
+every in-range lookup performs two dependent reads. Storing offsets avoids
+shifting the first lookup result before the second read. On Apple M4 with
+Zig 0.17, this reduced Script lookup time by about 8% compared with byte-sized
+page IDs, at a cost of 8,704 additional table bytes. Script_Extensions stays in
+separate sparse storage so a primary-only caller does not retain it: 176 merged ranges use binary search,
 then address 118 deduplicated static sets. The extension arrays occupy 2,003
-bytes, for 43,347 bytes when both methods are retained.
+bytes, for 52,051 bytes when both methods are retained.
 
 Bidirectional classification uses another two-stage prefix table with the same
 seven-bit page suffix. Its raw one-byte leaf combines the 23-value Bidi_Class,

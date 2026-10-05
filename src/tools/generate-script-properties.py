@@ -100,13 +100,16 @@ def primary_table(ranges, ids):
         dense[lo:hi + 1] = bytes([ids[name]]) * (hi - lo + 1)
     page_size = 1 << PAGE_SHIFT
     pages = {}
+    # Store byte offsets to avoid shifting a dependent table load at runtime.
     stage1 = []
     for base in range(0, MAX_CP, page_size):
         page = bytes(dense[base:base + page_size])
-        stage1.append(pages.setdefault(page, len(pages)))
+        stage1.append(pages.setdefault(page, len(pages)) * page_size)
     stage2 = [value for page in sorted(pages, key=pages.get) for value in page]
     if (len(stage1), len(pages), len(stage2)) != (8704, 255, 32640):
         raise ValueError("pinned primary trie geometry changed")
+    if max(stage1) > 0xFFFF:
+        raise ValueError("primary offsets no longer fit u16")
     return stage1, stage2, len(pages)
 
 
@@ -154,7 +157,7 @@ def emit(path, names, stage1, stage2, ranges, descriptors, members):
         out.write("};\n\n")
         out.write("const ExtensionRange = packed struct(u16) { length_minus_one: u6, set_id: u7, _padding: u3 = 0 };\n")
         out.write("const SetDescriptor = packed struct(u16) { offset: u10, len: u5, _padding: u1 = 0 };\n\n")
-        out.write("const primary_stage1 = [_]u8{\n"); write_values(out, stage1, width=24); out.write("};\n\n")
+        out.write("const primary_stage1 = [_]u16{\n"); write_values(out, stage1, width=24); out.write("};\n\n")
         out.write("const primary_stage2 = [_]Script{\n"); write_values(out, stage2, lambda value: "." + tags[value], 12); out.write("};\n\n")
         out.write("const extension_starts = [_]u21{\n"); write_values(out, [lo for lo, _, _ in ranges], lambda value: f"0x{value:X}", 12); out.write("};\n\n")
         out.write("const extension_ranges = [_]ExtensionRange{\n")
@@ -168,11 +171,11 @@ def emit(path, names, stage1, stage2, ranges, descriptors, members):
         out.write("pub const primary_table_bytes = @sizeOf(@TypeOf(primary_stage1)) + @sizeOf(@TypeOf(primary_stage2));\n")
         out.write("pub const extensions_table_bytes = @sizeOf(@TypeOf(extension_starts)) + @sizeOf(@TypeOf(extension_ranges)) + @sizeOf(@TypeOf(set_descriptors)) + @sizeOf(@TypeOf(set_members)) + @sizeOf(@TypeOf(singleton_values));\n")
         out.write("pub const table_bytes = primary_table_bytes + extensions_table_bytes;\n\n")
-        out.write("comptime {\n    if (@typeInfo(Script).@\"enum\".field_names.len != 175) @compileError(\"Script count changed\");\n    if (primary_table_bytes != 41344 or extensions_table_bytes != 2003 or table_bytes != 43347) @compileError(\"Script table sizes changed\");\n}\n\n")
+        out.write("comptime {\n    if (@typeInfo(Script).@\"enum\".field_names.len != 175) @compileError(\"Script count changed\");\n    if (primary_table_bytes != 50048 or extensions_table_bytes != 2003 or table_bytes != 52051) @compileError(\"Script table sizes changed\");\n}\n\n")
         out.write("pub fn script(cp: u21) Script {\n")
         out.write("    if (cp >= 0x110000) return .unknown;\n")
-        out.write("    const page = primary_stage1[cp >> 7];\n")
-        out.write("    return primary_stage2[(@as(usize, page) << 7) | (cp & 127)];\n}\n\n")
+        out.write("    const offset = primary_stage1[cp >> 7];\n")
+        out.write("    return primary_stage2[@as(usize, offset) | (cp & 127)];\n}\n\n")
         out.write("pub fn scriptExtensions(cp: u21) []const Script {\n")
         out.write("    if (cp >= 0x110000) return singleton_values[0..1];\n")
         out.write("    var low: usize = 0;\n    var high: usize = extension_starts.len;\n")
@@ -210,7 +213,7 @@ def diagnostic(ranges, ids):
     if two_best != (41344, PAGE_SHIFT, 255, 1):
         raise ValueError("pinned two-stage geometry changed")
     print(f"three-stage geometry best: {best[0]} bytes at S1={best[1]}, S2={best[2]}")
-    print(f"two-stage geometry best: {two_best[0]} bytes at page shift={two_best[1]}, {two_best[2]} pages, u{two_best[3] * 8} indices (selected)")
+    print(f"two-stage geometry best: {two_best[0]} bytes at page shift={two_best[1]}, {two_best[2]} pages, u{two_best[3] * 8} page IDs (size minimum)")
 
 
 def main():
@@ -228,6 +231,7 @@ def main():
     emit(args.output, names, stage1, stage2, ranges, descriptors, members)
     subprocess.run(["zig", "fmt", str(args.output)], check=True, stdout=subprocess.DEVNULL)
     diagnostic(script_ranges, ids)
+    print(f"selected primary table: {len(stage1) * 2 + len(stage2)} bytes, u16 offsets, page shift={PAGE_SHIFT}")
     print(f"wrote {args.output}: {len(names)} scripts, {pages} primary pages, {len(ranges)} extension ranges")
 
 
