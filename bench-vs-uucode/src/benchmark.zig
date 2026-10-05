@@ -46,8 +46,8 @@ const Operation = enum {
 const Selection = std.EnumSet(Operation);
 
 fn parseOperations(value: []const u8) !Selection {
-    if (std.mem.eql(u8, value, "all")) return Selection.initFull();
-    var selection = Selection.initEmpty();
+    if (std.mem.eql(u8, value, "all")) return Selection.full;
+    var selection = Selection.empty;
     var names = std.mem.splitScalar(u8, value, ',');
     while (names.next()) |name| {
         const operation = std.meta.stringToEnum(Operation, name) orelse return error.UnknownOperation;
@@ -167,8 +167,8 @@ fn printDump(out: *std.Io.Writer, allocator: std.mem.Allocator, selection: Selec
         try out.print("case={s} input=", .{case.name});
         for (case.text) |byte| try out.print("{x:0>2}", .{byte});
         try out.writeByte('\n');
-        inline for (@typeInfo(Operation).@"enum".fields) |field|
-            if (selection.contains(@enumFromInt(field.value))) try dumpOne(out, case, @enumFromInt(field.value));
+        inline for (comptime std.meta.tags(Operation)) |operation|
+            if (selection.contains(operation)) try dumpOne(out, case, operation);
     }
     try out.flush();
 }
@@ -191,12 +191,12 @@ pub fn main(init: std.process.Init) !void {
             \\
         , .{peer.name});
         try out.writeAll("Operations (default: all):\n");
-        inline for (@typeInfo(Operation).@"enum".fields) |field|
-            try out.print("  {s}\n", .{field.name});
+        inline for (comptime std.meta.fieldNames(Operation)) |name|
+            try out.print("  {s}\n", .{name});
         return out.flush();
     }
     const selection = if (args.len == 2)
-        Selection.initFull()
+        Selection.full
     else if (args.len == 4 and std.mem.eql(u8, args[2], "--operations"))
         try parseOperations(args[3])
     else
@@ -209,8 +209,8 @@ pub fn main(init: std.process.Init) !void {
     });
     var cases: [source_cases.len]Case = undefined;
     for (source_cases, &cases) |source, *case| case.* = try prepareCase(init.arena.allocator(), source);
-    for (cases) |case| inline for (@typeInfo(Operation).@"enum".fields) |field|
-        if (selection.contains(@enumFromInt(field.value))) try measure(init.io, out, case, @enumFromInt(field.value));
+    for (cases) |case| inline for (comptime std.meta.tags(Operation)) |operation|
+        if (selection.contains(operation)) try measure(init.io, out, case, operation);
     try out.flush();
 }
 
@@ -221,8 +221,8 @@ test "every timed operation is instantiated" {
         .text = "Aßǆ́⅓ﬁ",
         .codepoints = &codepoints,
     };
-    inline for (@typeInfo(Operation).@"enum".fields) |field| {
-        const result = run(@enumFromInt(field.value), case);
+    inline for (comptime std.meta.tags(Operation)) |operation| {
+        const result = run(operation, case);
         try std.testing.expect(result.units <= case.text.len);
     }
 }

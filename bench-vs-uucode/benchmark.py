@@ -64,7 +64,7 @@ PEERS = {
     "zunic": {"binary": "zunic-bench", "unicode": "17.0.0"},
     "uucode": {"binary": "uucode-bench", "unicode": "17.0.0"},
 }
-UUCODE_COMMIT = "f67fa5dbef5c9de57773dbe2f7a02bebc7e20301"
+UUCODE_COMMIT = "cba2b5bc9f79d200541a7f4fdd62a1ba5ca5f166"
 
 
 def parse_operations(value: str) -> tuple[str, ...]:

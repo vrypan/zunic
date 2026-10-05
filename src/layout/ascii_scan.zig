@@ -194,7 +194,7 @@ pub fn asciiLineCounted(comptime instrumented: bool, bytes: []const u8, start: u
     var columns: usize = 0;
     if (selectedBackend() != .off and simdSupported()) {
         const V = @Vector(simd_width, u8);
-        const Mask = std.meta.Int(.unsigned, simd_width);
+        const Mask = @Int(.unsigned, simd_width);
         while (pos + simd_width <= bytes.len) : (pos += simd_width) {
             const chunk: V = bytes[pos..][0..simd_width].*;
             if (instrumented) examined.* += simd_width;
@@ -248,7 +248,7 @@ pub fn asciiRun(bytes: []const u8, start: usize) AsciiRun {
     var columns: usize = 0;
     if (selectedBackend() != .off and simdSupported()) {
         const V = @Vector(simd_width, u8);
-        const Mask = std.meta.Int(.unsigned, simd_width);
+        const Mask = @Int(.unsigned, simd_width);
         while (pos + simd_width <= bytes.len) : (pos += simd_width) {
             const chunk: V = bytes[pos..][0..simd_width].*;
             if (@reduce(.Or, chunk >= @as(V, @splat(0x80)))) break;

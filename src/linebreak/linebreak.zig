@@ -208,8 +208,8 @@ test "SA combining marks inherit the preceding line-break class" {
 test "semantic machine exhaustive category triples and malformed tails" {
     // Select witnesses independently from the generated table: retain every
     // predicate observed by the standard, but not unrelated width/GB fields.
-    const line_break_classes = @typeInfo(properties.LineBreak).@"enum".fields.len;
-    var seen = [_]bool{false} ** (line_break_classes * 512);
+    const line_break_classes = @typeInfo(properties.LineBreak).@"enum".field_names.len;
+    var seen: [line_break_classes * 512]bool = @splat(false);
     var witnesses: [128]u21 = undefined;
     var count: usize = 0;
     for (0..0x110000) |value| {
@@ -221,7 +221,7 @@ test "semantic machine exhaustive category triples and malformed tails" {
             r.lb_cp30,         r.ep_cn,    r.lb_sa_mn_mc, cp == 0x2010,
             cp == 0x25cc,
         };
-        var key: usize = @as(usize, @intFromEnum(r.line_break)) * 512;
+        var key: usize = @as(usize, @backingInt(r.line_break)) * 512;
         for (bits, 0..) |bit, shift| key += @as(usize, @intFromBool(bit)) << @intCast(shift);
         if (seen[key]) continue;
         seen[key] = true;

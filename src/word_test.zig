@@ -171,9 +171,9 @@ test "WB3c and WB3d read raw adjacency, not the folded context" {
 
 test "regional indicators pair up, and folded characters do not reset them" {
     const ri = "\u{1F1E6}";
-    try expectSegments(ri ** 2, &.{n(0, 8)});
-    try expectSegments(ri ** 4, &.{ n(0, 8), n(8, 16) });
-    try expectSegments(ri ** 5, &.{ n(0, 8), n(8, 16), n(16, 20) });
+    try expectSegments(repeat(ri, 2), &.{n(0, 8)});
+    try expectSegments(repeat(ri, 4), &.{ n(0, 8), n(8, 16) });
+    try expectSegments(repeat(ri, 5), &.{ n(0, 8), n(8, 16), n(16, 20) });
     // The mark folds into the first indicator, so the pair still forms.
     try expectSegments(ri ++ "\u{0308}" ++ ri, &.{n(0, 10)});
     // A letter between them resets the parity.
@@ -296,7 +296,7 @@ test "long regional-indicator runs keep their parity across folded marks" {
 /// listed by hand, so a witness set can never fall behind the data.
 fn witnesses(buffer: []u21) []const u21 {
     const word_properties = @import("tables").word;
-    var seen = std.StaticBitSet(128).initEmpty();
+    var seen = std.StaticBitSet(128).empty;
     var len: usize = 0;
     var cp: u21 = 0;
     while (cp < 0x110000) : (cp += 1) {
@@ -325,16 +325,16 @@ fn expectSameSegmentation(bytes: []const u8) !void {
 }
 
 test "the compiled table decides exactly as the rules do" {
-    const classes = @typeInfo(word.WordBreak).@"enum".fields.len;
+    const classes = @typeInfo(word.WordBreak).@"enum".field_names.len;
     for (0..classes) |sig| {
         for (0..classes) |sig_prev| {
             for (0..2) |parity| {
                 for (0..classes) |cur| {
                     const args = .{
-                        @as(word.WordBreak, @enumFromInt(sig)),
-                        @as(word.WordBreak, @enumFromInt(sig_prev)),
+                        @as(word.WordBreak, @fromBackingInt(@intCast(sig))),
+                        @as(word.WordBreak, @fromBackingInt(@intCast(sig_prev))),
                         parity == 1,
-                        @as(word.WordBreak, @enumFromInt(cur)),
+                        @as(word.WordBreak, @fromBackingInt(@intCast(cur))),
                     };
                     try std.testing.expectEqualDeep(
                         @call(.auto, word.lateDecision, args),
@@ -486,4 +486,9 @@ test "ASCII iterator copies keep independent progress and stable exhaustion" {
     var counted = word.instrumentedIterator(bytes);
     while (counted.next()) |_| {}
     try std.testing.expectEqual(bytes.len, counted.counters.scalars);
+}
+
+inline fn repeat(comptime bytes: []const u8, comptime count: usize) *const [bytes.len * count]u8 {
+    const parts: [count][bytes.len]u8 = @splat(bytes[0..bytes.len].*);
+    return @ptrCast(&parts);
 }

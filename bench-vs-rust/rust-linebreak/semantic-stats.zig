@@ -22,7 +22,7 @@ pub fn main(init: std.process.Init) !void {
         const first = classifier.at(bytes, 0);
         var state = lb.State.firstWithRecord(first.record.line_break, first.codepoint orelse 0, first.record);
         var token = classifier.at(bytes, first.end);
-        var counts = [_]usize{0} ** 8;
+        var counts: [8]usize = @splat(0);
         var scalars: usize = 1;
         while (token.start < bytes.len) {
             const next = classifier.at(bytes, token.end);

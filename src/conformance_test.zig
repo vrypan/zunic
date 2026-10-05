@@ -305,7 +305,7 @@ test "Unicode 17.0.0 NormalizationTest" {
     // Part 1 lists every code point with a non-trivial normalization; every
     // scalar absent from it must be unchanged by both canonical forms.
     var in_part1 = false;
-    var part1_seen = std.StaticBitSet(0x110000).initEmpty();
+    var part1_seen = std.StaticBitSet(0x110000).empty;
     while (lines.next()) |raw_line| {
         const line = raw_line[0 .. std.mem.indexOfScalar(u8, raw_line, '#') orelse raw_line.len];
         const trimmed = std.mem.trim(u8, line, " \t\r");

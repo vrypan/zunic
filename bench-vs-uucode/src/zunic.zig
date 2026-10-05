@@ -66,7 +66,7 @@ pub inline fn terminalProperties(bytes: []const u8) Stats {
         const cp = step.cp orelse 0xfffd;
         const props = zunic.cp(cp).terminal();
         sums[0] +%= pos;
-        sums[1] +%= @intFromEnum(props.eastAsianWidth);
+        sums[1] +%= @backingInt(props.eastAsianWidth);
         sums[2] +%= @intFromBool(props.isEmojiPresentation);
         sums[3] +%= @intFromBool(props.isEmojiVariationBase);
         sums[4] +%= @intFromBool(props.isEmojiModifier);
@@ -84,7 +84,7 @@ pub inline fn terminalLookup(codepoints: []const u21) Stats {
     for (codepoints) |cp| {
         const props = zunic.cp(cp).terminal();
         sums[0] +%= cp;
-        sums[1] +%= @intFromEnum(props.eastAsianWidth);
+        sums[1] +%= @backingInt(props.eastAsianWidth);
         sums[2] +%= @intFromBool(props.isEmojiPresentation);
         sums[3] +%= @intFromBool(props.isEmojiVariationBase);
         sums[4] +%= @intFromBool(props.isEmojiModifier);
@@ -145,7 +145,7 @@ pub inline fn numericProperties(codepoints: []const u21) Stats {
     for (codepoints) |cp| {
         sums[0] +%= cp;
         if (zunic.cp(cp).numeric()) |value| {
-            sums[1] +%= @intFromEnum(value.kind) + 1;
+            sums[1] +%= @backingInt(value.kind) + 1;
             sums[2] +%= @as(usize, @bitCast(value.numerator));
             sums[3] +%= value.denominator;
         }
@@ -157,13 +157,13 @@ pub inline fn script(codepoints: []const u21) Stats {
     var sums: [2]usize = @splat(0);
     for (codepoints) |cp| {
         sums[0] +%= cp;
-        sums[1] +%= @intFromEnum(zunic.cp(cp).script());
+        sums[1] +%= @backingInt(zunic.cp(cp).script());
     }
     return .{ .units = codepoints.len, .checksum = finishSums(sums) };
 }
 
 fn bidiClass(value: zunic.BidiClass) usize {
-    return @intFromEnum(value);
+    return @backingInt(value);
 }
 
 pub inline fn bidiProperties(codepoints: []const u21) Stats {
@@ -173,7 +173,7 @@ pub inline fn bidiProperties(codepoints: []const u21) Stats {
         sums[0] +%= cp;
         sums[1] +%= bidiClass(props.class);
         sums[2] +%= @intFromBool(props.isMirrored);
-        sums[3] +%= @intFromEnum(props.pairedBracketType);
+        sums[3] +%= @backingInt(props.pairedBracketType);
     }
     return .{ .units = codepoints.len, .checksum = finishSums(sums) };
 }
@@ -210,7 +210,7 @@ pub inline fn decomposition(codepoints: []const u21) Stats {
         sums[0] +%= cp;
         if (zunic.cp(cp).decomposition()) |value| {
             sums[1] +%= 1;
-            sums[2] +%= @intFromEnum(value.type);
+            sums[2] +%= @backingInt(value.type);
             sums[3] +%= value.mapping.len;
             for (value.mapping) |mapped| sums[4] +%= mapped;
         }
@@ -288,7 +288,7 @@ pub fn dumpTerminalProperties(out: *std.Io.Writer, bytes: []const u8) !void {
         const props = zunic.cp(cp).terminal();
         try out.print("{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             pos,
-            @intFromEnum(props.eastAsianWidth),
+            @backingInt(props.eastAsianWidth),
             @intFromBool(props.isEmojiPresentation),
             @intFromBool(props.isEmojiVariationBase),
             @intFromBool(props.isEmoji),
@@ -306,7 +306,7 @@ pub fn dumpTerminalLookup(out: *std.Io.Writer, codepoints: []const u21) !void {
         const props = zunic.cp(cp).terminal();
         try out.print("{x}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             cp,
-            @intFromEnum(props.eastAsianWidth),
+            @backingInt(props.eastAsianWidth),
             @intFromBool(props.isEmojiPresentation),
             @intFromBool(props.isEmojiVariationBase),
             @intFromBool(props.isEmojiModifier),
@@ -358,7 +358,7 @@ pub fn dumpNumericProperties(out: *std.Io.Writer, codepoints: []const u21) !void
     for (codepoints) |cp| {
         if (zunic.cp(cp).numeric()) |value| {
             try out.print("{x}:{d}:{d}:{d},", .{
-                cp, @intFromEnum(value.kind), value.numerator, value.denominator,
+                cp, @backingInt(value.kind), value.numerator, value.denominator,
             });
         } else try out.print("{x}:n,", .{cp});
     }
@@ -366,13 +366,13 @@ pub fn dumpNumericProperties(out: *std.Io.Writer, codepoints: []const u21) !void
 
 pub fn dumpScript(out: *std.Io.Writer, codepoints: []const u21) !void {
     for (codepoints) |cp|
-        try out.print("{x}:{d},", .{ cp, @intFromEnum(zunic.cp(cp).script()) });
+        try out.print("{x}:{d},", .{ cp, @backingInt(zunic.cp(cp).script()) });
 }
 
 pub fn dumpBidiProperties(out: *std.Io.Writer, codepoints: []const u21) !void {
     for (codepoints) |cp| {
         const props = zunic.cp(cp).bidi();
-        try out.print("{x}:{d}:{d}:{d},", .{ cp, bidiClass(props.class), @intFromBool(props.isMirrored), @intFromEnum(props.pairedBracketType) });
+        try out.print("{x}:{d}:{d}:{d},", .{ cp, bidiClass(props.class), @intFromBool(props.isMirrored), @backingInt(props.pairedBracketType) });
     }
 }
 
@@ -392,7 +392,7 @@ pub fn dumpCombiningClass(out: *std.Io.Writer, codepoints: []const u21) !void {
 pub fn dumpDecomposition(out: *std.Io.Writer, codepoints: []const u21) !void {
     for (codepoints) |cp| {
         if (zunic.cp(cp).decomposition()) |value| {
-            try out.print("{x}:{d}:", .{ cp, @intFromEnum(value.type) });
+            try out.print("{x}:{d}:", .{ cp, @backingInt(value.type) });
             for (value.mapping) |mapped| try out.print("{x}.", .{mapped});
             try out.writeByte(',');
         } else try out.print("{x}:n,", .{cp});

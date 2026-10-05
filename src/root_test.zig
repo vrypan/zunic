@@ -197,8 +197,8 @@ test "exactly four normalization forms" {
     // NFC, NFD, NFKC, NFKD -- canonical and compatibility, each with and
     // without composition. The count is asserted so adding a fifth form (or
     // removing one of these four) is a deliberate act, not an accident.
-    try std.testing.expectEqual(@as(usize, 4), @typeInfo(unicode.Form).@"enum".fields.len);
-    try std.testing.expectEqual(@as(usize, 2), @typeInfo(unicode.Equivalence).@"enum".fields.len);
+    try std.testing.expectEqual(@as(usize, 4), @typeInfo(unicode.Form).@"enum".field_names.len);
+    try std.testing.expectEqual(@as(usize, 2), @typeInfo(unicode.Equivalence).@"enum".field_names.len);
 }
 
 test "iterated code-point views expose property groups" {

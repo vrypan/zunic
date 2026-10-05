@@ -27,7 +27,7 @@ jobs:
 
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.16.0
+          version: 0.17.0
 
       - name: zig build test
         run: zig build test -Dwrap-fast-path=${{ matrix.wrap_fast_path }} --summary all
@@ -47,7 +47,7 @@ jobs:
 
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.16.0
+          version: 0.17.0
 
       # Throughput numbers are not comparable across runners; this only checks
       # that the benchmark still builds and runs on both architectures.

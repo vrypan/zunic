@@ -372,7 +372,7 @@ test "presentation updates preserve adjacency across one-byte refills" {
 }
 
 test "long measured grapheme needs no growing buffer" {
-    const bytes = "\u{915}" ++ "\u{94d}\u{915}" ** 10_000;
+    const bytes = "\u{915}" ++ repeat("\u{94d}\u{915}", 10_000);
     var storage: [4]u8 = undefined;
     var input = Chunked.init(bytes, &storage);
     var it = unicode.reader(&input.interface).graphemes().measured();
@@ -536,4 +536,9 @@ test "file Reader and a pre-consumed source use a fresh offset origin" {
     try expectUpdate(&it, 3, 0x0301, false, false);
     try expectUpdate(&it, 3, null, false, true);
     try std.testing.expect((try it.next()) == null);
+}
+
+inline fn repeat(comptime bytes: []const u8, comptime count: usize) *const [bytes.len * count]u8 {
+    const parts: [count][bytes.len]u8 = @splat(bytes[0..bytes.len].*);
+    return @ptrCast(&parts);
 }

@@ -53,7 +53,7 @@ and how the result is checked.
 
 ## Build options
 
-The package requires Zig 0.16.0 or later according to `build.zig.zon`.
+The package requires Zig 0.17.0 or later according to `build.zig.zon`.
 
 | Option | Default | Effect |
 | --- | --- | --- |

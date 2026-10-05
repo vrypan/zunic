@@ -219,8 +219,13 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [4096]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.writeAll("corpus,mode,round,bytes,iterations,ns\n");
-    try measure(init.io, &stdout.interface, "ascii", "The quick brown fox jumps over the lazy dog.\r\n" ** 64);
-    try measure(init.io, &stdout.interface, "multilingual", "Cafe\u{301} Ελληνικά 日本語 👩‍👩‍👧‍👦 🇬🇷 " ** 32);
-    try measure(init.io, &stdout.interface, "combining", "a\u{301}\u{327}\u{316}\u{300}\u{31d}\u{302}" ** 64);
+    try measure(init.io, &stdout.interface, "ascii", repeat("The quick brown fox jumps over the lazy dog.\r\n", 64));
+    try measure(init.io, &stdout.interface, "multilingual", repeat("Cafe\u{301} Ελληνικά 日本語 👩‍👩‍👧‍👦 🇬🇷 ", 32));
+    try measure(init.io, &stdout.interface, "combining", repeat("a\u{301}\u{327}\u{316}\u{300}\u{31d}\u{302}", 64));
     try stdout.interface.flush();
+}
+
+inline fn repeat(comptime bytes: []const u8, comptime count: usize) *const [bytes.len * count]u8 {
+    const parts: [count][bytes.len]u8 = @splat(bytes[0..bytes.len].*);
+    return @ptrCast(&parts);
 }

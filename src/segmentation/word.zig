@@ -239,12 +239,12 @@ inline fn resolve(late: Late, following: anytype) bool {
 /// what collapses the 722 raw states. The saving is derived, not asserted:
 /// nothing here names which distinctions the rules happen to ignore.
 pub const machine = struct {
-    pub const class_count = @typeInfo(WordBreak).@"enum".fields.len;
+    pub const class_count = @typeInfo(WordBreak).@"enum".field_names.len;
     pub const state_count = class_count * class_count * 2;
 
     pub inline fn stateIndex(sig: WordBreak, sig_prev: WordBreak, ri_odd: bool) usize {
-        return ((@as(usize, @intFromEnum(sig)) * class_count) +
-            @intFromEnum(sig_prev)) * 2 + @intFromBool(ri_odd);
+        return ((@as(usize, @backingInt(sig)) * class_count) +
+            @backingInt(sig_prev)) * 2 + @intFromBool(ri_odd);
     }
 
     const built = blk: {
@@ -258,14 +258,14 @@ pub const machine = struct {
                     var row: [class_count]u8 = undefined;
                     for (0..class_count) |cur| {
                         const late = lateDecision(
-                            @enumFromInt(sig),
-                            @enumFromInt(sig_prev),
+                            @fromBackingInt(@intCast(sig)),
+                            @fromBackingInt(@intCast(sig_prev)),
                             parity == 1,
-                            @enumFromInt(cur),
+                            @fromBackingInt(@intCast(cur)),
                         );
                         row[cur] = @bitCast(late);
                     }
-                    const index = stateIndex(@enumFromInt(sig), @enumFromInt(sig_prev), parity == 1);
+                    const index = stateIndex(@fromBackingInt(@intCast(sig)), @fromBackingInt(@intCast(sig_prev)), parity == 1);
                     var found: ?usize = null;
                     for (rows[0..distinct], 0..) |existing, i| {
                         if (std.mem.eql(u8, &existing, &row)) {
@@ -303,7 +303,7 @@ pub const machine = struct {
 
     pub inline fn decide(sig: WordBreak, sig_prev: WordBreak, ri_odd: bool, cur: WordBreak) Late {
         const row = row_of[stateIndex(sig, sig_prev, ri_odd)];
-        return @bitCast(decisions[@as(usize, row) * class_count + @intFromEnum(cur)]);
+        return @bitCast(decisions[@as(usize, row) * class_count + @backingInt(cur)]);
     }
 };
 

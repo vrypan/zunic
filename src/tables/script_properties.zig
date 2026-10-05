@@ -3660,7 +3660,7 @@ pub const extensions_table_bytes = @sizeOf(@TypeOf(extension_starts)) + @sizeOf(
 pub const table_bytes = primary_table_bytes + extensions_table_bytes;
 
 comptime {
-    if (@typeInfo(Script).@"enum".fields.len != 175) @compileError("Script count changed");
+    if (@typeInfo(Script).@"enum".field_names.len != 175) @compileError("Script count changed");
     if (primary_table_bytes != 41344 or extensions_table_bytes != 2003 or table_bytes != 43347) @compileError("Script table sizes changed");
 }
 
@@ -3688,6 +3688,6 @@ pub fn scriptExtensions(cp: u21) []const Script {
             return set_members[offset .. offset + descriptor.len];
         }
     }
-    const id: usize = @intFromEnum(script(cp));
+    const id: usize = @backingInt(script(cp));
     return singleton_values[id .. id + 1];
 }

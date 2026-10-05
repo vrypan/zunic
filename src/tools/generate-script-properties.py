@@ -168,7 +168,7 @@ def emit(path, names, stage1, stage2, ranges, descriptors, members):
         out.write("pub const primary_table_bytes = @sizeOf(@TypeOf(primary_stage1)) + @sizeOf(@TypeOf(primary_stage2));\n")
         out.write("pub const extensions_table_bytes = @sizeOf(@TypeOf(extension_starts)) + @sizeOf(@TypeOf(extension_ranges)) + @sizeOf(@TypeOf(set_descriptors)) + @sizeOf(@TypeOf(set_members)) + @sizeOf(@TypeOf(singleton_values));\n")
         out.write("pub const table_bytes = primary_table_bytes + extensions_table_bytes;\n\n")
-        out.write("comptime {\n    if (@typeInfo(Script).@\"enum\".fields.len != 175) @compileError(\"Script count changed\");\n    if (primary_table_bytes != 41344 or extensions_table_bytes != 2003 or table_bytes != 43347) @compileError(\"Script table sizes changed\");\n}\n\n")
+        out.write("comptime {\n    if (@typeInfo(Script).@\"enum\".field_names.len != 175) @compileError(\"Script count changed\");\n    if (primary_table_bytes != 41344 or extensions_table_bytes != 2003 or table_bytes != 43347) @compileError(\"Script table sizes changed\");\n}\n\n")
         out.write("pub fn script(cp: u21) Script {\n")
         out.write("    if (cp >= 0x110000) return .unknown;\n")
         out.write("    const page = primary_stage1[cp >> 7];\n")
@@ -178,7 +178,7 @@ def emit(path, names, stage1, stage2, ranges, descriptors, members):
         out.write("    var low: usize = 0;\n    var high: usize = extension_starts.len;\n")
         out.write("    while (low < high) {\n        const middle = low + (high - low) / 2;\n        if (extension_starts[middle] <= cp) low = middle + 1 else high = middle;\n    }\n")
         out.write("    if (low != 0) {\n        const index = low - 1;\n        const item = extension_ranges[index];\n        const end = @as(u32, extension_starts[index]) + @as(u32, item.length_minus_one);\n        if (@as(u32, cp) <= end) {\n            const descriptor = set_descriptors[item.set_id];\n            const offset: usize = descriptor.offset;\n            return set_members[offset .. offset + descriptor.len];\n        }\n    }\n")
-        out.write("    const id: usize = @intFromEnum(script(cp));\n    return singleton_values[id .. id + 1];\n}\n")
+        out.write("    const id: usize = @backingInt(script(cp));\n    return singleton_values[id .. id + 1];\n}\n")
 
 
 def diagnostic(ranges, ids):

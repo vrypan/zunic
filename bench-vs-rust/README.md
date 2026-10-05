@@ -1,7 +1,7 @@
 # Rust comparison benchmarks
 
 Compare the current Zunic working tree, including uncommitted changes, with
-pinned Rust libraries. Run from a source checkout with Zig 0.16.0 or later,
+pinned Rust libraries. Run from a source checkout with Zig 0.17.0 or later,
 Rust/Cargo, Python 3, curl, and Make installed.
 
 > [!NOTE]

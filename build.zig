@@ -312,7 +312,7 @@ pub fn build(b: *std.Build) void {
         .root_module = benchmark_mod,
     });
     const run_benchmark = b.addRunArtifact(benchmark);
-    if (b.args) |args| run_benchmark.addArgs(args);
+    run_benchmark.addPassthruArgs();
     const benchmark_step = b.step("benchmark", "Run zunic benchmarks");
     benchmark_step.dependOn(&run_benchmark.step);
 

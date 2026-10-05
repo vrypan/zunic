@@ -41,7 +41,7 @@ fn classify(bytes: []const u8) Result {
     var result: Result = .{};
     while (pos < input.len) {
         const token = classifier.at(input, pos);
-        result.checksum +%= @intFromEnum(token.record.line_break);
+        result.checksum +%= @backingInt(token.record.line_break);
         result.count += 1;
         pos = token.end;
     }

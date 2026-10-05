@@ -63,7 +63,7 @@ pub inline fn terminalProperties(bytes: []const u8) Stats {
     while (it.next()) |cp| : (units += 1) {
         const props = uucode.getAll("0", cp);
         sums[0] +%= it.i;
-        sums[1] +%= @intFromEnum(props.east_asian_width);
+        sums[1] +%= @backingInt(props.east_asian_width);
         sums[2] +%= @intFromBool(props.is_emoji_presentation);
         sums[3] +%= @intFromBool(props.is_emoji_vs_base);
         sums[4] +%= @intFromBool(props.is_emoji_modifier);
@@ -81,7 +81,7 @@ pub inline fn terminalLookup(codepoints: []const u21) Stats {
     for (codepoints) |cp| {
         const props = uucode.getAll("0", cp);
         sums[0] +%= cp;
-        sums[1] +%= @intFromEnum(props.east_asian_width);
+        sums[1] +%= @backingInt(props.east_asian_width);
         sums[2] +%= @intFromBool(props.is_emoji_presentation);
         sums[3] +%= @intFromBool(props.is_emoji_vs_base);
         sums[4] +%= @intFromBool(props.is_emoji_modifier);
@@ -199,13 +199,13 @@ pub inline fn script(codepoints: []const u21) Stats {
     var sums: [2]usize = @splat(0);
     for (codepoints) |cp| {
         sums[0] +%= cp;
-        sums[1] +%= @intFromEnum(uucode.get(.script, cp));
+        sums[1] +%= @backingInt(uucode.get(.script, cp));
     }
     return .{ .units = codepoints.len, .checksum = finishSums(sums) };
 }
 
 fn bidiClass(value: anytype) usize {
-    return @intFromEnum(value);
+    return @backingInt(value);
 }
 
 fn bracketType(value: anytype) usize {
@@ -271,7 +271,7 @@ pub inline fn decomposition(codepoints: []const u21) Stats {
             var identity: [1]u21 = undefined;
             const mapping = uucode.get(.decomposition_mapping, cp).with(&identity, cp);
             sums[1] +%= 1;
-            sums[2] +%= @intFromEnum(kind) - 1;
+            sums[2] +%= @backingInt(kind) - 1;
             sums[3] +%= mapping.len;
             for (mapping) |mapped| sums[4] +%= mapped;
         }
@@ -347,7 +347,7 @@ pub fn dumpTerminalProperties(out: *std.Io.Writer, bytes: []const u8) !void {
         const props = uucode.getAll("0", cp);
         try out.print("{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             it.i,
-            @intFromEnum(props.east_asian_width),
+            @backingInt(props.east_asian_width),
             @intFromBool(props.is_emoji_presentation),
             @intFromBool(props.is_emoji_vs_base),
             @intFromBool(props.is_emoji),
@@ -365,7 +365,7 @@ pub fn dumpTerminalLookup(out: *std.Io.Writer, codepoints: []const u21) !void {
         const props = uucode.getAll("0", cp);
         try out.print("{x}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d}:{d},", .{
             cp,
-            @intFromEnum(props.east_asian_width),
+            @backingInt(props.east_asian_width),
             @intFromBool(props.is_emoji_presentation),
             @intFromBool(props.is_emoji_vs_base),
             @intFromBool(props.is_emoji_modifier),
@@ -424,7 +424,7 @@ pub fn dumpNumericProperties(out: *std.Io.Writer, codepoints: []const u21) !void
 
 pub fn dumpScript(out: *std.Io.Writer, codepoints: []const u21) !void {
     for (codepoints) |cp|
-        try out.print("{x}:{d},", .{ cp, @intFromEnum(uucode.get(.script, cp)) });
+        try out.print("{x}:{d},", .{ cp, @backingInt(uucode.get(.script, cp)) });
 }
 
 pub fn dumpBidiProperties(out: *std.Io.Writer, codepoints: []const u21) !void {
@@ -453,7 +453,7 @@ pub fn dumpDecomposition(out: *std.Io.Writer, codepoints: []const u21) !void {
         if (kind != .default) {
             var identity: [1]u21 = undefined;
             const mapping = uucode.get(.decomposition_mapping, cp).with(&identity, cp);
-            try out.print("{x}:{d}:", .{ cp, @intFromEnum(kind) - 1 });
+            try out.print("{x}:{d}:", .{ cp, @backingInt(kind) - 1 });
             for (mapping) |mapped| try out.print("{x}.", .{mapped});
             try out.writeByte(',');
         } else try out.print("{x}:n,", .{cp});

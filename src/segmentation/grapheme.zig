@@ -273,15 +273,15 @@ pub const machine = struct {
     fn classificationOfKey(key: u7) ?Classification {
         const gcb_raw: u4 = @truncate(key);
         // GraphemeClass has 14 members; 14 and 15 never occur in a record.
-        if (@as(u8, gcb_raw) >= @typeInfo(grapheme_properties.GraphemeClass).@"enum".fields.len) return null;
+        if (@as(u8, gcb_raw) >= @typeInfo(grapheme_properties.GraphemeClass).@"enum".field_names.len) return null;
         const g: grapheme_properties.GraphemeProperties = @bitCast(key);
         const property: Property = switch (g.gcb) {
             .other => if (g.extended_pictographic) .ep else .other,
             .regional_indicator => .ri,
             .spacingmark => .spacing_mark,
-            else => @enumFromInt(@intFromEnum(g.gcb)),
+            else => @fromBackingInt(@intCast(@backingInt(g.gcb))),
         };
-        return .{ .property = property, .incb = @enumFromInt(@intFromEnum(g.incb)) };
+        return .{ .property = property, .incb = @fromBackingInt(@intCast(@backingInt(g.incb))) };
     }
 
     /// Property keys that actually occur in Unicode 17. Enumerating all 128
@@ -334,7 +334,7 @@ pub const machine = struct {
     fn reference(id: u9) ClusterState {
         const st = decode(id);
         return .{
-            .previous = @enumFromInt(st.previous),
+            .previous = @fromBackingInt(@intCast(st.previous)),
             .ri_count = if (st.ri_parity) 1 else 0,
             .ep_before_zwj = st.ep_before_zwj,
             .zwj_after_ep = st.zwj_after_ep,
@@ -345,7 +345,7 @@ pub const machine = struct {
 
     fn encode(cs: ClusterState) u9 {
         const st = State{
-            .previous = @intFromEnum(cs.previous),
+            .previous = @backingInt(cs.previous),
             .ri_parity = cs.ri_count % 2 == 1,
             .ep_before_zwj = cs.ep_before_zwj,
             .zwj_after_ep = cs.zwj_after_ep,
@@ -472,10 +472,10 @@ pub fn classify(token: decoded_token.Token) Classification {
         .other => if (token.grapheme.extended_pictographic) .ep else .other,
         .regional_indicator => .ri,
         .spacingmark => .spacing_mark,
-        else => @enumFromInt(@intFromEnum(token.grapheme.gcb)),
+        else => @fromBackingInt(@intCast(@backingInt(token.grapheme.gcb))),
     };
     return .{
         .property = property,
-        .incb = @enumFromInt(@intFromEnum(token.grapheme.incb)),
+        .incb = @fromBackingInt(@intCast(@backingInt(token.grapheme.incb))),
     };
 }

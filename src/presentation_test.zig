@@ -145,7 +145,7 @@ test "exceptional rescans are once per cluster and ordinary text is not rescanne
     try std.testing.expectEqual(@as(usize, 0), plain.counters.presentation.decoded_scalars);
 
     // An arbitrarily long exceptional cluster is still one second pass.
-    const exceptional = "❤" ++ "\u{301}" ** 10_000 ++ "\u{fe0f}";
+    const exceptional = "❤" ++ repeat("\u{301}", 10_000) ++ "\u{fe0f}";
     var scanner: scan.Scanner(true) = .{ .bytes = exceptional };
     try std.testing.expectEqual(@as(u3, 1), scanner.next().?.columns);
     try std.testing.expect(scanner.next() == null);
@@ -167,7 +167,7 @@ test "wrapping fits corrected narrow and wide presentations" {
 }
 
 test "wrapping never replays presentation clusters when moving a saved break" {
-    const bytes = "▪▪\u{fe0f} words ⌚\u{fe0e} #\u{fe0f}\u{20e3} 👩‍👩‍👧‍👦 " ** 32;
+    const bytes = repeat("▪▪\u{fe0f} words ⌚\u{fe0e} #\u{fe0f}\u{20e3} 👩‍👩‍👧‍👦 ", 32);
     const scalars = std.unicode.utf8CountCodepoints(bytes) catch unreachable;
     for ([_]usize{ 1, 2, 3, 8, 40 }) |columns| {
         for ([_]unicode.Overflow{ .allow, .grapheme }) |overflow| {
@@ -181,4 +181,9 @@ test "wrapping never replays presentation clusters when moving a saved break" {
             try std.testing.expect(counters.decoded_scalars + counters.presentation.decoded_scalars < 3 * scalars);
         }
     }
+}
+
+inline fn repeat(comptime bytes: []const u8, comptime count: usize) *const [bytes.len * count]u8 {
+    const parts: [count][bytes.len]u8 = @splat(bytes[0..bytes.len].*);
+    return @ptrCast(&parts);
 }

@@ -35,16 +35,16 @@ fn useGhosttyCoverage(first: u21, second: u21) u64 {
     const gcb = uucode.get(.grapheme_break, first);
     const gcb_no_control = uucode.get(.grapheme_break_no_control, first);
 
-    mix(&hash, @intFromEnum(category));
-    mix(&hash, @intFromEnum(eaw));
+    mix(&hash, @backingInt(category));
+    mix(&hash, @backingInt(eaw));
     mix(&hash, @intFromBool(presentation));
     mix(&hash, @intFromBool(variation_base));
     mix(&hash, @intFromBool(modifier));
     mix(&hash, @intFromBool(modifier_base));
     mix(&hash, standalone);
     mix(&hash, @intFromBool(zero));
-    mix(&hash, @intFromEnum(gcb));
-    mix(&hash, @intFromEnum(gcb_no_control));
+    mix(&hash, @backingInt(gcb));
+    mix(&hash, @backingInt(gcb_no_control));
 
     const width: u2 = if (zero and !modifier and gcb_no_control != .prepend)
         0

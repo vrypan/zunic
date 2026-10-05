@@ -29,16 +29,16 @@ fn useGhosttyCoverage(first: u21, second: u21) u64 {
     const terminal = codepoint.terminal();
     const grapheme = codepoint.grapheme();
 
-    mix(&hash, @intFromEnum(general.category));
-    mix(&hash, @intFromEnum(terminal.eastAsianWidth));
+    mix(&hash, @backingInt(general.category));
+    mix(&hash, @backingInt(terminal.eastAsianWidth));
     mix(&hash, @intFromBool(terminal.isEmojiPresentation));
     mix(&hash, @intFromBool(terminal.isEmojiVariationBase));
     mix(&hash, @intFromBool(terminal.isEmojiModifier));
     mix(&hash, @intFromBool(terminal.isEmojiModifierBase));
     mix(&hash, terminal.standalone);
     mix(&hash, @intFromBool(terminal.zeroInGrapheme));
-    mix(&hash, @intFromEnum(grapheme.gcb));
-    mix(&hash, @intFromEnum(grapheme.incb));
+    mix(&hash, @backingInt(grapheme.gcb));
+    mix(&hash, @backingInt(grapheme.incb));
     mix(&hash, @intFromBool(grapheme.extendedPictographic));
 
     const width: u2 = if (first > zunic.max_codepoint)

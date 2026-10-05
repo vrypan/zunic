@@ -1,6 +1,6 @@
 # zunic
 
-Allocation-free Unicode primitives for Zig 0.16.0 or later.
+Allocation-free Unicode primitives for Zig 0.17.0 or later.
 
 Measure width, iterate graphemes and words, stream grapheme decisions, fold
 case, query Unicode properties, wrap text, find line endings, trim whitespace,

@@ -468,7 +468,7 @@ fn lineBreakChecksum(text: []const u8) u64 {
     var sum: u64 = 0xcbf29ce484222325;
     while (it.next()) |boundary| {
         sum = mix(sum, boundary.offset);
-        sum = mix(sum, @intFromEnum(boundary.opportunity));
+        sum = mix(sum, @backingInt(boundary.opportunity));
     }
     return sum;
 }
@@ -526,7 +526,7 @@ fn nfcIterateChecksum(text: []const u8) u64 {
 fn quickChecksum(text: []const u8, comptime form: zunic.Form) u64 {
     const answer = zunic.text(text).isNormalizedQuick(form) catch |err|
         return mix(0xcbf29ce484222325, failureCode(err));
-    return mix(0xcbf29ce484222325, @intFromEnum(answer));
+    return mix(0xcbf29ce484222325, @backingInt(answer));
 }
 fn nfcQuickChecksum(text: []const u8) u64 {
     return quickChecksum(text, .nfc);

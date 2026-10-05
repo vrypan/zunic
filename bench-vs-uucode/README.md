@@ -2,7 +2,7 @@
 
 Compare the current Zunic working tree with
 [uucode 0.2.0](https://github.com/jacobsandlund/uucode) at pinned commit
-`f67fa5dbef5c9de57773dbe2f7a02bebc7e20301`. Both peers are Zig libraries and
+`cba2b5bc9f79d200541a7f4fdd62a1ba5ca5f166` (Zig 0.17 compatibility). Both peers are Zig libraries and
 are built with the same Zig version, target, optimization mode, and CPU model.
 The dependency hash in `build.zig.zon` verifies the fetched package.
 

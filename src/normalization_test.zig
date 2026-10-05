@@ -299,7 +299,7 @@ test "the configured limit is what the build option says" {
 test "large configured runs exceed u16 without overflowing" {
     const marks = std.math.maxInt(u16);
     if (limit < marks) return error.SkipZigTest;
-    const input = "a" ++ "\u{0305}" ** marks;
+    const input = "a" ++ repeat("\u{0305}", marks);
     inline for ([_]Form{ .nfd, .nfc, .nfkd, .nfkc }) |form| {
         var it = normalization.normalize(input, form);
         try std.testing.expectEqual(@as(?u21, 'a'), try it.next());
@@ -598,7 +598,7 @@ test "isNormalized counts marks inside precomposed starters" {
     inline for (.{ .{ "\u{00E9}", 1 }, .{ "\u{0390}", 2 } }) |case| {
         const starter = case[0];
         const hidden_marks = case[1];
-        const at_limit = starter ++ "\u{0305}" ** (limit - hidden_marks);
+        const at_limit = starter ++ repeat("\u{0305}", limit - hidden_marks);
         const over_limit = at_limit ++ "\u{0305}";
         var output: [over_limit.len * 3]u8 = undefined;
         try std.testing.expect(try zunic.text(at_limit).isNormalized(.nfc));
@@ -914,7 +914,7 @@ test "NFKC and NFKD adjacent to the maximum-expansion witness" {
     // an off-by-one in the scratch buffer would corrupt a neighbour rather
     // than only the witness itself.
     try expectNfkd("a\u{FDFA}b", "a\u{635}\u{644}\u{649} \u{627}\u{644}\u{644}\u{647} \u{639}\u{644}\u{64a}\u{647} \u{648}\u{633}\u{644}\u{645}b");
-    try expectNfkd("\u{FDFA}\u{FDFA}", "\u{635}\u{644}\u{649} \u{627}\u{644}\u{644}\u{647} \u{639}\u{644}\u{64a}\u{647} \u{648}\u{633}\u{644}\u{645}" ** 2);
+    try expectNfkd("\u{FDFA}\u{FDFA}", repeat("\u{635}\u{644}\u{649} \u{627}\u{644}\u{644}\u{647} \u{639}\u{644}\u{64a}\u{647} \u{648}\u{633}\u{644}\u{645}", 2));
 }
 
 test "Hangul is algorithmic under NFKD and NFKC too" {
@@ -1058,4 +1058,9 @@ test "NFKC/NFKD reachable from the text view" {
     try std.testing.expect(try zunic.text("\u{FB01}").isNormalized(.nfc));
     try std.testing.expect(!try zunic.text("\u{FB01}").isNormalized(.nfkc));
     try std.testing.expectEqual(QuickCheck.no, try zunic.text("\u{FB01}").isNormalizedQuick(.nfkc));
+}
+
+inline fn repeat(comptime bytes: []const u8, comptime count: usize) *const [bytes.len * count]u8 {
+    const parts: [count][bytes.len]u8 = @splat(bytes[0..bytes.len].*);
+    return @ptrCast(&parts);
 }
