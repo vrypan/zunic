@@ -4,6 +4,16 @@ Notable code changes are listed by package version. Documentation-only,
 benchmark-only, planning, release bookkeeping, and intermediate changes that
 were superseded before the same release are omitted.
 
+## [0.6.0] - 2026-10-05
+
+### Changed
+
+- Migrated to Zig 0.17.0 and raised the minimum supported compiler version.
+- Improved SIMD ASCII column counting for width and wrapping on Zig 0.17.
+- Optimized Script, full case-folding, and general-category lookup indexes;
+  reduced the case-folding index size while preserving Unicode results.
+- Improved bidirectional mapping lookups with early returns for absent mappings.
+
 ## [0.5.0] - 2026-09-19
 
 ### Added

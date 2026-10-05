@@ -1,6 +1,6 @@
 .{
     .name = .zunic,
-    .version = "0.5.0",
+    .version = "0.6.0",
     .fingerprint = 0xb6c59fb4d94ecc9,
     .minimum_zig_version = "0.17.0",
     .paths = .{
