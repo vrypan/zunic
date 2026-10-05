@@ -53,3 +53,23 @@ jobs:
       # that the benchmark still builds and runs on both architectures.
       - name: zig build benchmark -- --smoke
         run: zig build benchmark -Doptimize=ReleaseFast -- --smoke
+
+  verify-tables:
+    name: Unicode tables and Python tooling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Verify Unicode tables and tooling
+        run: make verify-tables test-tools
+
+      - name: Ensure verification leaves tracked files unchanged
+        run: git diff --exit-code

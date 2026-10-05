@@ -16,6 +16,9 @@ import sys
 import uuid
 from pathlib import Path
 
+SUMMARY_SCHEMA = "zunic-uucode-benchmark/v8"
+SUPPORTED_SCHEMAS = {SUMMARY_SCHEMA} | {f"zunic-uucode-benchmark/v{v}" for v in range(1, 8)}
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT / "bench-vs-rust"))
@@ -328,7 +331,7 @@ def benchmark(args: argparse.Namespace) -> int:
     git_head = run(["git", "rev-parse", "HEAD"], ROOT).stdout.strip()
     git_status = run(["git", "status", "--short"], ROOT).stdout
     summary = {
-        "schema": "zunic-uucode-benchmark/v8", "title": "Unicode primitives: uucode vs Zunic",
+        "schema": SUMMARY_SCHEMA, "title": "Unicode primitives: uucode vs Zunic",
         "label": args.label, "pair_count": args.pairs, "cases": list(CORPORA),
         "operations": list(operations), "pairs": pairs,
         "peers": {name: {"name": name if name == "zunic" else "uucode 0.2.0",
@@ -378,7 +381,7 @@ def main() -> int:
         return self_test()
     if args.report:
         summary = json.loads(args.report.read_text())
-        if summary.get("schema") not in {"zunic-uucode-benchmark/v1", "zunic-uucode-benchmark/v2", "zunic-uucode-benchmark/v3", "zunic-uucode-benchmark/v4", "zunic-uucode-benchmark/v5", "zunic-uucode-benchmark/v6", "zunic-uucode-benchmark/v7"}:
+        if summary.get("schema") not in SUPPORTED_SCHEMAS:
             raise ValueError("unsupported summary schema")
         print(report(summary, True), end="")
         return 0

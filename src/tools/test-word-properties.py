@@ -5,7 +5,7 @@ Run from the repository root:
     python3 src/tools/test-word-properties.py
 
 Independent by construction: it re-derives all three facts from the pinned UCD
-files and decodes src/word_properties.zig by parsing the emitted Zig, sharing
+files and decodes src/tables/word_properties.zig by parsing the emitted Zig, sharing
 no classification code with generate-word-properties.py. A mismatch means the
 generator is wrong; it is never something to patch in the output.
 
@@ -103,14 +103,27 @@ def zig_name(value):
     return re.sub(r"[^a-z0-9]", "_", value.lower())
 
 
-def check_regeneration():
+def check_regeneration(source=SOURCE):
     with tempfile.TemporaryDirectory() as tmp:
-        copy = Path(tmp) / "word_properties.zig"
-        copy.write_bytes(SOURCE.read_bytes())
-        subprocess.run([sys.executable, str(GENERATOR)], check=True,
-                       stdout=subprocess.DEVNULL)
-        if not filecmp.cmp(copy, SOURCE, shallow=False):
-            sys.exit("regeneration is not deterministic: src/word_properties.zig changed")
+        generated = Path(tmp) / "word_properties.zig"
+        subprocess.run([sys.executable, str(GENERATOR), "--output", str(generated)],
+                       check=True, stdout=subprocess.DEVNULL)
+        if not filecmp.cmp(generated, source, shallow=False):
+            sys.exit("generated word tables are stale or regeneration is not deterministic")
+
+
+def check_stale_source_is_preserved():
+    """A failed verification must not repair or overwrite the file it checks."""
+    with tempfile.TemporaryDirectory() as tmp:
+        stale = Path(tmp) / "stale.zig"
+        original = b"// deliberately stale word tables\n"
+        stale.write_bytes(original)
+        try:
+            check_regeneration(stale)
+        except SystemExit:
+            assert stale.read_bytes() == original, "verification overwrote stale source"
+        else:
+            sys.exit("verification accepted stale source")
 
 
 def main():
@@ -119,6 +132,7 @@ def main():
 
     check_missing_default()
     check_regeneration()
+    check_stale_source_is_preserved()
 
     wb = read_property("WordBreakProperty-17.0.0.txt", "Other")
     alphabetic = read_property("DerivedCoreProperties-17.0.0.txt", "", {"Alphabetic"})

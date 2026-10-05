@@ -60,7 +60,7 @@ def save(args):
     if not SAFE_LABEL.fullmatch(args.label):
         raise SystemExit("label must contain only letters, digits, dot, underscore, or dash")
     build_args = shlex.split(os.environ.get("ZUNIC_BENCHMARK_BUILD_ARGS", ""))
-    command = ["zig", "build", "benchmark", "-Doptimize=ReleaseFast", *build_args, "--", *args.benchmark_args]
+    command = [args.zig, "build", "benchmark", f"-Doptimize={args.optimize}", *build_args, "--", *args.benchmark_args]
     completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
     timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     HISTORY.mkdir(parents=True, exist_ok=True)
@@ -76,7 +76,7 @@ def save(args):
         "git_dirty": bool(git("status", "--porcelain")),
         "source_fingerprint": digest_sources(), "python": platform.python_version(),
         "os": platform.platform(), "machine": platform.machine(),
-        "cpu": platform.processor() or "unknown", "zig": git_zig_version(),
+        "cpu": platform.processor() or "unknown", "zig": zig_version(args.zig),
         "harness": header, "benchmark_args": args.benchmark_args, "build_args": build_args,
     }
     (run / "metadata.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
@@ -85,9 +85,9 @@ def save(args):
     if completed.returncode:
         raise SystemExit(completed.returncode)
 
-def git_zig_version():
+def zig_version(zig):
     try:
-        return subprocess.check_output(["zig", "version"], text=True).strip()
+        return subprocess.check_output([zig, "version"], text=True).strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
 
@@ -120,6 +120,8 @@ def main():
     sub = parser.add_subparsers(required=True)
     save_parser = sub.add_parser("save")
     save_parser.add_argument("--label", required=True)
+    save_parser.add_argument("--zig", default="zig")
+    save_parser.add_argument("--optimize", choices=("Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"), default="ReleaseFast")
     save_parser.add_argument("benchmark_args", nargs="*")
     save_parser.set_defaults(func=save)
     compare_parser = sub.add_parser("compare")

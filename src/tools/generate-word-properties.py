@@ -18,6 +18,7 @@ Three facts per code point fit in one byte:
 Storing all three here avoids a second lookup into the fused record.
 """
 
+import argparse
 from collections import defaultdict
 from pathlib import Path
 import re
@@ -173,11 +174,14 @@ def emit(out, names, values):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=OUT)
+    args = parser.parse_args()
     wb = parse(FILES["wb"])
     alpha = parse(FILES["alpha"], {"Alphabetic"})
     ep = parse(FILES["ep"], {"Extended_Pictographic"})
     names, values = build(wb, alpha, ep, dense_categories(FILES["ud"]))
-    with OUT.open("w", encoding="utf-8") as out:
+    with args.output.open("w", encoding="utf-8") as out:
         blocks, index_len, data_len = emit(out, names, values)
     # The repository keeps generated Zig formatted, and zig fmt column-aligns
     # array rows. Running it here rather than by hand keeps regeneration
@@ -185,7 +189,7 @@ def main():
     zig = shutil.which("zig")
     if zig is None:
         sys.exit("zig is required to format the generated file")
-    subprocess.run([zig, "fmt", str(OUT)], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run([zig, "fmt", str(args.output)], check=True, stdout=subprocess.DEVNULL)
     print(f"word_break values: {len(names)}")
     print(f"unique blocks:     {blocks}")
     print(f"index bytes:       {index_len * 2}")

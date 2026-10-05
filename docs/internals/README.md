@@ -91,6 +91,11 @@ zig build wrap-regressions
 zig build wrap-exhaustive
 ```
 
+`make verify-tables test-tools` runs the maintainer checks separately from the
+Zig-only suite. It requires Python 3 and Zig on `PATH`, verifies tables against
+the pinned Unicode inputs, runs regeneration checks where available, and tests
+benchmark tooling without running benchmarks. CI runs this gate once on Linux.
+
 Fixtures check published examples of the Unicode rules. Reference comparisons
 check that shortcuts preserve the rule implementation. Instrumented tests count
 decodes and buffered tokens to catch excessive repeated work. None alone proves
