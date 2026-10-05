@@ -135,7 +135,7 @@ def main():
 
     if args.compiled:
         with tempfile.TemporaryFile() as output:
-            process = subprocess.run(["zig", "build", "--global-cache-dir", ".zig-global-cache", "dump-bidi-properties"], cwd=ROOT.parent,
+            process = subprocess.run(["zig", "build", "dump-bidi-properties"], cwd=ROOT.parent,
                                      stdout=output)
             if process.returncode:
                 raise SystemExit("compiled bidi dump failed")
