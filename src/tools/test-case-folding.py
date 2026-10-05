@@ -36,8 +36,12 @@ def main():
 
     text = SOURCE.read_text(encoding="utf-8")
     shift = int(re.search(r"pub const block_shift = (\d+);", text).group(1))
-    index = array(text, "block_index", "u8")
+    limit = int(re.search(r"pub const lookup_limit = (0x[0-9A-Fa-f]+);", text).group(1), 16)
+    assert limit == ((max(expected) >> shift) + 1) << shift
+    index = array(text, "block_index", "u16")
+    assert len(index) == limit >> shift
     ids = array(text, "mapping_ids", "u16")
+    assert all(offset % (1 << shift) == 0 and offset + (1 << shift) <= len(ids) for offset in index)
     mappings = []
     body = re.search(r"pub const mappings = \[_\]Mapping\{(.*?)\n\};", text, re.S).group(1)
     for values, length in re.findall(
@@ -49,8 +53,10 @@ def main():
     failures = 0
     mask = (1 << shift) - 1
     for cp in range(MAXCP):
-        block = index[cp >> shift]
-        mapping_id = ids[(block << shift) | (cp & mask)]
+        mapping_id = 0
+        if cp < limit:
+            block = index[cp >> shift]
+            mapping_id = ids[block | (cp & mask)]
         got = mappings[mapping_id - 1] if mapping_id else (cp,)
         want = expected.get(cp, (cp,))
         if got != want:

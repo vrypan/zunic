@@ -136,9 +136,9 @@ def build(categories, booleans):
         stage1.append(mids.setdefault(row, len(mids)))
     assert len(mids) < 256, "stage1 indices must fit a byte"
 
-    stage2 = [leaf for row in sorted(mids, key=mids.get) for leaf in row]
+    stage2 = [leaf << S2 for row in sorted(mids, key=mids.get) for leaf in row]
     stage3 = [cid for leaf in sorted(leaves, key=leaves.get) for cid in leaf]
-    assert all(leaf < 65536 for leaf in stage2), "stage2 indices must fit a u16"
+    assert all(leaf < 65536 for leaf in stage2), "stage2 element offsets must fit a u16"
     return order, stage1, stage2, stage3, ids[MAXCP - 1]
 
 
@@ -199,7 +199,7 @@ def emit(out, order, stage1, stage2, stage3, default_id):
     out.write(f"    if (cp >= 0x{MAXCP:X}) return class_default;\n")
     out.write("    const mid = gc_stage1[cp >> gc_s1];\n")
     out.write("    const leaf = gc_stage2[(@as(usize, mid) << (gc_s1 - gc_s2)) | (cp >> gc_s2 & ((1 << (gc_s1 - gc_s2)) - 1))];\n")
-    out.write("    const id = gc_stage3[(@as(usize, leaf) << gc_s2) | (cp & ((1 << gc_s2) - 1))];\n")
+    out.write("    const id = gc_stage3[@as(usize, leaf) | (cp & ((1 << gc_s2) - 1))];\n")
     out.write("    return class_table[id];\n")
     out.write("}\n\n")
 

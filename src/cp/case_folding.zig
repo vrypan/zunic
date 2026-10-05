@@ -17,10 +17,10 @@ pub const CaseFold = struct {
 pub fn fullCaseFold(cp: u21) CaseFold {
     if (cp >= 'A' and cp <= 'Z')
         return .{ .codepoints = .{ cp + ('a' - 'A'), 0, 0 }, .len = 1 };
-    if (cp <= 0x10ffff) {
+    if (cp < data.lookup_limit) {
         const block = data.block_index[cp >> data.block_shift];
         const mapping_id = data.mapping_ids[
-            (@as(usize, block) << data.block_shift) |
+            @as(usize, block) |
                 (cp & ((@as(usize, 1) << data.block_shift) - 1))
         ];
         if (mapping_id != 0) {

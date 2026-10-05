@@ -127,7 +127,7 @@ def lookup(table, cp):
     s1, s2 = table["s1"], table["s2"]
     mid = table["stage1"][cp >> s1]
     leaf = table["stage2"][(mid << (s1 - s2)) | (cp >> s2 & ((1 << (s1 - s2)) - 1))]
-    class_id = table["stage3"][(leaf << s2) | (cp & ((1 << s2) - 1))]
+    class_id = table["stage3"][leaf | (cp & ((1 << s2) - 1))]
     return table["class_table"][class_id]
 
 
@@ -137,6 +137,9 @@ def main():
     categories = read_categories()
     booleans = read_booleans()
     table = parse_zig()
+    for offset in table["stage2"]:
+        assert offset % (1 << table["s2"]) == 0
+        assert offset + (1 << table["s2"]) <= len(table["stage3"])
 
     failures = 0
     for cp in range(MAXCP):

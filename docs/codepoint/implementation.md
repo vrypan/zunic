@@ -22,6 +22,11 @@ calls therefore do not retain the wider line-break/layout table. Whitespace uses
 trimming. Case folding has an ASCII uppercase fast path followed by indexed
 mapping tables, returning an owned buffer of at most three values.
 
+The general-property trie stores precomputed `u16` element offsets in its
+middle stage. Combining an offset with the low four codepoint bits selects
+the leaf class ID without scaling a page ID at runtime. The index width and
+total table size are unchanged.
+
 Primary Script uses a fixed two-stage prefix trie. The high bits index 8,704
 precomputed `u16` offsets, and the low seven bits select a `Script` within one
 of 255 deduplicated 128-codepoint pages. Its arrays occupy 50,048 bytes and
@@ -62,7 +67,14 @@ normalization engine retains its existing lookups.
 
 The folding tables use the C (common) and F (full) mappings from the pinned
 `CaseFolding.txt`. They exclude the S (simple) and T (Turkic) alternatives,
-implementing full default Unicode case folding.
+implementing full default Unicode case folding. The first-stage index ends
+at the page containing the last C/F mapping, with the bound generated from
+the pinned input. Unicode 17 needs 490 `u16` offsets covering codepoints below
+`0x1EA00`; higher values retain the identity mapping. The offsets address
+6,912 `u16` mapping IDs. These lookup arrays occupy 14,804 bytes, down from
+18,176 bytes; the mapping payload is unchanged and excluded from those counts.
+On Apple M4 with Zig 0.17, bounded offsets reduced case-fold lookup time by
+about 13% across the comparison corpora.
 
 The [text iterator](../../src/text/text.zig) decodes UTF-8 before constructing
 each view. Internal segmentation and layout instead use
