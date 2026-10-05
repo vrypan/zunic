@@ -2,7 +2,7 @@
 """Exhaustively verify the generated two-stage property table.
 
 Run from the repository root:
-    python3 src/tools/test-properties.py
+    python3 tools/test-properties.py
 
 This is deliberately an *independent* implementation. It re-derives every fact
 from the pinned UCD files and decodes both generated property tables by parsing
@@ -18,7 +18,7 @@ from pathlib import Path
 
 from check_unicode_version import check as check_unicode_version
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 SOURCE = ROOT / "tables/properties.zig"
 GRAPHEME_SOURCE = ROOT / "tables/grapheme_properties.zig"

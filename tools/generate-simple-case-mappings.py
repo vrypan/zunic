@@ -10,7 +10,7 @@ import argparse
 from pathlib import Path
 import subprocess
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 SOURCE = ROOT / "data/UnicodeData-17.0.0.txt"
 DEFAULT_OUT = ROOT / "tables/simple_case_mappings.zig"
 MAXCP = 0x110000
@@ -47,7 +47,7 @@ def emit(path):
     limit, stage1, arrays = build()
     with path.open("w", encoding="utf-8") as out:
         out.write("//! Generated from UnicodeData-17.0.0.txt; do not edit.\n")
-        out.write("//! Run src/tools/generate-simple-case-mappings.py to regenerate.\n")
+        out.write("//! Run tools/generate-simple-case-mappings.py to regenerate.\n")
         out.write("//! Two dependent reads: shared leaf offsets, then an operation's signed delta.\n")
         out.write("//! Separate payload arrays let unused case operations stay out of the binary.\n\n")
         out.write(f"const shift = {SHIFT};\nconst limit = {limit};\n\n")

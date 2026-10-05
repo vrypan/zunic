@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Time zunic's per-script operations over the UDHR corpora.
 
-    python3 src/tools/fetch-udhr.py       # once, to get the text
-    python3 src/tools/benchmark-udhr.py
-    python3 src/tools/benchmark-udhr.py --against HEAD   # compare with a ref
+    python3 tools/fetch-udhr.py       # once, to get the text
+    python3 tools/benchmark-udhr.py
+    python3 tools/benchmark-udhr.py --against HEAD   # compare with a ref
 
-Advisory, not a gate. `src/tools/benchmark-history.py` remains the harness for
+Advisory, not a gate. `tools/benchmark-history.py` remains the harness for
 tracked measurements; this answers a different question, namely how an
 operation behaves across writing systems on the *same* document.
 
@@ -30,7 +30,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 CORPORA = ROOT / "data" / "udhr"
 REPO = ROOT.parent
 
@@ -135,7 +135,7 @@ def main() -> int:
 
     corpora = sorted(CORPORA.glob("*.txt"))
     if not corpora:
-        print(f"no corpora in {CORPORA.relative_to(REPO)}; run src/tools/fetch-udhr.py first", file=sys.stderr)
+        print(f"no corpora in {CORPORA.relative_to(REPO)}; run tools/fetch-udhr.py first", file=sys.stderr)
         return 2
 
     added_worktree = None

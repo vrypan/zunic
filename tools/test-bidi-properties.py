@@ -11,10 +11,10 @@ from pathlib import Path
 
 from check_unicode_version import check as check_unicode_version
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 SOURCE = ROOT / "tables/bidi_properties.zig"
-GENERATOR = ROOT / "tools/generate-bidi-properties.py"
+GENERATOR = ROOT.parent / "tools/generate-bidi-properties.py"
 MAX_CP = 0x110000
 U21_LIMIT = 0x200000
 BIDI_ORDER = (

@@ -2,7 +2,7 @@
 """Generate Unicode 17.0.0 word-segmentation property data.
 
 Run from the repository root:
-    python3 src/tools/generate-word-properties.py
+    python3 tools/generate-word-properties.py
 
 This is a sibling of generate-properties.py, not an extension of it. The fused
 `Record` cannot answer Word_Break: identical records occur for `"` and `'`, and
@@ -26,7 +26,7 @@ import shutil
 import subprocess
 import sys
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 OUT = ROOT / "tables/word_properties.zig"
 FILES = {
@@ -124,7 +124,7 @@ def emit(out, names, values):
     assert len(blocks) < 65536
 
     out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
-    out.write("//! Run src/tools/generate-word-properties.py to regenerate.\n")
+    out.write("//! Run tools/generate-word-properties.py to regenerate.\n")
     out.write("//!\n")
     out.write("//! Word segmentation keeps its own table rather than reading `properties.Record`:\n")
     out.write("//! the fused record cannot distinguish `\"` from `'`, or `,` from `.`, yet UAX #29\n")

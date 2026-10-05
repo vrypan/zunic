@@ -39,9 +39,10 @@ all three tasks. Both tables store repeated blocks only once, and ASCII can
 skip UTF-8 decoding with direct array access.
 
 Word and normalization data have their own generated tables because they need
-different facts. Generators and their pinned input data live under
-[`src/tools/`](../../src/tools). Generated Zig files are checked in, so ordinary
-users need neither Python nor a Unicode-data download to build the library.
+different facts. Generators live under [`tools/`](../../tools); pinned Unicode
+inputs live under [`src/data/`](../../src/data). Generated Zig files are checked
+in, so ordinary users need neither Python nor a Unicode-data download to build
+the library.
 
 ## Use tables where they remove repeated rule work
 

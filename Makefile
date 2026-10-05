@@ -22,25 +22,25 @@ bench benchmark:
 	$(ZIG) build benchmark -Doptimize=$(OPTIMIZE) $(BENCHMARK_BUILD_ARGS) -- $(BENCHMARK_ARGS)
 
 benchmark-save:
-	ZUNIC_BENCHMARK_BUILD_ARGS='$(BENCHMARK_BUILD_ARGS)' $(PYTHON) src/tools/benchmark-history.py save --zig "$(ZIG)" --optimize "$(OPTIMIZE)" --label $${BENCHMARK_LABEL:?set BENCHMARK_LABEL} -- $(BENCHMARK_ARGS)
+	ZUNIC_BENCHMARK_BUILD_ARGS='$(BENCHMARK_BUILD_ARGS)' $(PYTHON) tools/benchmark-history.py save --zig "$(ZIG)" --optimize "$(OPTIMIZE)" --label $${BENCHMARK_LABEL:?set BENCHMARK_LABEL} -- $(BENCHMARK_ARGS)
 
 benchmark-compare:
-	$(PYTHON) src/tools/benchmark-history.py compare --before $${BEFORE:?set BEFORE} --after $${AFTER:?set AFTER}
+	$(PYTHON) tools/benchmark-history.py compare --before $${BEFORE:?set BEFORE} --after $${AFTER:?set AFTER}
 
 # Maintainer checks are separate from the Python-free Zig test suite.
 verify-tables:
-	$(PYTHON) src/tools/test-properties.py
-	$(PYTHON) src/tools/test-terminal-properties.py
-	$(PYTHON) src/tools/test-word-properties.py
-	$(PYTHON) src/tools/test-normalization-properties.py
-	$(PYTHON) src/tools/test-case-folding.py
-	$(PYTHON) src/tools/test-simple-case-mappings.py
-	$(PYTHON) src/tools/test-numeric-properties.py
-	$(PYTHON) src/tools/test-script-properties.py
-	$(PYTHON) src/tools/test-bidi-properties.py
-	$(PYTHON) src/tools/test-general-category.py
-	$(PYTHON) src/tools/test-line-break-machine.py
+	$(PYTHON) tools/test-properties.py
+	$(PYTHON) tools/test-terminal-properties.py
+	$(PYTHON) tools/test-word-properties.py
+	$(PYTHON) tools/test-normalization-properties.py
+	$(PYTHON) tools/test-case-folding.py
+	$(PYTHON) tools/test-simple-case-mappings.py
+	$(PYTHON) tools/test-numeric-properties.py
+	$(PYTHON) tools/test-script-properties.py
+	$(PYTHON) tools/test-bidi-properties.py
+	$(PYTHON) tools/test-general-category.py
+	$(PYTHON) tools/test-line-break-machine.py
 
 test-tools:
-	$(PYTHON) src/tools/test-benchmark-history.py
+	$(PYTHON) tools/test-benchmark-history.py
 	$(PYTHON) bench-vs-uucode/test-benchmark.py

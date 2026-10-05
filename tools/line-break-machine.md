@@ -1,8 +1,8 @@
 # Unicode 17 line-break machine
 
-Regenerate with `python3 src/tools/generate-line-break-machine.py --write`.
+Regenerate with `python3 tools/generate-line-break-machine.py --write`.
 Check reproducibility and the standard fixtures with
-`python3 src/tools/test-line-break-machine.py`. No generator runs during a
+`python3 tools/test-line-break-machine.py`. No generator runs during a
 normal Zig build; the package uses checked-in data and has no Python runtime
 dependency. The implementation is authored from Zunic's Unicode 17 rules,
 not copied Unicode 15 Rust table bytes.

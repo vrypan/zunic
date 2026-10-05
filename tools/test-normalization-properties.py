@@ -2,7 +2,7 @@
 """Exhaustively verify the generated canonical normalization tables.
 
 Run from the repository root:
-    python3 src/tools/test-normalization-properties.py
+    python3 tools/test-normalization-properties.py
 
 Independent by construction: it re-derives every fact from the pinned UCD files
 and decodes src/normalization_properties.zig by parsing the emitted Zig,
@@ -23,10 +23,10 @@ from pathlib import Path
 
 from check_unicode_version import check as check_unicode_version
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 SOURCE = ROOT / "tables/normalization_properties.zig"
-GENERATOR = ROOT / "tools" / "generate-normalization-properties.py"
+GENERATOR = ROOT.parent / "tools" / "generate-normalization-properties.py"
 FIXTURE = DATA / "NormalizationTest-17.0.0.txt"
 MAXCP = 0x110000
 

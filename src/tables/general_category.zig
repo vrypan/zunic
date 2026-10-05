@@ -1,5 +1,5 @@
 //! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.
-//! Run src/tools/generate-general-category.py to regenerate.
+//! Run tools/generate-general-category.py to regenerate.
 //!
 //! Independent of `properties.Record`: see this file's generator for why.
 

@@ -228,17 +228,17 @@ pub fn build(b: *std.Build) void {
     // These focused gates also decode the generated tables independently from
     // the vendored Unicode inputs. Keep them off the aggregate test step so
     // the normal Zig-only suite does not acquire a Python runtime dependency.
-    const verify_terminal_properties = b.addSystemCommand(&.{ "python3", "src/tools/test-terminal-properties.py" });
+    const verify_terminal_properties = b.addSystemCommand(&.{ "python3", "tools/test-terminal-properties.py" });
     group_steps.get("unicode-properties").?.dependOn(&verify_terminal_properties.step);
-    const verify_numeric_properties = b.addSystemCommand(&.{ "python3", "src/tools/test-numeric-properties.py" });
+    const verify_numeric_properties = b.addSystemCommand(&.{ "python3", "tools/test-numeric-properties.py" });
     group_steps.get("unicode-properties").?.dependOn(&verify_numeric_properties.step);
-    const verify_script_properties = b.addSystemCommand(&.{ "python3", "src/tools/test-script-properties.py" });
+    const verify_script_properties = b.addSystemCommand(&.{ "python3", "tools/test-script-properties.py" });
     group_steps.get("unicode-properties").?.dependOn(&verify_script_properties.step);
-    const verify_bidi_properties = b.addSystemCommand(&.{ "python3", "src/tools/test-bidi-properties.py" });
+    const verify_bidi_properties = b.addSystemCommand(&.{ "python3", "tools/test-bidi-properties.py" });
     group_steps.get("unicode-properties").?.dependOn(&verify_bidi_properties.step);
-    const verify_case_folding = b.addSystemCommand(&.{ "python3", "src/tools/test-case-folding.py" });
+    const verify_case_folding = b.addSystemCommand(&.{ "python3", "tools/test-case-folding.py" });
     group_steps.get("case-folding").?.dependOn(&verify_case_folding.step);
-    const verify_simple_case_mappings = b.addSystemCommand(&.{ "python3", "src/tools/test-simple-case-mappings.py" });
+    const verify_simple_case_mappings = b.addSystemCommand(&.{ "python3", "tools/test-simple-case-mappings.py" });
     group_steps.get("case-folding").?.dependOn(&verify_simple_case_mappings.step);
 
     // Keep the >u16 counter regression in the normal gate without running

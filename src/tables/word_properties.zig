@@ -1,5 +1,5 @@
 //! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.
-//! Run src/tools/generate-word-properties.py to regenerate.
+//! Run tools/generate-word-properties.py to regenerate.
 //!
 //! Word segmentation keeps its own table rather than reading `properties.Record`:
 //! the fused record cannot distinguish `"` from `'`, or `,` from `.`, yet UAX #29

@@ -1,5 +1,5 @@
 //! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.
-//! Run src/tools/generate-normalization-properties.py to regenerate.
+//! Run tools/generate-normalization-properties.py to regenerate.
 //!
 //! Canonical (NFC/NFD) and compatibility (NFKC/NFKD) normalization.
 //! Canonical and compatibility decompositions live in separate tables:

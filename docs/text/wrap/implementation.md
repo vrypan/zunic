@@ -72,7 +72,7 @@ and future decisions. Most entries directly say allowed, prohibited, or
 mandatory. A few request a small amount of lookahead.
 
 The table is generated ahead of time and checked into the source tree; normal
-builds do not run Python. [The generator notes](../../../src/tools/line-break-machine.md)
+builds do not run Python. [The generator notes](../../../tools/line-break-machine.md)
 document the state counts, rule mapping, and checks in detail. There is one
 production engine; the old `-Dline-break-engine` selector is no longer available.
 

@@ -2,7 +2,7 @@
 """Generate Unicode 17.0.0 General_Category and derived boolean properties.
 
 Run from the repository root:
-    python3 src/tools/generate-general-category.py
+    python3 tools/generate-general-category.py
 
 The inputs are committed under ../data. This script deliberately parses the
 pinned UCD files instead of Python's Unicode database, whose version is not a
@@ -16,7 +16,7 @@ hot path for data most callers never touch. See plan 030.
 
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 OUT = ROOT / "tables/general_category.zig"
 MAXCP = 0x110000
@@ -144,7 +144,7 @@ def build(categories, booleans):
 
 def emit(out, order, stage1, stage2, stage3, default_id):
     out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
-    out.write("//! Run src/tools/generate-general-category.py to regenerate.\n")
+    out.write("//! Run tools/generate-general-category.py to regenerate.\n")
     out.write("//!\n")
     out.write("//! Independent of `properties.Record`: see this file's generator for why.\n\n")
 

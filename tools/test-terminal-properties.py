@@ -7,7 +7,7 @@ from pathlib import Path
 
 from check_unicode_version import check as check_unicode_version
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 SOURCE = ROOT / "tables/terminal_properties.zig"
 MAXCP = 0x110000

@@ -1,5 +1,5 @@
 //! Generated from UnicodeData-17.0.0.txt; do not edit.
-//! Run src/tools/generate-simple-case-mappings.py to regenerate.
+//! Run tools/generate-simple-case-mappings.py to regenerate.
 //! Two dependent reads: shared leaf offsets, then an operation's signed delta.
 //! Separate payload arrays let unused case operations stay out of the binary.
 

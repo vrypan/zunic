@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fetch Universal Declaration of Human Rights translations as plain text.
 
-    python3 src/tools/fetch-udhr.py            # the default script sample
-    python3 src/tools/fetch-udhr.py --all      # every translation in the repo
-    python3 src/tools/fetch-udhr.py eng arb    # named ISO 639-3 codes
+    python3 tools/fetch-udhr.py            # the default script sample
+    python3 tools/fetch-udhr.py --all      # every translation in the repo
+    python3 tools/fetch-udhr.py eng arb    # named ISO 639-3 codes
 
 Writes UTF-8 files to `src/data/udhr/`, which is git-ignored. The corpora are
 deliberately **not** checked in: they are third-party text under their own
@@ -29,7 +29,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 OUT = ROOT / "data" / "udhr"
 SOURCE = "https://raw.githubusercontent.com/eric-muller/udhr/main/data/udhr"
 NS = "{http://efele.net/udhr}"

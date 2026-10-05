@@ -1,5 +1,5 @@
 //! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.
-//! Run src/tools/generate-properties.py to regenerate.
+//! Run tools/generate-properties.py to regenerate.
 
 pub const GraphemeClass = enum(u4) { other, cr, lf, control, extend, zwj, regional_indicator, prepend, spacingmark, l, v, t, lv, lvt };
 pub const IndicConjunctBreak = enum(u2) { none, consonant, extend, linker };

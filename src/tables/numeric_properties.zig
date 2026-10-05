@@ -1,5 +1,5 @@
 //! Generated from UnicodeData-17.0.0.txt; do not edit.
-//! Run src/tools/generate-numeric-properties.py to regenerate.
+//! Run tools/generate-numeric-properties.py to regenerate.
 
 pub const NumericType = enum(u2) { decimal, digit, numeric };
 pub const Numeric = struct { kind: NumericType, numerator: i64, denominator: u16 };

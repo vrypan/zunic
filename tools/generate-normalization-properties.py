@@ -2,8 +2,8 @@
 """Generate Unicode 17.0.0 normalization tables: canonical and compatibility.
 
 Run from the repository root:
-    python3 src/tools/generate-normalization-properties.py
-    python3 src/tools/generate-normalization-properties.py --check
+    python3 tools/generate-normalization-properties.py
+    python3 tools/generate-normalization-properties.py --check
 
 A third sibling of generate-properties.py and generate-word-properties.py.
 Normalization gets its own module for the same reason word segmentation did:
@@ -39,7 +39,7 @@ import subprocess
 import sys
 import tempfile
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 OUT = ROOT / "tables/normalization_properties.zig"
 FILES = {
@@ -381,7 +381,7 @@ def emit(out, combining, sources, canonical, flat, offsets, full, composition, m
          factor, compat_factor, compat_max_len, classes, compat_sources, compat_flat,
          compat_offsets, decomposition_types, mapping_index):
     out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
-    out.write("//! Run src/tools/generate-normalization-properties.py to regenerate.\n")
+    out.write("//! Run tools/generate-normalization-properties.py to regenerate.\n")
     out.write("//!\n")
     out.write("//! Canonical (NFC/NFD) and compatibility (NFKC/NFKD) normalization.\n")
     out.write("//! Canonical and compatibility decompositions live in separate tables:\n")

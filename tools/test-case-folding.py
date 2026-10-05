@@ -7,7 +7,7 @@ from pathlib import Path
 
 from check_unicode_version import check as check_unicode_version
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 SOURCE = ROOT / "tables/case_folding.zig"
 FIXTURE = ROOT / "data/CaseFolding-17.0.0.txt"
 MAXCP = 0x110000

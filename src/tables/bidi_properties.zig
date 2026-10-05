@@ -1,5 +1,5 @@
 //! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.
-//! Run src/tools/generate-bidi-properties.py to regenerate.
+//! Run tools/generate-bidi-properties.py to regenerate.
 
 pub const BidiClass = enum(u5) {
     left_to_right = 0,

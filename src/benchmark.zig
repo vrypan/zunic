@@ -1,7 +1,7 @@
 //! Native throughput benchmarks over pinned corpora.
 //!
 //! Each case reports per-sample timings plus a checksum, so a run proves what
-//! it measured still produces the same bytes. `src/tools/benchmark-history.py`
+//! it measured still produces the same bytes. `tools/benchmark-history.py`
 //! archives a run and compares two of them; see `private/` for the Rust peer
 //! comparisons, which answer a different question.
 //!

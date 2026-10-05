@@ -2,7 +2,7 @@
 """Exhaustively verify the generated word-segmentation property table.
 
 Run from the repository root:
-    python3 src/tools/test-word-properties.py
+    python3 tools/test-word-properties.py
 
 Independent by construction: it re-derives all three facts from the pinned UCD
 files and decodes src/tables/word_properties.zig by parsing the emitted Zig, sharing
@@ -23,10 +23,10 @@ from pathlib import Path
 
 from check_unicode_version import check as check_unicode_version
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 SOURCE = ROOT / "tables/word_properties.zig"
-GENERATOR = ROOT / "tools" / "generate-word-properties.py"
+GENERATOR = ROOT.parent / "tools" / "generate-word-properties.py"
 MAXCP = 0x110000
 NUMBER_CATEGORIES = ("Nd", "Nl", "No")
 

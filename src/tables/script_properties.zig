@@ -1,5 +1,5 @@
 //! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.
-//! Run src/tools/generate-script-properties.py to regenerate.
+//! Run tools/generate-script-properties.py to regenerate.
 
 pub const Script = enum(u8) {
     unknown,

@@ -2,7 +2,7 @@
 """Generate Unicode 17.0.0 fused property records and ASCII lookup arrays.
 
 Run from the repository root:
-    python3 src/tools/generate-properties.py
+    python3 tools/generate-properties.py
 
 The inputs are committed under ../data.  This script deliberately parses the
 pinned UCD files instead of Python's Unicode database, whose version is not a
@@ -15,7 +15,7 @@ import re
 
 from line_break_categories import category_key as line_break_category_key
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 OUT = ROOT / "tables/properties.zig"
 GRAPHEME_OUT = ROOT / "tables/grapheme_properties.zig"
@@ -355,13 +355,13 @@ def main():
     records, malformed_category, default_category = build_records(gcb, incb, ep, lb, eaw, dense_categories(FILES["ud"]), lb_names)
     with OUT.open("w", encoding="utf-8") as out:
         out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
-        out.write("//! Run src/tools/generate-properties.py to regenerate.\n\n")
+        out.write("//! Run tools/generate-properties.py to regenerate.\n\n")
         emit_grapheme_aliases(out)
         emit_line_break_api(out, lb)
         emit_record_table(out, records, lb_names, malformed_category, default_category)
     with GRAPHEME_OUT.open("w", encoding="utf-8") as out:
         out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
-        out.write("//! Run src/tools/generate-properties.py to regenerate.\n\n")
+        out.write("//! Run tools/generate-properties.py to regenerate.\n\n")
         emit_grapheme_record_table(out, records, gcb, incb, ep)
 
 

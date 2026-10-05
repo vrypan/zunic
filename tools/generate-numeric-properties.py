@@ -5,7 +5,7 @@ import argparse
 from fractions import Fraction
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 SOURCE = ROOT / "data/UnicodeData-17.0.0.txt"
 DEFAULT_OUT = ROOT / "tables/numeric_properties.zig"
 MAXCP = 0x110000
@@ -50,7 +50,7 @@ def emit(path):
     classes, stage1, stage2, stage3 = build()
     with path.open("w", encoding="utf-8") as out:
         out.write("//! Generated from UnicodeData-17.0.0.txt; do not edit.\n")
-        out.write("//! Run src/tools/generate-numeric-properties.py to regenerate.\n\n")
+        out.write("//! Run tools/generate-numeric-properties.py to regenerate.\n\n")
         out.write("pub const NumericType = enum(u2) { decimal, digit, numeric };\n")
         out.write("pub const Numeric = struct { kind: NumericType, numerator: i64, denominator: u16 };\n")
         out.write(f"const s1 = {S1};\nconst s2 = {S2};\n\n")

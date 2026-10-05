@@ -118,7 +118,7 @@ def validate_summary(summary: dict, require_three: bool = True) -> list[str]:
 
 
 def source_paths() -> list[Path]:
-    paths = list((ROOT / "src").rglob("*.zig")) + list((ROOT / "src/tools").glob("*.py"))
+    paths = list((ROOT / "src").rglob("*.zig")) + list((ROOT / "tools").glob("*.py"))
     paths += [ROOT / "build.zig", ROOT / "build.zig.zon", HERE / "build.zig", HERE / "build.zig.zon",
               HERE / "diagnostic.zig", HERE / "diagnostic.rs", HERE / "diagnostic-rust/Cargo.toml",
               HERE / "diagnostic-rust/Cargo.lock", Path(__file__).resolve(),

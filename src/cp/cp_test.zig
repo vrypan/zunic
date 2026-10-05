@@ -27,7 +27,7 @@ test "immediate decomposition agrees with stored mappings for every u21" {
 
 test "ASCII arrays agree with the fused record" {
     // The trie is verified exhaustively against the pinned UCD by
-    // src/tools/test-properties.py. What that cannot see is decoded_token.at's ASCII
+    // tools/test-properties.py. What that cannot see is decoded_token.at's ASCII
     // shortcut, which reads two separate arrays and hard-codes one column.
     const properties = @import("tables").properties;
     const grapheme = @import("tables").grapheme;
@@ -154,7 +154,7 @@ test "general group agrees with the pinned UCD" {
     try std.testing.expect(!outside_unicode.isChangesWhenCasemapped);
 
     // Every Lu/Ll/Lt code point is Cased, by the property's own definition
-    // (verified exhaustively by src/tools/test-general-category.py; this is
+    // (verified exhaustively by tools/test-general-category.py; this is
     // a second, narrower consistency signal from inside the test suite).
     try std.testing.expect(codepoints.init('A').general().isCased);
     try std.testing.expect(codepoints.init('A').general().category == .lu);

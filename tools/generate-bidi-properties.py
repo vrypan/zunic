@@ -7,7 +7,7 @@ import re
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 DEFAULT_OUT = ROOT / "tables/bidi_properties.zig"
 MAX_CP = 0x110000
@@ -200,7 +200,7 @@ def render():
     bracket_stage1, bracket_stage2 = mapping_table(bracket_targets, 6, 18, "bracket")
     lines = [
         "//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.",
-        "//! Run src/tools/generate-bidi-properties.py to regenerate.", "",
+        "//! Run tools/generate-bidi-properties.py to regenerate.", "",
         "pub const BidiClass = enum(u5) {",
     ]
     lines.extend(f"    {zig_name(long_name)} = {value}," for value, (_, long_name) in enumerate(names))

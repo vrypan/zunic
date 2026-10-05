@@ -6,7 +6,7 @@ import re
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 DEFAULT_OUT = ROOT / "tables/script_properties.zig"
 MAX_CP = 0x110000
@@ -150,7 +150,7 @@ def emit(path, names, stage1, stage2, ranges, descriptors, members):
     tags = [zig_name(name) for name in names]
     with path.open("w", encoding="utf-8") as out:
         out.write("//! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.\n")
-        out.write("//! Run src/tools/generate-script-properties.py to regenerate.\n\n")
+        out.write("//! Run tools/generate-script-properties.py to regenerate.\n\n")
         out.write("pub const Script = enum(u8) {\n")
         for tag in tags:
             out.write(f"    {tag},\n")

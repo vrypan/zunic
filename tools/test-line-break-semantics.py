@@ -6,7 +6,7 @@ from line_break_semantics import Category, History, categories, compile_machine,
 
 
 def main():
-    fixture = Path(__file__).resolve().parents[1] / "data/LineBreakTest-17.0.0.txt"
+    fixture = (Path(__file__).resolve().parents[1] / "src") / "data/LineBreakTest-17.0.0.txt"
     cases, points = [], set()
     for number, line in enumerate(fixture.read_text().splitlines(), 1):
         tokens = line.split("#", 1)[0].split()

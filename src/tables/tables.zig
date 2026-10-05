@@ -5,7 +5,7 @@
 //! `properties` keeps the wider fused record used by layout and line breaking,
 //! where one lookup must answer grapheme, width, and line-break questions.
 //!
-//! Regenerate with the scripts under `src/tools/`; never hand-edit.
+//! Regenerate with the scripts under `tools/`; never hand-edit.
 pub const properties = @import("properties.zig");
 pub const grapheme = @import("grapheme_properties.zig");
 pub const word = @import("word_properties.zig");

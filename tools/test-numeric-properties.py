@@ -11,10 +11,10 @@ from pathlib import Path
 
 from check_unicode_version import check as check_unicode_version
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data/UnicodeData-17.0.0.txt"
 SOURCE = ROOT / "tables/numeric_properties.zig"
-GENERATOR = ROOT / "tools/generate-numeric-properties.py"
+GENERATOR = ROOT.parent / "tools/generate-numeric-properties.py"
 MAXCP = 0x110000
 
 

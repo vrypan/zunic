@@ -173,7 +173,7 @@ test "the pinned Unicode data version is published" {
     try std.testing.expectEqual(@as(u64, 0), unicode.unicode_version.minor);
     try std.testing.expectEqual(@as(u64, 0), unicode.unicode_version.patch);
     // This is the data version, not the package version; the three verifiers
-    // under src/tools assert it against the vendored UCD filenames.
+    // under tools/ assert it against the vendored UCD filenames.
     try std.testing.expect(unicode.unicode_version.pre == null);
 }
 

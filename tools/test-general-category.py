@@ -2,7 +2,7 @@
 """Exhaustively verify the generated General_Category / boolean-property table.
 
 Run from the repository root:
-    python3 src/tools/test-general-category.py
+    python3 tools/test-general-category.py
 
 Deliberately independent: re-derives every fact from the pinned UCD files and
 decodes src/tables/general_category.zig by parsing the emitted Zig, sharing no
@@ -16,7 +16,7 @@ from pathlib import Path
 
 from check_unicode_version import check as check_unicode_version
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "src"
 DATA = ROOT / "data"
 SOURCE = ROOT / "tables/general_category.zig"
 MAXCP = 0x110000

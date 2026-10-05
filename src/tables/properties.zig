@@ -1,5 +1,5 @@
 //! Generated from pinned Unicode 17.0.0 UCD files. Do not edit.
-//! Run src/tools/generate-properties.py to regenerate.
+//! Run tools/generate-properties.py to regenerate.
 
 const grapheme_properties = @import("grapheme_properties.zig");
 pub const GraphemeClass = grapheme_properties.GraphemeClass;
