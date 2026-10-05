@@ -16,14 +16,12 @@ inline fn finishSums(sums: anytype) u64 {
 }
 
 pub inline fn utf8(bytes: []const u8) Stats {
-    var pos: usize = 0;
+    var it = zunic.text(bytes).codepoints().iterator();
     var units: usize = 0;
     var sums: [2]usize = @splat(0);
-    while (pos < bytes.len) : (units += 1) {
-        const step = zunic.utf8.step(bytes[pos..]);
-        pos += step.len;
-        sums[0] +%= step.cp orelse 0xfffd;
-        sums[1] +%= pos;
+    while (it.next()) |point| : (units += 1) {
+        sums[0] +%= point.value;
+        sums[1] +%= it.offset;
     }
     return .{ .units = units, .checksum = finishSums(sums) };
 }
@@ -257,12 +255,8 @@ pub inline fn ghosttyWidth(bytes: []const u8) Stats {
 }
 
 pub fn dumpUtf8(out: *std.Io.Writer, bytes: []const u8) !void {
-    var pos: usize = 0;
-    while (pos < bytes.len) {
-        const step = zunic.utf8.step(bytes[pos..]);
-        pos += step.len;
-        try out.print("{x}:{d},", .{ step.cp orelse 0xfffd, pos });
-    }
+    var it = zunic.text(bytes).codepoints().iterator();
+    while (it.next()) |point| try out.print("{x}:{d},", .{ point.value, it.offset });
 }
 
 pub fn dumpGraphemes(out: *std.Io.Writer, bytes: []const u8) !void {

@@ -20,7 +20,7 @@ Rust/Cargo, Python 3, curl, and Make installed.
 | [Wrapping](rust-wrap/README.md) | textwrap 0.16.2 | Full wrapping and first 24 lines |
 | [Display width](rust-width/README.md) | unicode-width 0.2.2 | Whole-text display width |
 
-Current Zunic uses Unicode 17.0.0; each suite documents its Rust peer's version.
+Zunic v0.6.0 uses Unicode 17.0.0; each suite documents its Rust peer's version.
 ANSI stripping is archived because Zunic no longer provides that operation.
 The recorded results below retain the versions and operations of their original runs.
 

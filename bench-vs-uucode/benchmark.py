@@ -340,6 +340,7 @@ def benchmark(args: argparse.Namespace) -> int:
         "operation_outputs": operation_outputs,
         "notes": [
             "Inputs are valid UTF-8 and file I/O is outside timing.",
+            "The UTF-8 row traverses Zunic text.codepoints().iterator() and uucode.utf8.Iterator, consuming every scalar value and ending byte offset.",
             "Measured traversal consumes each grapheme's start, end, and width; Zunic's renderable flag has no uucode counterpart and is excluded.",
             "Both peers use Unicode 17.0.0; whole-grapheme width policies can still differ and are shown explicitly.",
             "Terminal-property, case-mapping, numeric, Script, normalization-fact, full-fold, and Ghostty-width rows agree exactly on these valid UTF-8 corpora.",

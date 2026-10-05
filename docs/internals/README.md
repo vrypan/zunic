@@ -54,7 +54,7 @@ and how the result is checked.
 
 ## Build options
 
-The package requires Zig 0.17.0 or later according to `build.zig.zon`.
+Zunic v0.6.0 requires Zig 0.17.0 or later according to `build.zig.zon`.
 
 | Option | Default | Effect |
 | --- | --- | --- |

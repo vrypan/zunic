@@ -16,11 +16,27 @@ The dependency hash in `build.zig.zon` verifies the fetched package.
 
 ## Latest results
 
-Recorded on 2026-09-19 from the Zunic source tree committed as `7bdbc2d`, on
-an Apple ARM64 machine running macOS 26.6.2. Both peers used Unicode 17.0.0,
-Zig 0.16.0, ReleaseFast, and the native CPU target. The run used three
-alternating pairs and 15 samples per executable run. See
-[TIMINGS.md](TIMINGS.md) for every per-corpus measurement.
+These results cover **Zunic v0.6.0**. The measurements preceded the release
+metadata bump; the runtime library code is unchanged. Exact measured commits
+and archive provenance are recorded in [TIMINGS.md](TIMINGS.md).
+
+Recorded on 2026-10-05 on an Apple M4 ARM64 machine running macOS 27.0.1.
+Both peers used Unicode 17.0.0, Zig 0.17.0, ReleaseFast, and the native CPU
+target. uucode was pinned to
+`cba2b5bc9f79d200541a7f4fdd62a1ba5ca5f166`. The run included all eighteen
+operations and nine corpora, with three alternating pairs and 15 samples per
+executable run. See [TIMINGS.md](TIMINGS.md) for every per-corpus measurement.
+
+The UTF-8 row was rerun separately after changing its adapter to the public
+`text(bytes).codepoints().iterator()`. This rerun used the same v0.6.0 runtime
+library code, settings, peer revision, corpora, three-pair protocol, and sample
+count. The other seventeen rows retain the full-run measurements. Both archives record source and binary
+hashes; the focused archive identifies the uncommitted adapter change.
+
+Both peer-adapter tests and the CLI, exact-dump, filtered-operation, and
+operation-contract checks passed. Timed counts and checksums matched each
+peer's dumps, and exact outputs and corpus hashes remained unchanged throughout
+the run. Known grapheme and width-policy differences are reported below.
 
 For each corpus, the result is the median of the three run medians. The average
 below is the geometric mean of the nine per-corpus ratios. `uucode/Zunic` above
@@ -30,24 +46,29 @@ paths.
 
 | Benchmark class | Geometric mean uucode/Zunic | Range | Exact outputs |
 |---|---:|---:|---:|
-| UTF-8 decoding | 1.84× | 1.57–2.35× | 9/9 |
-| Extended grapheme ranges | 1.84× | 1.48–2.45× | 8/9 |
-| Grapheme ranges with cluster width | 2.54× | 2.21–3.21× | 7/9 |
-| Whole-text grapheme width | 5.90× | 2.42–111.89× | 7/9 |
-| Unicode terminal property facts | 1.91× | 1.50–2.11× | 9/9 |
-| Fused scalar terminal-property lookup | 1.22× | 1.19–1.25× | 9/9 |
-| Full default case folding | 1.09× | 0.97–1.35× | 9/9 |
-| Simple uppercase mapping | 1.06× | 0.91–1.29× | 9/9 |
-| Simple lowercase mapping | 1.02× | 0.92–1.23× | 9/9 |
-| Simple titlecase mapping | 1.05× | 0.88–1.29× | 9/9 |
-| Exact numeric properties | 1.88× | 1.80–2.23× | 9/9 |
-| Primary Script property | 0.86× | 0.82–0.97× | 9/9 |
-| Bidirectional scalar properties | 1.28× | 1.23–1.40× | 9/9 |
-| Bidirectional scalar mappings | 1.16× | 1.09–1.28× | 9/9 |
-| Canonical combining class | 0.83× | 0.75–0.97× | 9/9 |
-| Immediate decomposition facts | 1.25× | 1.12–1.78× | 9/9 |
-| Incremental grapheme boundaries | 2.69× | 1.94–3.97× | 8/9 |
-| Ghostty scalar-width composition | 1.55× | 1.24–1.70× | 9/9 |
+| UTF-8 decoding | 1.67× | 1.29–2.16× | 9/9 |
+| Extended grapheme ranges | 1.49× | 1.22–1.83× | 8/9 |
+| Grapheme ranges with cluster width | 1.63× | 1.43–1.94× | 7/9 |
+| Whole-text grapheme width | 3.75× | 1.45–97.90× | 7/9 |
+| Unicode terminal property facts | 1.46× | 1.36–1.54× | 9/9 |
+| Fused scalar terminal-property lookup | 1.37× | 1.34–1.42× | 9/9 |
+| Full default case folding | 1.29× | 1.17–1.43× | 9/9 |
+| Simple uppercase mapping | 1.24× | 1.02–1.53× | 9/9 |
+| Simple lowercase mapping | 1.19× | 1.06–1.48× | 9/9 |
+| Simple titlecase mapping | 1.23× | 1.02–1.48× | 9/9 |
+| Exact numeric properties | 2.09× | 2.01–2.27× | 9/9 |
+| Primary Script property | 1.02× | 0.98–1.11× | 9/9 |
+| Bidirectional scalar properties | 1.37× | 1.28–1.48× | 9/9 |
+| Bidirectional scalar mappings | 1.22× | 1.15–1.36× | 9/9 |
+| Canonical combining class | 1.03× | 0.93–1.24× | 9/9 |
+| Immediate decomposition facts | 1.18× | 1.00–1.34× | 9/9 |
+| Incremental grapheme boundaries | 2.74× | 1.92–3.70× | 8/9 |
+| Ghostty scalar-width composition | 1.28× | 1.13–1.54× | 9/9 |
+
+Full-run archive: `benchmarks/20261005T113605Z-zig017-5f95f7c-ae1079/summary.json`.
+UTF-8 iterator rerun: `benchmarks/20261005T134156Z-zig017-public-codepoints-8be596/summary.json`.
+Both directories contain raw samples, before/after dumps, executable copies,
+and corpus snapshots with recorded hashes.
 
 [Results breakdown: full per-corpus timings](TIMINGS.md)
 
@@ -55,7 +76,7 @@ uucode and Zunic overlap in eighteen benchmarked operations:
 
 | Operation | Zunic | uucode | Timed result consumed |
 |---|---|---|---|
-| UTF-8 decoding | `zunic.utf8.step` | `uucode.utf8.Iterator` | code point and ending byte offset |
+| UTF-8 decoding | `text(...).codepoints().iterator()` | `uucode.utf8.Iterator` | code point and ending byte offset |
 | Grapheme segmentation | `text(...).graphemes()` | `grapheme.utf8Iterator` | every start/end byte range |
 | Measured graphemes | measured grapheme iterator | `grapheme.wcwidthNext` | every start/end range and cluster width |
 | Whole-text width | `text(...).width()` | `grapheme.utf8Wcwidth` | total columns |
@@ -74,11 +95,16 @@ uucode and Zunic overlap in eighteen benchmarked operations:
 | Streaming graphemes | `graphemeBreak` | `computeGraphemeBreak` | every adjacent-pair boundary and ending offset |
 | Ghostty scalar width | public width/GCB composition | matching uucode field composition | derived width for every scalar |
 
-The UTF-8 row measures the low-level `zunic.utf8.step()` decoder, not
-`text(bytes).codepoints().iterator()`. It does not measure the public iterator's
-`CodepointView` return or sticky `err` handling. Property rows use the current
-`cp(value)` API; grapheme rows use the tolerant text iterators. Simple case
-mapping, numeric properties, Script, bidi properties and mappings, combining class, and decomposition receive
+The UTF-8 row measures public scalar iteration: Zunic's
+`text(bytes).codepoints().iterator()` returns `CodepointView`, while uucode's
+`utf8.Iterator` returns scalar values. Both adapters consume the scalar value
+and ending byte offset. Zunic's property lookups remain lazy and are not
+requested in this row. All inputs are valid UTF-8; this does not benchmark
+malformed-input or error-handling behavior.
+
+Property rows use the current `cp(value)` API; grapheme rows use the tolerant
+text iterators. Simple case mapping, numeric properties, Script, bidi
+properties and mappings, combining class, and decomposition receive
 predecoded codepoints so their timings isolate lookup and result handling.
 
 uucode does not currently expose comparable line breaking, complete text

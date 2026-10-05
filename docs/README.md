@@ -1,5 +1,8 @@
 # Zunic documentation
 
+This documentation describes **Zunic v0.6.0**, which requires Zig 0.17.0 or
+later.
+
 Zunic has three basic exports for working with Unicode: **`cp`, `text`, and
 `reader`**.
 
