@@ -46,12 +46,18 @@ whitespace predicate. Only `zunic` remains available through `dep.module()`.
 The internal `text` module lives under `src/text/`. It owns byte-sequence
 views and their adapters; `zunic.text()` re-exports its constructor. It has no
 import of the public facade, and reaches line breaking only through layout.
+`text.zig` re-exports the strict scalar iterator from `codepoints.zig` and
+the byte-scanning terminator iterator from `terminators.zig`.
 
 The internal `reader_input` module stores the caller's Reader pointer and
 bounded iterator state. It uses `encoding` for strict decoding and
 `segmentation` for incremental grapheme boundaries, then constructs the same
 lazy codepoint view as `cp` and Text iteration. It has no direct table or
 layout imports.
+
+Within `segmentation`, `grapheme_machine.zig` owns the reference rules,
+classification, and compile-time transition tables. `grapheme.zig` owns byte
+iteration and measurement, and re-exports the boundary machine interface.
 
 Streaming grapheme state and advancement live in `segmentation`; the facade
 re-exports them without handling machine IDs. Facade imports are listed

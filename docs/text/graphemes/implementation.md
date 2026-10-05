@@ -16,7 +16,12 @@ through the engine's `nextSpan(comptime measured)` for plain traversal.
 
 ## Boundary tables and measurement
 
-The reference `ClusterState` in [grapheme.zig](../../../src/segmentation/grapheme.zig) expresses
+The boundary machine owns classification, reference rules, and transition
+tables. [grapheme.zig](../../../src/segmentation/grapheme.zig) keeps byte
+iteration and cluster measurement, and re-exports the machine interface.
+
+The reference `ClusterState` in
+[grapheme_machine.zig](../../../src/segmentation/grapheme_machine.zig) expresses
 the boundary rules and state updates. At compile time, the engine evaluates
 them into transition tables. Runtime traversal uses a category and state ID to
 obtain both the next state and the boundary decision, avoiding a chain of rule

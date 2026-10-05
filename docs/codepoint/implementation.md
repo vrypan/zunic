@@ -76,7 +76,7 @@ the pinned input. Unicode 17 needs 490 `u16` offsets covering codepoints below
 On Apple M4 with Zig 0.17, bounded offsets reduced case-fold lookup time by
 about 13% across the comparison corpora.
 
-The [text iterator](../../src/text/text.zig) decodes UTF-8 before constructing
+The [text iterator](../../src/text/codepoints.zig) decodes UTF-8 before constructing
 each view. Internal segmentation and layout instead use
 [decoded tokens](../../src/encoding/decoded_token.zig), which carry byte
 positions and already gathered facts for reuse. Those tokens serve text

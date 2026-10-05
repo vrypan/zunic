@@ -10,8 +10,14 @@ const word_engine = @import("segmentation").word;
 const wrap_engine = @import("layout").wrap;
 const text_trim = @import("trim.zig");
 const ascii_scan = @import("encoding").ascii;
-const utf8 = @import("encoding").utf8;
-const CodepointView = @import("cp").CodepointView;
+const terminators = @import("terminators.zig");
+const codepoints = @import("codepoints.zig");
+
+pub const Terminators = terminators.Terminators;
+pub const TerminatorIterator = terminators.TerminatorIterator;
+pub const Codepoints = codepoints.Codepoints;
+pub const CodepointIterator = codepoints.CodepointIterator;
+pub const DecodeError = codepoints.DecodeError;
 
 const types = @import("types");
 
@@ -298,83 +304,6 @@ pub const Text = struct {
     }
 };
 
-/// The seven Unicode hard line terminators, as byte extents. `\r\n` is one
-/// terminator of length two.
-///
-/// | code point | UAX #14 class |
-/// | --- | --- |
-/// | `U+000A` LF, `U+000D` CR | LF, CR |
-/// | `U+000B` VT, `U+000C` FF | BK |
-/// | `U+0085` NEL | NL |
-/// | `U+2028`, `U+2029` | BK |
-///
-/// Scanning raw bytes is sound: no grapheme cluster spans a terminator except
-/// CRLF, because CR, LF and the rest are `GCB = Control`/`CR`/`LF` and GB4/GB5
-/// force a break on both sides, while GB3 keeps CRLF together and this iterator
-/// emits it as one span. An ASCII terminator byte can never appear inside a
-/// multi-byte sequence, since UTF-8 continuation bytes are all >= 0x80.
-pub const Terminators = struct {
-    bytes: []const u8,
-
-    /// Number of terminators. `\r\n` counts as one.
-    pub fn count(self: Terminators) usize {
-        var it = self.iterator();
-        var n: usize = 0;
-        while (it.next() != null) n += 1;
-        return n;
-    }
-
-    pub fn iterator(self: Terminators) TerminatorIterator {
-        return .{ .bytes = self.bytes };
-    }
-};
-
-pub const TerminatorIterator = struct {
-    bytes: []const u8,
-    pos: usize = 0,
-
-    /// Extent of the next terminator, or null at end of input. Unlike
-    /// `line_break.Iterator`, nothing is reported at end of text: only
-    /// terminators physically present in the bytes.
-    pub fn next(self: *TerminatorIterator) ?Span {
-        while (self.pos < self.bytes.len) {
-            const start = self.pos;
-            const byte = self.bytes[start];
-            switch (byte) {
-                '\r' => {
-                    const end = if (start + 1 < self.bytes.len and self.bytes[start + 1] == '\n') start + 2 else start + 1;
-                    self.pos = end;
-                    return .{ .start = .{ .value = start }, .end = .{ .value = end } };
-                },
-                0x0A, 0x0B, 0x0C => {
-                    self.pos = start + 1;
-                    return .{ .start = .{ .value = start }, .end = .{ .value = start + 1 } };
-                },
-                // U+0085 NEL is C2 85; U+2028/U+2029 are E2 80 A8/A9. Verify
-                // the whole sequence: a truncated lead byte is not a terminator.
-                0xC2 => {
-                    if (start + 1 < self.bytes.len and self.bytes[start + 1] == 0x85) {
-                        self.pos = start + 2;
-                        return .{ .start = .{ .value = start }, .end = .{ .value = start + 2 } };
-                    }
-                    self.pos = start + 1;
-                },
-                0xE2 => {
-                    if (start + 2 < self.bytes.len and self.bytes[start + 1] == 0x80 and
-                        (self.bytes[start + 2] == 0xA8 or self.bytes[start + 2] == 0xA9))
-                    {
-                        self.pos = start + 3;
-                        return .{ .start = .{ .value = start }, .end = .{ .value = start + 3 } };
-                    }
-                    self.pos = start + 1;
-                },
-                else => self.pos = start + 1,
-            }
-        }
-        return null;
-    }
-};
-
 /// One segment of the UAX #29 word partition.
 pub const WordBound = struct {
     start: ByteOffset,
@@ -428,53 +357,5 @@ pub const WordBoundIterator = struct {
             .end = .{ .value = span.end },
             .is_word = span.is_word,
         };
-    }
-};
-
-/// The individual Unicode scalars of this text, as a lazy iterator.
-/// Each yielded item is the same view returned by zunic.cp(value), with property
-/// lookups deferred until requested. No allocation or eager property lookup.
-///
-/// Iteration stops at the first malformed UTF-8 sequence. After next() returns
-/// null, inspect the iterator's err field to distinguish failure from exhaustion.
-/// Unlike graphemes(), this does not group combining marks with their base.
-///
-/// ```zig
-/// var it = zunic.text(bytes).codepoints().iterator();
-/// while (it.next()) |point| use(point.value);
-/// if (it.err) |err| handleDecodeError(err, it.offset);
-/// ```
-pub const Codepoints = struct {
-    bytes: []const u8,
-
-    pub fn iterator(self: Codepoints) CodepointIterator {
-        return .{ .bytes = self.bytes };
-    }
-};
-
-pub const DecodeError = enum { invalid_utf8 };
-
-/// Strict UTF-8 iteration. A copy is an independent checkpoint over borrowed bytes.
-pub const CodepointIterator = struct {
-    bytes: []const u8,
-    /// Byte offset of the next scalar, or of the undecodable sequence on error.
-    /// Equals bytes.len after normal exhaustion. Relative to the view's slice.
-    offset: usize = 0,
-    /// Sticky decoding failure. Null means no error has been encountered;
-    /// only a loop that reaches exhaustion has checked the complete input.
-    err: ?DecodeError = null,
-
-    /// Return a valid scalar view, or null on exhaustion or decoding failure.
-    /// On failure the offending bytes are not consumed. Subsequent calls keep
-    /// returning null and preserve err and offset.
-    pub fn next(self: *CodepointIterator) ?CodepointView {
-        if (self.err != null or self.offset == self.bytes.len) return null;
-        const step = utf8.step(self.bytes[self.offset..]);
-        const value = step.cp orelse {
-            self.err = .invalid_utf8;
-            return null;
-        };
-        self.offset += step.len;
-        return .{ .value = value };
     }
 };

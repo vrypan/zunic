@@ -1,6 +1,6 @@
 # Codepoint iteration implementation
 
-[API](README.md) · [Source](../../../src/text/text.zig)
+[API](README.md) · [Source](../../../src/text/codepoints.zig)
 
 `Codepoints` holds a borrowed byte slice. `iterator()` initializes a
 `CodepointIterator` with the same slice, offset zero, and no error.

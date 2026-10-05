@@ -1,6 +1,6 @@
 # Why terminators scan bytes
 
-[API](README.md) · [Source](../../../src/text/text.zig)
+[API](README.md) · [Source](../../../src/text/terminators.zig)
 
 Hard terminators are a fixed, small set. The iterator recognizes their exact
 UTF-8 encodings directly, avoiding Unicode property lookups and grapheme
@@ -22,4 +22,4 @@ whole-input validation guarantee.
 
 Traversal is linear with constant state: the borrowed slice and a current byte
 position. `count()` is a fresh traversal, not stored metadata. See
-[root tests](../../../src/root_test.zig) for terminator and paragraph edge cases.
+[text tests](../../../src/text/text_test.zig) for terminator and paragraph edge cases.
